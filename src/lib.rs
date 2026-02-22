@@ -124,12 +124,16 @@
 //! }
 //! ```
 
+#[macro_use]
+mod macros;
+
 pub mod app;
 pub mod channel;
 pub mod commands;
 pub mod connection;
 pub mod error;
 pub mod event;
+pub mod headers;
 pub mod variables;
 
 pub(crate) mod buffer;
@@ -156,4 +160,7 @@ pub use connection::{
 pub use constants::DEFAULT_ESL_PORT;
 pub use error::{EslError, EslResult};
 pub use event::{EslEvent, EslEventPriority, EslEventType, EventFormat};
-pub use variables::{EslArray, MultipartBody, MultipartItem};
+pub use headers::{EventHeader, ParseEventHeaderError};
+pub use variables::{
+    ChannelVariable, EslArray, MultipartBody, MultipartItem, ParseChannelVariableError,
+};

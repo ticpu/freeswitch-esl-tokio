@@ -1,10 +1,7 @@
 //! ESL event types and structures
 
 use crate::channel::{AnswerState, CallDirection, CallState, ChannelState};
-use crate::constants::{
-    HEADER_ANSWER_STATE, HEADER_CALLER_UUID, HEADER_CALL_DIRECTION, HEADER_CHANNEL_CALL_STATE,
-    HEADER_CHANNEL_STATE, HEADER_CHANNEL_STATE_NUMBER, HEADER_UNIQUE_ID,
-};
+use crate::headers::EventHeader;
 use crate::variables::EslArray;
 use percent_encoding::{percent_encode, NON_ALPHANUMERIC};
 use serde::{Deserialize, Serialize};
@@ -334,9 +331,9 @@ impl EslEvent {
     }
 
     /// Look up a header by name (case-sensitive).
-    pub fn header(&self, name: &str) -> Option<&str> {
+    pub fn header(&self, name: impl AsRef<str>) -> Option<&str> {
         self.headers
-            .get(name)
+            .get(name.as_ref())
             .map(|s| s.as_str())
     }
 
@@ -352,9 +349,9 @@ impl EslEvent {
     }
 
     /// Remove a header, returning its value if it existed.
-    pub fn del_header(&mut self, name: &str) -> Option<String> {
+    pub fn del_header(&mut self, name: impl AsRef<str>) -> Option<String> {
         self.headers
-            .remove(name)
+            .remove(name.as_ref())
     }
 
     /// Event body (the content after the blank line in plain-text events).
@@ -373,12 +370,12 @@ impl EslEvent {
     /// FreeSWITCH stores this as metadata but does **not** use it for dispatch
     /// ordering — all events are delivered FIFO regardless of priority.
     pub fn set_priority(&mut self, priority: EslEventPriority) {
-        self.set_header("priority", priority.to_string());
+        self.set_header(EventHeader::Priority.as_str(), priority.to_string());
     }
 
     /// Parse the `priority` header value.
     pub fn priority(&self) -> Option<EslEventPriority> {
-        self.header("priority")?
+        self.header(EventHeader::Priority)?
             .parse()
             .ok()
     }
@@ -436,38 +433,38 @@ impl EslEvent {
 
     /// `Unique-ID` header, falling back to `Caller-Unique-ID`.
     pub fn unique_id(&self) -> Option<&str> {
-        self.header(HEADER_UNIQUE_ID)
-            .or_else(|| self.header(HEADER_CALLER_UUID))
+        self.header(EventHeader::UniqueId)
+            .or_else(|| self.header(EventHeader::CallerUniqueId))
     }
 
     /// `Job-UUID` header from `bgapi` `BACKGROUND_JOB` events.
     pub fn job_uuid(&self) -> Option<&str> {
-        self.header("Job-UUID")
+        self.header(EventHeader::JobUuid)
     }
 
     /// `Channel-Name` header (e.g. `sofia/internal/1000@domain`).
     pub fn channel_name(&self) -> Option<&str> {
-        self.header("Channel-Name")
+        self.header(EventHeader::ChannelName)
     }
 
     /// `Caller-Caller-ID-Number` header.
     pub fn caller_id_number(&self) -> Option<&str> {
-        self.header("Caller-Caller-ID-Number")
+        self.header(EventHeader::CallerCallerIdNumber)
     }
 
     /// `Caller-Caller-ID-Name` header.
     pub fn caller_id_name(&self) -> Option<&str> {
-        self.header("Caller-Caller-ID-Name")
+        self.header(EventHeader::CallerCallerIdName)
     }
 
     /// `Hangup-Cause` header (e.g. `NORMAL_CLEARING`, `USER_BUSY`).
     pub fn hangup_cause(&self) -> Option<&str> {
-        self.header("Hangup-Cause")
+        self.header(EventHeader::HangupCause)
     }
 
     /// Parse the `Channel-State` header into a [`ChannelState`].
     pub fn channel_state(&self) -> Option<ChannelState> {
-        self.header(HEADER_CHANNEL_STATE)?
+        self.header(EventHeader::ChannelState)?
             .parse()
             .ok()
     }
@@ -475,7 +472,7 @@ impl EslEvent {
     /// Parse the `Channel-State-Number` header into a [`ChannelState`].
     pub fn channel_state_number(&self) -> Option<ChannelState> {
         let n: u8 = self
-            .header(HEADER_CHANNEL_STATE_NUMBER)?
+            .header(EventHeader::ChannelStateNumber)?
             .parse()
             .ok()?;
         ChannelState::from_number(n)
@@ -483,21 +480,21 @@ impl EslEvent {
 
     /// Parse the `Channel-Call-State` header into a [`CallState`].
     pub fn call_state(&self) -> Option<CallState> {
-        self.header(HEADER_CHANNEL_CALL_STATE)?
+        self.header(EventHeader::ChannelCallState)?
             .parse()
             .ok()
     }
 
     /// Parse the `Answer-State` header into an [`AnswerState`].
     pub fn answer_state(&self) -> Option<AnswerState> {
-        self.header(HEADER_ANSWER_STATE)?
+        self.header(EventHeader::AnswerState)?
             .parse()
             .ok()
     }
 
     /// Parse the `Call-Direction` header into a [`CallDirection`].
     pub fn call_direction(&self) -> Option<CallDirection> {
-        self.header(HEADER_CALL_DIRECTION)?
+        self.header(EventHeader::CallDirection)?
             .parse()
             .ok()
     }
@@ -530,15 +527,15 @@ impl EslEvent {
 
     /// `Event-Subclass` header for `CUSTOM` events (e.g. `sofia::register`).
     pub fn event_subclass(&self) -> Option<&str> {
-        self.header("Event-Subclass")
+        self.header(EventHeader::EventSubclass)
     }
 
     /// Look up a channel variable by name.
     ///
     /// Checks the `variable_{name}` header, which is how FreeSWITCH exposes
     /// channel variables in events.
-    pub fn variable(&self, name: &str) -> Option<&str> {
-        let key = format!("variable_{}", name);
+    pub fn variable(&self, name: impl AsRef<str>) -> Option<&str> {
+        let key = format!("variable_{}", name.as_ref());
         self.header(&key)
     }
 
@@ -560,13 +557,15 @@ impl EslEvent {
         use std::fmt::Write;
         let mut result = String::new();
 
+        let event_name_key = EventHeader::EventName.as_str();
         if let Some(event_name) = self
             .headers
-            .get("Event-Name")
+            .get(event_name_key)
         {
             let _ = writeln!(
                 result,
-                "Event-Name: {}",
+                "{}: {}",
+                event_name_key,
                 percent_encode(event_name.as_bytes(), NON_ALPHANUMERIC)
             );
         }
@@ -574,7 +573,7 @@ impl EslEvent {
         let mut sorted_headers: Vec<_> = self
             .headers
             .iter()
-            .filter(|(k, _)| k.as_str() != "Event-Name" && k.as_str() != "Content-Length")
+            .filter(|(k, _)| k.as_str() != event_name_key && k.as_str() != "Content-Length")
             .collect();
         sorted_headers.sort_by_key(|(k, _)| k.as_str());
 

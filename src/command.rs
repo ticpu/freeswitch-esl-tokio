@@ -1,9 +1,10 @@
 //! Command execution and response handling
 
 use crate::{
-    constants::*,
+    constants::{HEADER_REPLY_TEXT, HEADER_TERMINATOR, LINE_TERMINATOR},
     error::{EslError, EslResult},
     event::EslEvent,
+    headers::EventHeader,
 };
 use std::collections::HashMap;
 use std::fmt;
@@ -91,9 +92,9 @@ impl EslResponse {
     }
 
     /// Look up a response header by name.
-    pub fn header(&self, name: &str) -> Option<&str> {
+    pub fn header(&self, name: impl AsRef<str>) -> Option<&str> {
         self.headers
-            .get(name)
+            .get(name.as_ref())
             .map(|s| s.as_str())
     }
 
@@ -115,7 +116,7 @@ impl EslResponse {
     /// and as a separate `Job-UUID` header. This reads the dedicated header.
     pub fn job_uuid(&self) -> Option<&str> {
         self.headers
-            .get(HEADER_JOB_UUID)
+            .get(EventHeader::JobUuid.as_str())
             .map(|s| s.as_str())
     }
 

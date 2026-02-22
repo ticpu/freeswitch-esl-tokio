@@ -3,9 +3,14 @@
 use crate::{
     buffer::EslBuffer,
     command::EslResponse,
-    constants::*,
+    constants::{
+        CONTENT_TYPE_API_RESPONSE, CONTENT_TYPE_AUTH_REQUEST, CONTENT_TYPE_COMMAND_REPLY,
+        CONTENT_TYPE_TEXT_EVENT_JSON, CONTENT_TYPE_TEXT_EVENT_PLAIN, CONTENT_TYPE_TEXT_EVENT_XML,
+        HEADER_CONTENT_LENGTH, HEADER_CONTENT_TYPE, HEADER_TERMINATOR, MAX_MESSAGE_SIZE,
+    },
     error::{EslError, EslResult},
     event::{EslEvent, EslEventType, EventFormat},
+    headers::EventHeader,
 };
 use percent_encoding::percent_decode_str;
 use std::collections::HashMap;
@@ -308,7 +313,7 @@ impl EslParser {
         }
 
         if let Some(event_name) = event
-            .header(HEADER_EVENT_NAME)
+            .header(EventHeader::EventName)
             .map(|s| s.to_string())
         {
             event.set_event_type(EslEventType::parse_event_type(&event_name));
@@ -419,7 +424,7 @@ impl EslParser {
         }
 
         if let Some(event_name) = event
-            .header(HEADER_EVENT_NAME)
+            .header(EventHeader::EventName)
             .map(|s| s.to_string())
         {
             event.set_event_type(EslEventType::parse_event_type(&event_name));

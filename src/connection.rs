@@ -14,7 +14,7 @@ use tracing::{debug, info, trace, warn};
 
 use crate::{
     command::{EslCommand, EslResponse},
-    constants::*,
+    constants::{DEFAULT_TIMEOUT_MS, HEADER_CONTENT_TYPE, MAX_EVENT_QUEUE_SIZE, SOCKET_BUF_SIZE},
     error::{EslError, EslResult},
     event::{EslEvent, EslEventType, EventFormat},
     protocol::{EslMessage, EslParser, MessageType},
