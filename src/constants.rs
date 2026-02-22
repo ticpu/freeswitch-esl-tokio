@@ -1,6 +1,6 @@
 //! Protocol constants and configuration values
 
-/// Default FreeSWITCH ESL port for inbound connections
+/// Default FreeSWITCH ESL port for inbound connections.
 pub const DEFAULT_ESL_PORT: u16 = 8021;
 
 /// Socket buffer size for reading from TCP stream (64KB) - standard TCP receive window
@@ -18,16 +18,22 @@ pub const MAX_MESSAGE_SIZE: usize = 8 * 1024 * 1024;
 /// Should hold 2 max messages + overhead. Indicates a bug if exceeded.
 pub const MAX_BUFFER_SIZE: usize = 16 * 1024 * 1024;
 
-/// Protocol message terminators
+/// Double newline separating header blocks in ESL wire format.
 pub const HEADER_TERMINATOR: &str = "\n\n";
+/// Single newline separating individual headers in ESL wire format.
 pub const LINE_TERMINATOR: &str = "\n";
 
-/// Content-Type header values
+/// Content-Type for auth challenge from FreeSWITCH.
 pub const CONTENT_TYPE_AUTH_REQUEST: &str = "auth/request";
+/// Content-Type for command reply messages.
 pub const CONTENT_TYPE_COMMAND_REPLY: &str = "command/reply";
+/// Content-Type for api/bgapi response bodies.
 pub const CONTENT_TYPE_API_RESPONSE: &str = "api/response";
+/// Content-Type for plain-text event format.
 pub const CONTENT_TYPE_TEXT_EVENT_PLAIN: &str = "text/event-plain";
+/// Content-Type for JSON event format.
 pub const CONTENT_TYPE_TEXT_EVENT_JSON: &str = "text/event-json";
+/// Content-Type for XML event format.
 pub const CONTENT_TYPE_TEXT_EVENT_XML: &str = "text/event-xml";
 
 /// Protocol framing header names (not event payload — these stay as constants).

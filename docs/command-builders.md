@@ -38,6 +38,10 @@ for no benefit over `Display`. Every FreeSWITCH API command is ultimately a stri
 ```
 src/
 ├── command.rs              # ESL protocol: EslCommand, CommandBuilder, EslResponse (unchanged)
+├── channel.rs              # ChannelState, CallState, AnswerState, CallDirection,
+│                           # ChannelTimetable, TimetablePrefix
+├── headers.rs              # EventHeader enum (26 variants) — typed event header names
+├── macros.rs               # define_header_enum! — generates Display/FromStr/as_str for header enums
 ├── app/
 │   ├── mod.rs
 │   └── dptools.rs          # AppCommand (moved from command.rs) — answer, hangup, bridge, etc.
@@ -49,7 +53,8 @@ src/
 ├── variables/              # Channel variable format parsers
 │   ├── mod.rs
 │   ├── esl_array.rs        # ARRAY::item1|:item2 format
-│   └── sip_multipart.rs    # SIP multipart body extraction
+│   ├── sip_multipart.rs    # SIP multipart body extraction
+│   └── channel_variable.rs # ChannelVariable enum (54 variants) — typed variable names
 ```
 
 ### app/ vs commands/

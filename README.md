@@ -24,6 +24,13 @@ offers.
   dptools (`answer`, `bridge`, `playback`, ...) — all implement `Display` with
   no transport coupling. Build commands, unit test them, use them with
   `client.api()` when ready.
+- **Typed channel state** — `ChannelState`, `CallState`, `AnswerState`,
+  `CallDirection` enums with `FromStr`/`Display`. `ChannelTimetable` extracts
+  call lifecycle timestamps. All decoupled from `EslEvent` — works with any
+  key-value store via closure-based lookup.
+- **Typed header/variable enums** — `EventHeader` (26 variants) and
+  `ChannelVariable` (54 variants) for compile-time header and variable name
+  checking. No more typos in `"Caller-Caller-ID-Number"` strings.
 - **Connection health** — liveness detection via HEARTBEAT subscription,
   configurable command timeouts (default 5s), structured `DisconnectReason`,
   `is_connection_error()` / `is_recoverable()` error classification.
@@ -57,7 +64,7 @@ architecture story.
 
 ```toml
 [dependencies]
-freeswitch-esl-tokio = "1.0"
+freeswitch-esl-tokio = "1"
 tokio = { version = "1.0", features = ["full"] }
 ```
 
@@ -68,7 +75,12 @@ use freeswitch_esl_tokio::{EslClient, EslError};
 
 #[tokio::main]
 async fn main() -> Result<(), EslError> {
+    // Password-only authentication (default user)
     let (client, mut events) = EslClient::connect("localhost", 8021, "ClueCon").await?;
+
+    // Or authenticate as a specific user
+    let (client, mut events) =
+        EslClient::connect_with_user("localhost", 8021, "admin@default", "ClueCon").await?;
 
     let response = client.api("status").await?;
     println!("{}", response.body_string());
@@ -211,6 +223,60 @@ let body = MultipartBody::parse(raw_multipart).unwrap();
 let pidf = body.by_mime_type("application/pidf+xml");
 ```
 
+### Typed event accessors
+
+`EslEvent` provides typed accessors that parse header values into enums
+instead of returning raw strings:
+
+```rust
+use freeswitch_esl_tokio::{ChannelState, CallDirection};
+
+// Typed enums parsed from headers — no string matching
+if let Some(state) = event.channel_state() {
+    match state {
+        ChannelState::CsExecute => println!("Executing app"),
+        ChannelState::CsHangup => println!("Hanging up"),
+        _ => {}
+    }
+}
+
+// Convenience accessors for common headers
+let cid = event.caller_id_number();
+let direction = event.call_direction(); // Option<CallDirection>
+let cause = event.hangup_cause();       // Option<&str>
+```
+
+Call lifecycle timestamps via `ChannelTimetable`:
+
+```rust
+use freeswitch_esl_tokio::TimetablePrefix;
+
+// From an EslEvent — extracts Caller-Channel-*-Time headers
+let timetable = event.caller_timetable()?;
+
+// From any key-value store — decoupled from EslEvent
+let timetable = ChannelTimetable::from_lookup(
+    TimetablePrefix::Caller,
+    |key| headers.get(key).map(|v| v.as_str()),
+)?;
+if let Some(tt) = timetable {
+    println!("Created: {:?}, Answered: {:?}", tt.created, tt.answered);
+}
+```
+
+Compile-time header and variable name enums:
+
+```rust
+use freeswitch_esl_tokio::{EventHeader, ChannelVariable};
+
+// No typos — compiler checks the name
+let uid = event.header(EventHeader::UniqueId.as_str());
+let codec = event.variable(ChannelVariable::ReadCodec.as_str());
+```
+
+See `cargo run --example channel_tracker` for a complete reference
+implementation using typed accessors for channel lifecycle monitoring.
+
 ## Protocol commands
 
 | Method | ESL command |
@@ -240,6 +306,9 @@ let pidf = body.by_mime_type("application/pidf+xml");
 | Liveness detection | yes | no | no | no |
 | Command timeout | yes (default 5s) | no | no | no |
 | Error classification | yes | no | no | no |
+| Typed state enums | 5 (`ChannelState`, `CallState`, ...) | no | no | no |
+| Typed header enums | `EventHeader` (26) + `ChannelVariable` (54) | no | no | no |
+| Channel timetable | yes (decoupled from event type) | no | no | no |
 | Command builders | 13 typed structs | none | basic | none |
 | Event types | ![Event Types](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/event-type-count.json) | — | — | — |
 | Test count | ![Tests](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/test-count.json) | — | — | — |
