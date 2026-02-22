@@ -317,6 +317,60 @@ pub struct ChannelTimetable {
     pub hold_accum: Option<i64>,
 }
 
+/// Header prefix identifying which call leg's timetable to extract.
+///
+/// FreeSWITCH emits timetable headers as `{prefix}-Channel-Created-Time`, etc.
+/// The prefix varies by context — `Caller` for the primary leg, `Other-Leg`
+/// for the bridged party, `Channel` in outbound ESL mode, etc.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum TimetablePrefix {
+    /// Primary call leg (`Caller-*`).
+    Caller,
+    /// Bridged party (`Other-Leg-*`).
+    OtherLeg,
+    /// Outbound ESL channel profile (`Channel-*`).
+    Channel,
+    /// XML dialplan hunt (`Hunt-*`).
+    Hunt,
+    /// Bridge debug originator (`ORIGINATOR-*`).
+    Originator,
+    /// Bridge debug originatee (`ORIGINATEE-*`).
+    Originatee,
+    /// Post-bridge debug originator (`POST-ORIGINATOR-*`).
+    PostOriginator,
+    /// Post-bridge debug originatee (`POST-ORIGINATEE-*`).
+    PostOriginatee,
+}
+
+impl TimetablePrefix {
+    /// Wire-format prefix string.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Caller => "Caller",
+            Self::OtherLeg => "Other-Leg",
+            Self::Channel => "Channel",
+            Self::Hunt => "Hunt",
+            Self::Originator => "ORIGINATOR",
+            Self::Originatee => "ORIGINATEE",
+            Self::PostOriginator => "POST-ORIGINATOR",
+            Self::PostOriginatee => "POST-ORIGINATEE",
+        }
+    }
+}
+
+impl fmt::Display for TimetablePrefix {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl AsRef<str> for TimetablePrefix {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
 /// Error returned when a timetable header is present but not a valid `i64`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseTimetableError {
@@ -350,17 +404,24 @@ impl ChannelTimetable {
     ///
     /// ```
     /// use std::collections::HashMap;
-    /// use freeswitch_esl_tokio::ChannelTimetable;
+    /// use freeswitch_esl_tokio::{ChannelTimetable, TimetablePrefix};
     ///
     /// let mut headers = HashMap::new();
     /// headers.insert("Caller-Channel-Created-Time".into(), "1700000001000000".into());
+    ///
+    /// // With enum:
+    /// let tt = ChannelTimetable::from_lookup(TimetablePrefix::Caller, |k| headers.get(k).map(|v| v.as_str()));
+    /// assert!(tt.unwrap().unwrap().created.is_some());
+    ///
+    /// // With raw string (e.g. for dynamic "Call-1" prefix):
     /// let tt = ChannelTimetable::from_lookup("Caller", |k| headers.get(k).map(|v| v.as_str()));
     /// assert!(tt.unwrap().unwrap().created.is_some());
     /// ```
     pub fn from_lookup<'a>(
-        prefix: &str,
+        prefix: impl AsRef<str>,
         lookup: impl Fn(&str) -> Option<&'a str>,
     ) -> Result<Option<Self>, ParseTimetableError> {
+        let prefix = prefix.as_ref();
         let mut tt = Self::default();
         let mut found = false;
 
