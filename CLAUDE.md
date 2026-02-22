@@ -36,6 +36,13 @@ git tag -as v0.X.0 -m "v0.X.0
 git push --tags
 ```
 
+**Never `cargo publish` without completing these steps first:**
+
+1. Create a signed annotated tag (`git tag -as`)
+2. Push the tag (`git push --tags`)
+3. Wait for CI to pass on the tagged commit
+4. Only then `cargo publish`
+
 ## Documentation Style
 
 All public items must have doc comments — the pre-commit hook enforces
