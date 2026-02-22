@@ -420,22 +420,25 @@ async fn live_channel_timetable_on_create() {
                 {
                     let tt = evt
                         .caller_timetable()
+                        .expect("timetable should parse without error")
                         .expect("CHANNEL_CREATE should have Caller timetable");
 
                     // created must be a positive epoch-microsecond timestamp
+                    let created = tt
+                        .created
+                        .expect("created should be present on CHANNEL_CREATE");
                     assert!(
-                        tt.created
-                            .unwrap_or(0)
-                            > 1_000_000_000_000_000,
-                        "created timestamp should be a recent epoch-us value: {:?}",
-                        tt.created
+                        created > 1_000_000_000_000_000,
+                        "created timestamp should be a recent epoch-us value: {}",
+                        created
                     );
+                    let profile_created = tt
+                        .profile_created
+                        .expect("profile_created should be present on CHANNEL_CREATE");
                     assert!(
-                        tt.profile_created
-                            .unwrap_or(0)
-                            > 1_000_000_000_000_000,
-                        "profile_created should be a recent epoch-us value: {:?}",
-                        tt.profile_created
+                        profile_created > 1_000_000_000_000_000,
+                        "profile_created should be a recent epoch-us value: {}",
+                        profile_created
                     );
                     // answered/hungup should be 0 at creation time
                     assert_eq!(tt.answered, Some(0), "answered should be 0 at create");

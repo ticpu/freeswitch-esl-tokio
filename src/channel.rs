@@ -318,25 +318,47 @@ pub struct ChannelTimetable {
     pub hold_accum: Option<i64>,
 }
 
+/// Error returned when a timetable header is present but not a valid `i64`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParseTimetableError {
+    /// Full header name (e.g. `Caller-Channel-Created-Time`).
+    pub header: String,
+    /// The unparseable value found in the header.
+    pub value: String,
+}
+
+impl fmt::Display for ParseTimetableError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "invalid timetable value for {}: {:?}",
+            self.header, self.value
+        )
+    }
+}
+
+impl std::error::Error for ParseTimetableError {}
+
 impl ChannelTimetable {
     /// Extract a timetable from event headers with the given prefix.
     ///
-    /// Returns `None` if no timestamp headers with this prefix are present
-    /// or parseable. Common prefixes: `"Caller"`, `"Other-Leg"`.
-    pub fn from_event(event: &EslEvent, prefix: &str) -> Option<Self> {
+    /// Returns `Ok(None)` if no timestamp headers with this prefix are present.
+    /// Returns `Err` if a header is present but contains an invalid (non-`i64`) value.
+    /// Common prefixes: `"Caller"`, `"Other-Leg"`.
+    pub fn from_event(event: &EslEvent, prefix: &str) -> Result<Option<Self>, ParseTimetableError> {
         let mut tt = Self::default();
         let mut found = false;
 
         macro_rules! field {
             ($field:ident, $suffix:literal) => {
                 let header = format!("{}-{}", prefix, $suffix);
-                if let Some(v) = event
-                    .header(&header)
-                    .and_then(|s| {
-                        s.parse()
-                            .ok()
-                    })
-                {
+                if let Some(raw) = event.header(&header) {
+                    let v: i64 = raw
+                        .parse()
+                        .map_err(|_| ParseTimetableError {
+                            header: header.clone(),
+                            value: raw.to_string(),
+                        })?;
                     tt.$field = Some(v);
                     found = true;
                 }
@@ -356,9 +378,9 @@ impl ChannelTimetable {
         field!(hold_accum, "Channel-Hold-Accum");
 
         if found {
-            Some(tt)
+            Ok(Some(tt))
         } else {
-            None
+            Ok(None)
         }
     }
 }
@@ -569,7 +591,8 @@ mod tests {
 
         let tt = event
             .caller_timetable()
-            .expect("should parse");
+            .unwrap()
+            .expect("should have timetable");
         assert_eq!(tt.profile_created, Some(1700000000000000));
         assert_eq!(tt.created, Some(1700000001000000));
         assert_eq!(tt.answered, Some(1700000005000000));
@@ -600,7 +623,8 @@ mod tests {
 
         let tt = event
             .other_leg_timetable()
-            .expect("should parse");
+            .unwrap()
+            .expect("should have timetable");
         assert_eq!(tt.created, Some(1700000001000000));
         assert_eq!(tt.bridged, Some(1700000006000000));
     }
@@ -608,12 +632,18 @@ mod tests {
     #[test]
     fn timetable_no_headers() {
         let event = EslEvent::new();
-        assert!(event
-            .caller_timetable()
-            .is_none());
-        assert!(event
-            .other_leg_timetable()
-            .is_none());
+        assert_eq!(
+            event
+                .caller_timetable()
+                .unwrap(),
+            None
+        );
+        assert_eq!(
+            event
+                .other_leg_timetable()
+                .unwrap(),
+            None
+        );
     }
 
     #[test]
@@ -623,6 +653,7 @@ mod tests {
 
         let tt = event
             .caller_timetable()
+            .unwrap()
             .expect("at least one field parsed");
         assert_eq!(tt.created, Some(1700000001000000));
         assert_eq!(tt.answered, None);
@@ -630,13 +661,28 @@ mod tests {
     }
 
     #[test]
-    fn timetable_invalid_value_only() {
+    fn timetable_invalid_value_is_error() {
         let mut event = EslEvent::new();
         event.set_header("Caller-Channel-Created-Time", "not_a_number");
 
-        assert!(event
+        let err = event
             .caller_timetable()
-            .is_none());
+            .unwrap_err();
+        assert_eq!(err.header, "Caller-Channel-Created-Time");
+        assert_eq!(err.value, "not_a_number");
+    }
+
+    #[test]
+    fn timetable_valid_then_invalid_is_error() {
+        let mut event = EslEvent::new();
+        event.set_header("Caller-Profile-Created-Time", "1700000000000000");
+        event.set_header("Caller-Channel-Created-Time", "garbage");
+
+        let err = event
+            .caller_timetable()
+            .unwrap_err();
+        assert_eq!(err.header, "Caller-Channel-Created-Time");
+        assert_eq!(err.value, "garbage");
     }
 
     #[test]
@@ -646,7 +692,8 @@ mod tests {
 
         let tt = event
             .caller_timetable()
-            .expect("should parse");
+            .unwrap()
+            .expect("should have timetable");
         assert_eq!(tt.hungup, Some(0));
     }
 
@@ -657,6 +704,7 @@ mod tests {
 
         let tt = event
             .timetable("Channel")
+            .unwrap()
             .expect("custom prefix should work");
         assert_eq!(tt.created, Some(1700000001000000));
     }

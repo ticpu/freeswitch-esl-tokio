@@ -138,7 +138,9 @@ pub(crate) mod constants;
 pub(crate) mod protocol;
 
 pub use app::dptools::AppCommand;
-pub use channel::{AnswerState, CallDirection, CallState, ChannelState, ChannelTimetable};
+pub use channel::{
+    AnswerState, CallDirection, CallState, ChannelState, ChannelTimetable, ParseTimetableError,
+};
 pub use command::{CommandBuilder, EslResponse, ReplyStatus};
 pub use commands::{
     Application, ApplicationList, ConferenceDtmf, ConferenceHold, ConferenceMute, DialplanType,

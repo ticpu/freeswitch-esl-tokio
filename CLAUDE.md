@@ -58,6 +58,11 @@ Concretely: never use `unwrap_or` / default values to paper over missing
 mandatory protocol fields. If the ESL spec says a field must be present,
 its absence is a hard error — not a recoverable condition.
 
+Never use `.parse().ok()` to silently discard parse errors on protocol
+data. If a header is present but its value doesn't parse, that's a
+protocol violation — return `Err`, don't collapse it into `None` where
+it becomes indistinguishable from a missing header.
+
 ## Design Principles
 
 ### Transport layer (connection, protocol, event)

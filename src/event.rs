@@ -504,19 +504,27 @@ impl EslEvent {
 
     /// Extract timetable from timestamp headers with the given prefix.
     ///
-    /// Returns `None` if no timestamp headers with this prefix are present.
+    /// Returns `Ok(None)` if no timestamp headers with this prefix are present.
+    /// Returns `Err` if a header is present but contains an invalid value.
     /// Common prefixes: `"Caller"`, `"Other-Leg"`, `"Channel"`.
-    pub fn timetable(&self, prefix: &str) -> Option<crate::channel::ChannelTimetable> {
+    pub fn timetable(
+        &self,
+        prefix: &str,
+    ) -> Result<Option<crate::channel::ChannelTimetable>, crate::channel::ParseTimetableError> {
         crate::channel::ChannelTimetable::from_event(self, prefix)
     }
 
     /// Caller-leg channel timetable (`Caller-*-Time` headers).
-    pub fn caller_timetable(&self) -> Option<crate::channel::ChannelTimetable> {
+    pub fn caller_timetable(
+        &self,
+    ) -> Result<Option<crate::channel::ChannelTimetable>, crate::channel::ParseTimetableError> {
         self.timetable("Caller")
     }
 
     /// Other-leg channel timetable (`Other-Leg-*-Time` headers).
-    pub fn other_leg_timetable(&self) -> Option<crate::channel::ChannelTimetable> {
+    pub fn other_leg_timetable(
+        &self,
+    ) -> Result<Option<crate::channel::ChannelTimetable>, crate::channel::ParseTimetableError> {
         self.timetable("Other-Leg")
     }
 
