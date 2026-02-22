@@ -1,6 +1,5 @@
 //! Channel-related data types extracted from ESL event headers.
 
-use crate::event::EslEvent;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
@@ -340,19 +339,35 @@ impl fmt::Display for ParseTimetableError {
 impl std::error::Error for ParseTimetableError {}
 
 impl ChannelTimetable {
-    /// Extract a timetable from event headers with the given prefix.
+    /// Extract a timetable by looking up prefixed header names via a closure.
+    ///
+    /// The closure receives full header names (e.g. `"Caller-Channel-Created-Time"`)
+    /// and should return the raw value if present. Works with any key-value store:
+    /// `HashMap<String, String>`, `EslEvent`, `BTreeMap`, etc.
     ///
     /// Returns `Ok(None)` if no timestamp headers with this prefix are present.
     /// Returns `Err` if a header is present but contains an invalid (non-`i64`) value.
-    /// Common prefixes: `"Caller"`, `"Other-Leg"`.
-    pub fn from_event(event: &EslEvent, prefix: &str) -> Result<Option<Self>, ParseTimetableError> {
+    ///
+    /// ```
+    /// use std::collections::HashMap;
+    /// use freeswitch_esl_tokio::ChannelTimetable;
+    ///
+    /// let mut headers = HashMap::new();
+    /// headers.insert("Caller-Channel-Created-Time".into(), "1700000001000000".into());
+    /// let tt = ChannelTimetable::from_lookup("Caller", |k| headers.get(k).map(|v| v.as_str()));
+    /// assert!(tt.unwrap().unwrap().created.is_some());
+    /// ```
+    pub fn from_lookup<'a>(
+        prefix: &str,
+        lookup: impl Fn(&str) -> Option<&'a str>,
+    ) -> Result<Option<Self>, ParseTimetableError> {
         let mut tt = Self::default();
         let mut found = false;
 
         macro_rules! field {
             ($field:ident, $suffix:literal) => {
                 let header = format!("{}-{}", prefix, $suffix);
-                if let Some(raw) = event.header(&header) {
+                if let Some(raw) = lookup(&header) {
                     let v: i64 = raw
                         .parse()
                         .map_err(|_| ParseTimetableError {
@@ -388,6 +403,7 @@ impl ChannelTimetable {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::event::EslEvent;
 
     // --- ChannelState tests ---
 

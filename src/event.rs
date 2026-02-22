@@ -511,7 +511,7 @@ impl EslEvent {
         &self,
         prefix: &str,
     ) -> Result<Option<crate::channel::ChannelTimetable>, crate::channel::ParseTimetableError> {
-        crate::channel::ChannelTimetable::from_event(self, prefix)
+        crate::channel::ChannelTimetable::from_lookup(prefix, |key| self.header(key))
     }
 
     /// Caller-leg channel timetable (`Caller-*-Time` headers).

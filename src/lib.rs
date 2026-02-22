@@ -134,7 +134,7 @@ pub mod variables;
 
 pub(crate) mod buffer;
 pub(crate) mod command;
-pub(crate) mod constants;
+pub mod constants;
 pub(crate) mod protocol;
 
 pub use app::dptools::AppCommand;

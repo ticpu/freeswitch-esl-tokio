@@ -72,6 +72,18 @@ it becomes indistinguishable from a missing header.
 
 ## Design Principles
 
+### Single responsibility — no coupling to `EslEvent`
+
+Data types and parsers must not depend on `EslEvent` when a generic interface
+suffices. If a function only needs `header(&str) -> Option<&str>`, accept a
+closure or trait — not `&EslEvent`. This lets callers use the same logic with
+`HashMap`, `BTreeMap`, or any other key-value store without going through
+`EslEvent`.
+
+Concrete example: `ChannelTimetable::from_lookup(prefix, |k| map.get(k).map(…))`
+works with any data source. `from_event()` is a convenience wrapper, not the
+primary API.
+
 ### Transport layer (connection, protocol, event)
 
 - **Split reader/writer**: Background reader task + channel-based event delivery.
