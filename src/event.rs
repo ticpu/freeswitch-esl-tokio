@@ -2,6 +2,7 @@
 
 use crate::channel::{AnswerState, CallDirection, CallState, ChannelState};
 use crate::headers::EventHeader;
+use crate::lookup::HeaderLookup;
 use crate::variables::EslArray;
 use percent_encoding::{percent_encode, NON_ALPHANUMERIC};
 use serde::{Deserialize, Serialize};
@@ -601,6 +602,19 @@ impl EslEvent {
 impl Default for EslEvent {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl HeaderLookup for EslEvent {
+    fn header_str(&self, name: &str) -> Option<&str> {
+        self.headers
+            .get(name)
+            .map(|s| s.as_str())
+    }
+
+    fn variable_str(&self, name: &str) -> Option<&str> {
+        let key = format!("variable_{}", name);
+        self.header_str(&key)
     }
 }
 

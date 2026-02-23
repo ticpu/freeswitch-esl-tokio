@@ -4,7 +4,9 @@
 //!
 //! Usage: cargo run --example event_listener
 
-use freeswitch_esl_tokio::{EslClient, EslError, EslEventType, EventFormat, DEFAULT_ESL_PORT};
+use freeswitch_esl_tokio::{
+    EslClient, EslError, EslEventType, EventFormat, EventHeader, DEFAULT_ESL_PORT,
+};
 use std::collections::HashMap;
 use tracing::{debug, error, info};
 
@@ -152,7 +154,10 @@ fn process_event(
             }
         }
         Some(EslEventType::Dtmf) => {
-            if let (Some(uuid), Some(digit)) = (event.unique_id(), event.header("DTMF-Digit")) {
+            if let (Some(uuid), Some(digit)) = (
+                event.unique_id(),
+                event.header(EventHeader::DtmfDigit.as_str()),
+            ) {
                 info!("DTMF: {} pressed '{}'", uuid, digit);
             }
         }

@@ -28,9 +28,10 @@ offers.
   `CallDirection` enums with `FromStr`/`Display`. `ChannelTimetable` extracts
   call lifecycle timestamps. All decoupled from `EslEvent` — works with any
   key-value store via closure-based lookup.
-- **Typed header/variable enums** — `EventHeader` (26 variants) and
-  `ChannelVariable` (54 variants) for compile-time header and variable name
-  checking. No more typos in `"Caller-Caller-ID-Number"` strings.
+- **Typed header/variable enums** — `EventHeader` and `ChannelVariable` enums
+  for compile-time header and variable name checking. The `HeaderLookup` trait
+  provides typed accessors to any key-value store that implements two methods —
+  not just `EslEvent`.
 - **Connection health** — liveness detection via HEARTBEAT subscription,
   configurable command timeouts (default 5s), structured `DisconnectReason`,
   `is_connection_error()` / `is_recoverable()` error classification.
@@ -300,18 +301,46 @@ if let Some(tt) = timetable {
 }
 ```
 
-Compile-time header and variable name enums:
+Compile-time header and variable name enums via `HeaderLookup`:
 
 ```rust
-use freeswitch_esl_tokio::{EventHeader, ChannelVariable};
+use freeswitch_esl_tokio::{HeaderLookup, EventHeader, ChannelVariable};
 
-// Compiler-checked header names, no risk of typos
-let uid = event.header(EventHeader::UniqueId.as_str());       // Option<&str>
-let codec = event.variable(ChannelVariable::ReadCodec.as_str()); // Option<&str>
+// HeaderLookup trait provides typed enum lookups on EslEvent
+let uid = event.header(EventHeader::UniqueId);             // Option<&str>
+let codec = event.variable(ChannelVariable::ReadCodec);    // Option<&str>
+```
+
+### Custom channel tracker with `HeaderLookup`
+
+The `HeaderLookup` trait lets any `HashMap<String, String>` wrapper share
+the same typed accessors as `EslEvent`. Implement two methods, get ~17
+accessors for free:
+
+```rust
+use std::collections::HashMap;
+use freeswitch_esl_tokio::HeaderLookup;
+
+struct TrackedChannel {
+    data: HashMap<String, String>,
+}
+
+impl HeaderLookup for TrackedChannel {
+    fn header_str(&self, name: &str) -> Option<&str> {
+        self.data.get(name).map(|s| s.as_str())
+    }
+    fn variable_str(&self, name: &str) -> Option<&str> {
+        self.data.get(&format!("variable_{}", name)).map(|s| s.as_str())
+    }
+}
+
+// Now TrackedChannel has all the same typed accessors:
+// ch.channel_state(), ch.call_direction(), ch.hangup_cause(),
+// ch.caller_timetable(), ch.header(EventHeader::UniqueId), etc.
 ```
 
 See `cargo run --example channel_tracker` for a complete reference
-implementation using typed accessors for channel lifecycle monitoring.
+implementation using `HeaderLookup` for channel lifecycle monitoring.
 
 ## Development
 
@@ -359,7 +388,7 @@ cargo test --test live_freeswitch -- --ignored
 | Command timeout | yes (default 5s) | no | no | no |
 | Error classification | yes | no | no | no |
 | Typed state enums | 5 (`ChannelState`, `CallState`, ...) | no | no | no |
-| Typed header enums | `EventHeader` (26) + `ChannelVariable` (54) | no | no | no |
+| Typed header enums | `EventHeader` + `ChannelVariable` + `HeaderLookup` trait | no | no | no |
 | Channel timetable | yes (decoupled from event type) | no | no | no |
 | Command builders | 13 typed structs | none | basic | none |
 | Event types | ![Event Types](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/event-type-count.json) | — | — | — |

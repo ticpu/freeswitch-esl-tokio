@@ -1,14 +1,20 @@
-//! Channel state tracker — reference example for ESL channel lifecycle monitoring.
+//! Channel state tracker -- reference example for ESL channel lifecycle monitoring.
+//!
+//! Demonstrates [`HeaderLookup`] -- the shared trait for typed header access from
+//! any key-value store. `TrackedChannel` implements just two methods
+//! (`header_str`, `variable_str`) and gets all typed accessors for free:
+//! `channel_state()`, `call_state()`, `call_direction()`, `hangup_cause()`,
+//! `timetable()`, etc.
 //!
 //! Tracks all active channels as flat data maps storing event headers and
-//! uuid_dump variables. Typed state accessors (`channel_state()`, `call_state()`,
-//! etc.) parse on demand from the stored headers — no separate fields to sync.
+//! uuid_dump variables. Typed state accessors parse on demand from the stored
+//! headers -- no separate fields to sync.
 //!
-//! Bootstrap flow: subscribe → `show channels as json` → fake CHANNEL_CREATE
-//! events → bgapi uuid_dump per channel. Single code path for bootstrap and
+//! Bootstrap flow: subscribe -> `show channels as json` -> fake CHANNEL_CREATE
+//! events -> bgapi uuid_dump per channel. Single code path for bootstrap and
 //! live events.
 //!
-//! uuid_dump uses bgapi so it doesn't block event processing — results arrive
+//! uuid_dump uses bgapi so it doesn't block event processing -- results arrive
 //! as BACKGROUND_JOB events matched by Job-UUID.
 //!
 //! Usage: RUST_LOG=info cargo run --example channel_tracker [-- [host[:port]] [password]]
@@ -17,8 +23,8 @@ use std::collections::HashMap;
 use std::fmt::Display;
 
 use freeswitch_esl_tokio::{
-    CallDirection, CallState, ChannelState, EslClient, EslError, EslEvent, EslEventType,
-    EventFormat, DEFAULT_ESL_PORT,
+    CallState, EslClient, EslError, EslEvent, EslEventType, EventFormat, EventHeader, HeaderLookup,
+    DEFAULT_ESL_PORT,
 };
 use percent_encoding::percent_decode_str;
 use tracing::{debug, error, info, warn};
@@ -34,50 +40,69 @@ fn display_or<T: Display>(opt: Option<T>) -> String {
     }
 }
 
-/// Mapping from `show channels as json` field names to ESL event header names.
+/// Mapping from `show channels as json` field names to ESL event headers.
 /// Used to build fake CHANNEL_CREATE events from bootstrap data so that
 /// bootstrap and live events share the same processing path.
-const DB_TO_EVENT: &[(&str, &str)] = &[
-    ("uuid", "Unique-ID"),
-    ("name", "Channel-Name"),
-    ("state", "Channel-State"),
-    ("callstate", "Channel-Call-State"),
-    ("direction", "Call-Direction"),
-    ("cid_name", "Caller-Caller-ID-Name"),
-    ("cid_num", "Caller-Caller-ID-Number"),
-    ("initial_cid_name", "Caller-Orig-Caller-ID-Name"),
-    ("initial_cid_num", "Caller-Orig-Caller-ID-Number"),
-    ("callee_name", "Caller-Callee-ID-Name"),
-    ("callee_num", "Caller-Callee-ID-Number"),
-    ("dest", "Caller-Destination-Number"),
-    ("call_uuid", "Channel-Call-UUID"),
+const DB_TO_EVENT: &[(&str, EventHeader)] = &[
+    ("uuid", EventHeader::UniqueId),
+    ("name", EventHeader::ChannelName),
+    ("state", EventHeader::ChannelState),
+    ("callstate", EventHeader::ChannelCallState),
+    ("direction", EventHeader::CallDirection),
+    ("cid_name", EventHeader::CallerCallerIdName),
+    ("cid_num", EventHeader::CallerCallerIdNumber),
+    ("initial_cid_name", EventHeader::CallerOrigCallerIdName),
+    ("initial_cid_num", EventHeader::CallerOrigCallerIdNumber),
+    ("callee_name", EventHeader::CallerCalleeIdName),
+    ("callee_num", EventHeader::CallerCalleeIdNumber),
+    ("dest", EventHeader::CallerDestinationNumber),
+    ("call_uuid", EventHeader::ChannelCallUuid),
 ];
 
 /// Build a fake CHANNEL_CREATE event from a `show channels as json` row,
 /// mapping DB field names to event header names. Feeds through the normal
-/// process_event path — no separate constructor to keep in sync.
+/// process_event path -- no separate constructor to keep in sync.
 fn fake_channel_create(row: &serde_json::Value) -> Option<EslEvent> {
     row.get("uuid")?
         .as_str()?;
 
     let mut event = EslEvent::with_type(EslEventType::ChannelCreate);
-    for (json_key, header_name) in DB_TO_EVENT {
+    for (json_key, header) in DB_TO_EVENT {
         if let Some(val) = row
             .get(json_key)
             .and_then(|v| v.as_str())
         {
             if !val.is_empty() {
-                event.set_header(*header_name, val);
+                event.set_header(header.as_ref(), val);
             }
         }
     }
     Some(event)
 }
 
-/// Flat data map — all event headers and uuid_dump variables accumulated over
-/// the channel's lifetime. Typed state is parsed on demand from stored headers.
+/// Flat data map -- all event headers and uuid_dump variables accumulated over
+/// the channel's lifetime.
+///
+/// Implements [`HeaderLookup`] to get all typed accessors (`channel_state()`,
+/// `call_direction()`, `hangup_cause()`, `timetable()`, etc.) from just two
+/// methods. Use `header(EventHeader::X)` for known headers, `header_str("X")`
+/// for arbitrary header names, and `variable_str("x")` for channel variables.
 struct TrackedChannel {
     data: HashMap<String, String>,
+}
+
+impl HeaderLookup for TrackedChannel {
+    fn header_str(&self, name: &str) -> Option<&str> {
+        self.data
+            .get(name)
+            .map(|s| s.as_str())
+    }
+
+    fn variable_str(&self, name: &str) -> Option<&str> {
+        self.data
+            .get(&format!("variable_{}", name))
+            .map(|s| s.as_str())
+    }
 }
 
 impl TrackedChannel {
@@ -85,28 +110,6 @@ impl TrackedChannel {
         Self {
             data: HashMap::new(),
         }
-    }
-
-    fn channel_state(&self) -> Option<ChannelState> {
-        self.get("Channel-State")?
-            .parse()
-            .ok()
-    }
-
-    fn call_state(&self) -> Option<CallState> {
-        self.get("Channel-Call-State")?
-            .parse()
-            .ok()
-    }
-
-    fn call_direction(&self) -> Option<CallDirection> {
-        self.get("Call-Direction")?
-            .parse()
-            .ok()
-    }
-
-    fn hangup_cause(&self) -> Option<&str> {
-        self.get("Hangup-Cause")
     }
 
     /// Merge all event headers into the data map.
@@ -131,26 +134,14 @@ impl TrackedChannel {
         }
     }
 
-    fn get(&self, key: &str) -> Option<&str> {
-        self.data
-            .get(key)
-            .map(|s| s.as_str())
-    }
-
-    fn var(&self, name: &str) -> Option<&str> {
-        self.data
-            .get(&format!("variable_{}", name))
-            .map(|s| s.as_str())
-    }
-
     fn format_fields(&self) -> (String, String, String, &str, &str) {
         (
             display_or(self.channel_state()),
             display_or(self.call_state()),
             display_or(self.call_direction()),
-            self.get("Caller-Caller-ID-Number")
+            self.caller_id_number()
                 .unwrap_or("-"),
-            self.get("Channel-Name")
+            self.channel_name()
                 .unwrap_or("-"),
         )
     }
@@ -158,7 +149,7 @@ impl TrackedChannel {
 
 struct ChannelTracker {
     channels: HashMap<String, TrackedChannel>,
-    /// Maps bgapi Job-UUID → channel UUID for pending uuid_dump results.
+    /// Maps bgapi Job-UUID -> channel UUID for pending uuid_dump results.
     pending_dumps: HashMap<String, String>,
 }
 
@@ -170,7 +161,7 @@ impl ChannelTracker {
         }
     }
 
-    /// Bootstrap from `show channels as json` — builds fake CHANNEL_CREATE
+    /// Bootstrap from `show channels as json` -- builds fake CHANNEL_CREATE
     /// events and feeds them through the normal process_event path.
     /// Returns UUIDs of bootstrapped channels (for uuid_dump follow-up).
     fn bootstrap(&mut self, body: &str) -> Vec<String> {
@@ -260,7 +251,7 @@ impl ChannelTracker {
                         short_uuid(&uuid),
                         ch.hangup_cause()
                             .unwrap_or("UNKNOWN"),
-                        ch.get("Channel-Name")
+                        ch.channel_name()
                             .unwrap_or("-"),
                     );
                     self.channels
@@ -287,7 +278,7 @@ impl ChannelTracker {
                 {
                     ch.update_from_event(event);
                     ch.data
-                        .remove("Other-Leg-Unique-ID");
+                        .remove(EventHeader::OtherLegUniqueId.as_ref());
                 }
             }
             _ => {
@@ -353,22 +344,22 @@ impl ChannelTracker {
         for (uuid, ch) in sorted {
             let (state, call_state, dir, cid, name) = ch.format_fields();
             let dest = ch
-                .get("Caller-Destination-Number")
+                .header(EventHeader::CallerDestinationNumber)
                 .unwrap_or("-");
             let mut flags = String::new();
             if ch.call_state() == Some(CallState::Held) {
                 flags.push_str("[HELD]");
             }
             if ch
-                .var("rtp_secure_media_confirmed")
+                .variable_str("rtp_secure_media_confirmed")
                 .is_some()
             {
                 flags.push_str("[SEC]");
             }
-            if let Some(other) = ch.get("Other-Leg-Unique-ID") {
+            if let Some(other) = ch.header(EventHeader::OtherLegUniqueId) {
                 flags.push_str(&format!("[B:{}]", short_uuid(other)));
             }
-            if let Some(call_id) = ch.var("sip_call_id") {
+            if let Some(call_id) = ch.variable_str("sip_call_id") {
                 flags.push_str(&format!("[SIP:{}]", &call_id[..16.min(call_id.len())]));
             }
             println!(
@@ -444,7 +435,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Err(EslError::Io(e)) if e.kind() == std::io::ErrorKind::ConnectionRefused => {
             error!(
-                "Connection refused — is FreeSWITCH running on {}:{}?",
+                "Connection refused -- is FreeSWITCH running on {}:{}?",
                 host, port,
             );
             return Err(e.into());
@@ -492,7 +483,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut tracker = ChannelTracker::new();
 
-    // Bootstrap: show channels → fake events → bgapi uuid_dump per channel.
+    // Bootstrap: show channels -> fake events -> bgapi uuid_dump per channel.
     // Subscribe first so we don't miss channels created during bootstrap.
     // Dump results arrive as BACKGROUND_JOB events in the event loop.
     match client

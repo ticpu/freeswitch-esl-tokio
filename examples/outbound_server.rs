@@ -8,7 +8,7 @@
 //! To test this, configure FreeSWITCH with:
 //! <action application="socket" data="localhost:8040 async full"/>
 
-use freeswitch_esl_tokio::{AppCommand, EslClient, EslEventType, EventFormat};
+use freeswitch_esl_tokio::{AppCommand, EslClient, EslEventType, EventFormat, EventHeader};
 use tokio::net::TcpListener;
 use tracing::{debug, error, info};
 
@@ -134,7 +134,7 @@ async fn handle_call(
                     .await?;
             }
             Some(EslEventType::Dtmf) => {
-                if let Some(digit) = event.header("DTMF-Digit") {
+                if let Some(digit) = event.header(EventHeader::DtmfDigit.as_str()) {
                     info!("Received DTMF: {}", digit);
 
                     if digit == "#" {

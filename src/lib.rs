@@ -162,6 +162,7 @@ pub use constants::DEFAULT_ESL_PORT;
 pub use error::{EslError, EslResult};
 pub use event::{EslEvent, EslEventPriority, EslEventType, EventFormat};
 pub use headers::{EventHeader, ParseEventHeaderError};
+pub use lookup::HeaderLookup;
 pub use variables::{
     ChannelVariable, EslArray, MultipartBody, MultipartItem, ParseChannelVariableError,
 };

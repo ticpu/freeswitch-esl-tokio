@@ -53,6 +53,10 @@ Only document when it adds value: non-obvious behavior, FreeSWITCH-specific sema
 wire format details, gotchas. Silence over noise. If the name and signature tell the
 whole story, a brief one-liner suffices.
 
+**No hardcoded counts in prose.** Don't write "26 variants" or "54 variables" in
+markdown files or comments — these go stale when variants are added. Use dynamic
+badges (CI-generated) in README or just omit the count.
+
 ## Correctness Over Recovery
 
 Correctness is the highest priority. Never silently absorb protocol violations
@@ -139,7 +143,8 @@ src/
 ├── event.rs               # EslEvent, EslEventType (synced with C ESL EVENT_NAMES[])
 ├── error.rs               # EslError, DisconnectReason, error classification
 ├── channel.rs             # ChannelState, CallState, AnswerState, CallDirection, ChannelTimetable
-├── headers.rs             # EventHeader enum (26 variants)
+├── headers.rs             # EventHeader enum
+├── lookup.rs              # HeaderLookup trait — typed accessors for any key-value store
 ├── constants.rs           # Wire format constants, timeouts, buffer sizes
 ├── macros.rs              # define_header_enum! macro
 ├── app/
@@ -154,7 +159,7 @@ src/
     ├── mod.rs
     ├── esl_array.rs       # ARRAY::item1|:item2 format
     ├── sip_multipart.rs   # SIP multipart body extraction
-    └── channel_variable.rs # ChannelVariable enum (54 variants)
+    └── channel_variable.rs # ChannelVariable enum
 
 tests/
 ├── integration_tests.rs   # Mock-server protocol tests
@@ -216,6 +221,14 @@ never used this library before.
 - **Explain unwrap() calls.** If `unwrap()` is safe, say why in a comment
   (e.g. "BACKGROUND_JOB always has a body; most other event types don't").
   If it's not safe, use `?` or handle the `None`.
+
+### Keep examples in sync with API changes
+
+When adding or changing public API (new traits, new enum variants, renamed
+methods), **always update examples/ to use the new API**. Examples are the
+primary documentation for new users. Stale examples that use deprecated or
+removed patterns are worse than no examples at all. Build all examples
+(`cargo build --examples`) as part of every change that touches public API.
 
 ### Typed API, not C ESL patterns
 

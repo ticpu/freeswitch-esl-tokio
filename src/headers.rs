@@ -45,6 +45,7 @@ define_header_enum! {
         CallerDirection => "Caller-Direction",
         CallerNetworkAddr => "Caller-Network-Addr",
         CoreUuid => "Core-UUID",
+        DtmfDigit => "DTMF-Digit",
         Priority => "priority",
     }
 }
@@ -132,6 +133,7 @@ mod tests {
             EventHeader::CallerDirection,
             EventHeader::CallerNetworkAddr,
             EventHeader::CoreUuid,
+            EventHeader::DtmfDigit,
             EventHeader::Priority,
         ];
         for v in variants {
