@@ -388,7 +388,7 @@ cargo test --test live_freeswitch -- --ignored
 | Command timeout | yes (default 5s) | no | no | no |
 | Error classification | yes | no | no | no |
 | Typed state enums | 5 (`ChannelState`, `CallState`, ...) | no | no | no |
-| Typed header enums | `EventHeader` + `ChannelVariable` + `HeaderLookup` trait | no | no | no |
+| Typed header enums | ![EventHeader](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/event-header-count.json)<br>![ChannelVariable](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/channel-var-count.json)<br>![HeaderLookup](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/header-lookup-count.json) | no | no | no |
 | Channel timetable | yes (decoupled from event type) | no | no | no |
 | Command builders | 13 typed structs | none | basic | none |
 | Event types | ![Event Types](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/event-type-count.json) | — | — | — |

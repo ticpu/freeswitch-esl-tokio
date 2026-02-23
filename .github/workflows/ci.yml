@@ -41,6 +41,12 @@ jobs:
           count=$(sed -n '/impl fmt::Display for EslEventType/,/=> "ALL"/p' src/event.rs | grep -c '=> "')
           echo "EVENT_TYPE_COUNT=$count" >> "$GITHUB_ENV"
 
+      - name: Count typed enum variants
+        run: |
+          echo "EVENT_HEADER_COUNT=$(grep -c '=> "' src/headers.rs)" >> "$GITHUB_ENV"
+          echo "CHANNEL_VAR_COUNT=$(grep -c '=> "' src/variables/channel_variable.rs)" >> "$GITHUB_ENV"
+          echo "HEADER_LOOKUP_COUNT=$(sed -n '/^pub trait HeaderLookup/,/^}/p' src/lookup.rs | grep -c '^ *fn ')" >> "$GITHUB_ENV"
+
       - name: Test
         run: |
           set -o pipefail
@@ -68,6 +74,39 @@ jobs:
           filename: event-type-count.json
           label: event types
           message: "${{ env.EVENT_TYPE_COUNT }} (verified vs C)"
+          color: blue
+
+      - name: Update EventHeader count badge
+        if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: def178758b6a88effff310aca87b6b50
+          filename: event-header-count.json
+          label: EventHeader
+          message: "${{ env.EVENT_HEADER_COUNT }}"
+          color: blue
+
+      - name: Update ChannelVariable count badge
+        if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: def178758b6a88effff310aca87b6b50
+          filename: channel-var-count.json
+          label: ChannelVariable
+          message: "${{ env.CHANNEL_VAR_COUNT }}"
+          color: blue
+
+      - name: Update HeaderLookup count badge
+        if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: def178758b6a88effff310aca87b6b50
+          filename: header-lookup-count.json
+          label: HeaderLookup
+          message: "${{ env.HEADER_LOOKUP_COUNT }} accessors"
           color: blue
 
       - name: Build
