@@ -134,6 +134,7 @@ pub mod connection;
 pub mod error;
 pub mod event;
 pub mod headers;
+pub mod lookup;
 pub mod variables;
 
 pub(crate) mod buffer;
