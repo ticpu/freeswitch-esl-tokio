@@ -109,6 +109,68 @@ primary API.
 - **Foundation for extension**: Application-specific crates (NGCS, X-Call-Info, SIP
   URI) can depend on these base types without reimplementing escaping or parsing.
 
+### Architectural boundary: core vs wrapper
+
+This crate (`freeswitch-esl-tokio`) is **transport only**: wire format, framing,
+event delivery, and raw `api()`/`bgapi()`. It does not parse API response bodies
+into typed structs.
+
+A future **wrapper crate** will own the typed command-and-response layer:
+
+- Depends on this crate for transport and on `commands/` for command builders
+- Provides typed methods (`client.status()`, `client.sofia_status()`,
+  `client.show_channels()`) that send the command and parse the response
+- Each method returns a parsed struct (`StatusResponse`, `SofiaProfile`, etc.)
+- Uses XML output variants where available for reliable parsing
+- Can pull in heavier deps (regex, serde) without bloating the core
+
+**Do not add response parsing or high-level command methods to `EslClient`.**
+Keep the boundary clean — `EslClient` sends strings and returns `EslResponse`.
+
+## Source Layout
+
+```
+src/
+├── lib.rs                 # Public API re-exports
+├── connection.rs          # EslClient, EslEventStream, connect()/accept_outbound()
+├── protocol.rs            # Wire format parser (framing, percent-decoding)
+├── buffer.rs              # Streaming read buffer with Content-Length framing
+├── command.rs             # EslCommand, CommandBuilder, EslResponse
+├── event.rs               # EslEvent, EslEventType (synced with C ESL EVENT_NAMES[])
+├── error.rs               # EslError, DisconnectReason, error classification
+├── channel.rs             # ChannelState, CallState, AnswerState, CallDirection, ChannelTimetable
+├── headers.rs             # EventHeader enum (26 variants)
+├── constants.rs           # Wire format constants, timeouts, buffer sizes
+├── macros.rs              # define_header_enum! macro
+├── app/
+│   ├── mod.rs
+│   └── dptools.rs         # AppCommand — answer, hangup, bridge, playback, ...
+├── commands/              # API command string builders (→ api()/bgapi())
+│   ├── mod.rs             # Re-exports, originate_quote/unquote, originate_split()
+│   ├── originate.rs       # Variables, Endpoint, Application, Originate
+│   ├── channel.rs         # UuidAnswer, UuidBridge, UuidKill, UuidSetVar, ...
+│   └── conference.rs      # ConferenceMute, ConferenceHold, ConferenceDtmf
+└── variables/             # Channel variable format parsers
+    ├── mod.rs
+    ├── esl_array.rs       # ARRAY::item1|:item2 format
+    ├── sip_multipart.rs   # SIP multipart body extraction
+    └── channel_variable.rs # ChannelVariable enum (54 variants)
+
+tests/
+├── integration_tests.rs   # Mock-server protocol tests
+├── connection_tests.rs    # Connection lifecycle, timeouts, liveness
+├── live_freeswitch.rs     # Real ESL tests (ignored without FreeSWITCH)
+└── mock_server.rs         # Test harness simulating ESL server
+
+examples/
+├── channel_tracker.rs     # Channel lifecycle monitoring with typed accessors
+├── event_listener.rs      # Subscribe and print events
+├── event_filter.rs        # Event filtering demo
+├── inbound_client.rs      # Basic inbound ESL client
+├── outbound_server.rs     # Outbound ESL server
+└── outbound_test.rs       # Outbound mode integration test
+```
+
 ## Outbound ESL Mode
 
 See [docs/outbound-esl-quirks.md](docs/outbound-esl-quirks.md) for details.
@@ -138,9 +200,24 @@ To check if FreeSWITCH is listening: `ss -tlnp sport = :8022`
 Check with `ss -tlnp sport = :8022` — if listening, run them. If not
 available, skip but note it in the commit process.
 
-## Examples — Use the Library's Own API
+## Examples — Write for the New User
 
-Examples must showcase the library's typed API, not reimplement C ESL patterns.
+Examples are the first thing a new user reads. Write them for someone who has
+never used this library before.
+
+- **Comment the "why", not the "what".** A beginner can read `client.api("status")`
+  but can't guess that `body()` is `None` for some commands, or that `recv()`
+  returning `None` means disconnection.
+- **Show return types** when they aren't obvious from context. Add
+  `// Option<&str>` or `// Option<CallDirection>` inline so the reader doesn't
+  have to look up docs to follow the example.
+- **No em-dashes (—) in source code.** Use commas, periods, or reword.
+  Em-dashes are fine in markdown prose.
+- **Explain unwrap() calls.** If `unwrap()` is safe, say why in a comment
+  (e.g. "BACKGROUND_JOB always has a body; most other event types don't").
+  If it's not safe, use `?` or handle the `None`.
+
+### Typed API, not C ESL patterns
 
 - Use typed accessors (`event.caller_id_number()`, `event.hangup_cause()`,
   `event.call_direction()`, `event.channel_state()`) — never raw
@@ -152,6 +229,10 @@ Examples must showcase the library's typed API, not reimplement C ESL patterns.
   rather than maintaining parallel fields to keep in sync.
 - The C ESL ecosystem is entirely string-based. LLMs default to that pattern.
   Review generated example code specifically for this anti-pattern.
+- Never suggest raw `starts_with("+OK")` / `starts_with("-ERR")` string parsing
+  on responses. Use the typed API: `response.is_success()`, `response.into_result()`,
+  `response.reply_status()`. If a typed accessor doesn't exist for a use case,
+  that's a missing feature to implement — not a reason to fall back to string matching.
 
 ## Development Methodology — TDD
 

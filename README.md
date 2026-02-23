@@ -75,19 +75,26 @@ use freeswitch_esl_tokio::{EslClient, EslError};
 
 #[tokio::main]
 async fn main() -> Result<(), EslError> {
-    // Password-only authentication (default user)
+    // connect() returns a client for sending commands and a stream for receiving events
     let (client, mut events) = EslClient::connect("localhost", 8021, "ClueCon").await?;
 
-    // Or authenticate as a specific user
-    let (client, mut events) =
-        EslClient::connect_with_user("localhost", 8021, "admin@default", "ClueCon").await?;
-
+    // api() sends a command and waits for the response
     let response = client.api("status").await?;
+    // EslResponse has is_success(), reply_text(), body(), header(), etc.
+    // Some commands return data in body(), others only set reply_text().
+    // body_string() is a shorthand that returns "" when body() is None.
     println!("{}", response.body_string());
 
     client.disconnect().await?;
     Ok(())
 }
+```
+
+Multi-tenant setups can authenticate as a specific ACL user:
+
+```rust
+let (client, mut events) =
+    EslClient::connect_with_user("localhost", 8021, "admin@default", "ClueCon").await?;
 ```
 
 ### Event loop with liveness detection
@@ -100,21 +107,26 @@ use std::time::Duration;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (client, mut events) = EslClient::connect("localhost", 8021, "ClueCon").await?;
 
-    // 60s without any TCP traffic → Disconnected(HeartbeatExpired)
+    // Without liveness detection, a dead TCP connection hangs silently.
+    // With it, the library fires Disconnected(HeartbeatExpired) after the timeout.
     client.set_liveness_timeout(Duration::from_secs(60));
 
-    // HEARTBEAT subscription ensures traffic on idle connections
+    // Subscribe to HEARTBEAT so FreeSWITCH sends periodic traffic even when
+    // no calls are active, this is what the liveness timer watches for
     client.subscribe_events(EventFormat::Plain, &[
         EslEventType::Heartbeat,
         EslEventType::ChannelAnswer,
         EslEventType::ChannelHangup,
     ]).await?;
 
+    // recv() returns None when the reader task exits (disconnect, EOF, or
+    // liveness timeout). Some(Err(_)) is a parse error on a single event,
+    // the connection is still alive, so keep looping.
     while let Some(Ok(event)) = events.recv().await {
         println!("{:?}", event.event_type());
     }
 
-    // None → reader task exited (disconnect, EOF, or liveness timeout)
+    // After the loop, status() tells you why the connection ended
     println!("Disconnected: {:?}", events.status());
     Ok(())
 }
@@ -131,13 +143,18 @@ client.subscribe_events(EventFormat::Plain, &[
     EslEventType::BackgroundJob,
 ]).await?;
 
-let response = client.bgapi("originate user/1000 &park").await?;
+// bgapi queues the command and returns immediately with a Job-UUID
+let response = client.bgapi("sofia xmlstatus profile internal").await?;
 let job_uuid = response.job_uuid().expect("bgapi returns Job-UUID");
 
-// In the event loop:
-if event.is_event_type(EslEventType::BackgroundJob) {
-    if event.job_uuid() == Some(&job_uuid) {
-        println!("{}", event.body().unwrap_or(""));
+// The result arrives later as a BACKGROUND_JOB event
+while let Some(Ok(event)) = events.recv().await {
+    if event.is_event_type(EslEventType::BackgroundJob)
+        && event.job_uuid() == Some(&job_uuid)
+    {
+        // BACKGROUND_JOB always has a body; most other event types don't
+        println!("{}", event.body().unwrap());
+        break;
     }
 }
 ```
@@ -154,8 +171,9 @@ use tokio::net::TcpListener;
 let listener = TcpListener::bind("0.0.0.0:8040").await?;
 let (client, mut events) = EslClient::accept_outbound(&listener).await?;
 
-// Required first command — returns channel data
+// Must be the first command after accept, returns channel info as an EslEvent
 let channel_data = client.connect_session().await?;
+// Channel-Name is always present in connect response
 println!("Channel: {}", channel_data.header("Channel-Name").unwrap());
 
 // Subscribe, enable linger, resume dialplan
@@ -171,6 +189,10 @@ while let Some(Ok(event)) = events.recv().await {
     // handle events...
 }
 ```
+
+See [docs/outbound-esl-quirks.md](docs/outbound-esl-quirks.md) for outbound
+mode gotchas (`connect_session` ordering, `async full` requirement, socket app
+quoting).
 
 ### Command builders
 
@@ -194,6 +216,7 @@ let cmd = Originate {
     dialplan: Some(DialplanType::Inline),
     context: None, cid_name: None, cid_num: None, timeout: None,
 };
+// → "originate sofia/gateway/my-provider/18005551212 conference:room1 inline"
 client.bgapi(&cmd.to_string()).await?;
 
 // Round-trip: parse ↔ display
@@ -202,14 +225,24 @@ assert_eq!(parsed.to_string(), cmd.to_string());
 
 // UUID commands
 let kill = UuidKill { uuid: uuid.into(), cause: Some("NORMAL_CLEARING".into()) };
+// → "uuid_kill <uuid> NORMAL_CLEARING"
 client.api(&kill.to_string()).await?;
 
 // Conference commands
 let dtmf = ConferenceDtmf { name: "room1".into(), member: "all".into(), dtmf: "1".into() };
+// → "conference room1 dtmf all 1"
 client.api(&dtmf.to_string()).await?;
 ```
 
-Channel variable parsers for FreeSWITCH-specific formats:
+> Output strings verified by unit tests in
+> [`commands/originate.rs`](src/commands/originate.rs),
+> [`commands/channel.rs`](src/commands/channel.rs), and
+> [`commands/conference.rs`](src/commands/conference.rs).
+
+See [docs/command-builders.md](docs/command-builders.md) for the full builder
+architecture, all channel/conference command types, and escaping rules.
+
+### Variable parsers
 
 ```rust
 use freeswitch_esl_tokio::variables::{EslArray, MultipartBody};
@@ -223,6 +256,9 @@ let body = MultipartBody::parse(raw_multipart).unwrap();
 let pidf = body.by_mime_type("application/pidf+xml");
 ```
 
+> Verified in [`variables/esl_array.rs`](src/variables/esl_array.rs) and
+> [`variables/sip_multipart.rs`](src/variables/sip_multipart.rs).
+
 ### Typed event accessors
 
 `EslEvent` provides typed accessors that parse header values into enums
@@ -231,7 +267,7 @@ instead of returning raw strings:
 ```rust
 use freeswitch_esl_tokio::{ChannelState, CallDirection};
 
-// Typed enums parsed from headers — no string matching
+// Typed enums parsed from headers, no string matching needed
 if let Some(state) = event.channel_state() {
     match state {
         ChannelState::CsExecute => println!("Executing app"),
@@ -240,8 +276,8 @@ if let Some(state) = event.channel_state() {
     }
 }
 
-// Convenience accessors for common headers
-let cid = event.caller_id_number();
+// All accessors return Option: None if the header is absent from this event
+let cid = event.caller_id_number();     // Option<&str>
 let direction = event.call_direction(); // Option<CallDirection>
 let cause = event.hangup_cause();       // Option<&str>
 ```
@@ -251,10 +287,10 @@ Call lifecycle timestamps via `ChannelTimetable`:
 ```rust
 use freeswitch_esl_tokio::TimetablePrefix;
 
-// From an EslEvent — extracts Caller-Channel-*-Time headers
+// Extracts Caller-Channel-*-Time headers from the event
 let timetable = event.caller_timetable()?;
 
-// From any key-value store — decoupled from EslEvent
+// Also works with any key-value store, not coupled to EslEvent
 let timetable = ChannelTimetable::from_lookup(
     TimetablePrefix::Caller,
     |key| headers.get(key).map(|v| v.as_str()),
@@ -269,49 +305,13 @@ Compile-time header and variable name enums:
 ```rust
 use freeswitch_esl_tokio::{EventHeader, ChannelVariable};
 
-// No typos — compiler checks the name
-let uid = event.header(EventHeader::UniqueId.as_str());
-let codec = event.variable(ChannelVariable::ReadCodec.as_str());
+// Compiler-checked header names, no risk of typos
+let uid = event.header(EventHeader::UniqueId.as_str());       // Option<&str>
+let codec = event.variable(ChannelVariable::ReadCodec.as_str()); // Option<&str>
 ```
 
 See `cargo run --example channel_tracker` for a complete reference
 implementation using typed accessors for channel lifecycle monitoring.
-
-## Protocol commands
-
-| Method | ESL command |
-|---|---|
-| `api()` / `bgapi()` | `api`, `bgapi` |
-| `subscribe_events()` / `nixevent()` / `noevents()` | `event`, `nixevent`, `noevents` |
-| `filter_events()` / `filter_delete()` | `filter`, `filter delete` |
-| `myevents()` / `myevents_uuid()` | `myevents` |
-| `linger()` / `nolinger()` | `linger`, `nolinger` |
-| `resume()` | `resume` |
-| `divert_events()` | `divert_events` |
-| `execute()` / `sendmsg()` | `sendmsg` |
-| `sendevent()` | `sendevent` |
-| `connect_session()` | `connect` (outbound) |
-| `log()` / `nolog()` | `log`, `nolog` |
-| `getvar()` | `getvar` (outbound) |
-| `exit()` / `disconnect()` | `exit` |
-
-## How it compares
-
-| | freeswitch-esl-tokio | [freeswitch-esl](https://crates.io/crates/freeswitch-esl) | [eslrs](https://crates.io/crates/eslrs) | [freeswitch-esl-rs](https://crates.io/crates/freeswitch-esl-rs) |
-|---|---|---|---|---|
-| Async (Tokio) | yes | yes | yes | no (blocking) |
-| Split reader/writer | yes | no | no | n/a |
-| Inbound + outbound | both | both | both | inbound only |
-| Event formats | plain, JSON, XML | JSON only | plain, JSON, XML | plain only |
-| Liveness detection | yes | no | no | no |
-| Command timeout | yes (default 5s) | no | no | no |
-| Error classification | yes | no | no | no |
-| Typed state enums | 5 (`ChannelState`, `CallState`, ...) | no | no | no |
-| Typed header enums | `EventHeader` (26) + `ChannelVariable` (54) | no | no | no |
-| Channel timetable | yes (decoupled from event type) | no | no | no |
-| Command builders | 13 typed structs | none | basic | none |
-| Event types | ![Event Types](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/event-type-count.json) | — | — | — |
-| Test count | ![Tests](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/test-count.json) | — | — | — |
 
 ## Development
 
@@ -319,9 +319,12 @@ implementation using typed accessors for channel lifecycle monitoring.
 ./hooks/install.sh   # symlinks pre-commit hook
 ```
 
-The pre-commit hook runs `cargo fmt --check`, `cargo clippy`, and
-`hooks/check-event-types.sh` which verifies the `EslEventType` enum matches
-the C ESL `EVENT_NAMES[]` array.
+The pre-commit hook enforces:
+
+- `cargo fmt --check` — formatting
+- `cargo clippy -- -D warnings` — lint warnings as errors
+- `RUSTDOCFLAGS="-D missing_docs" cargo doc` — all public items documented
+- `hooks/check-event-types.sh` — `EslEventType` enum matches C ESL `EVENT_NAMES[]`
 
 ### Testing
 
@@ -343,6 +346,24 @@ cargo test --test live_freeswitch -- --ignored
 
 - Rust 1.70+
 - Tokio async runtime
+
+## How it compares
+
+| | freeswitch-esl-tokio | [freeswitch-esl](https://crates.io/crates/freeswitch-esl) | [eslrs](https://crates.io/crates/eslrs) | [freeswitch-esl-rs](https://crates.io/crates/freeswitch-esl-rs) |
+|---|---|---|---|---|
+| Async (Tokio) | yes | yes | yes | no (blocking) |
+| Split reader/writer | yes | no | no | n/a |
+| Inbound + outbound | both | both | both | inbound only |
+| Event formats | plain, JSON, XML | JSON only | plain, JSON, XML | plain only |
+| Liveness detection | yes | no | no | no |
+| Command timeout | yes (default 5s) | no | no | no |
+| Error classification | yes | no | no | no |
+| Typed state enums | 5 (`ChannelState`, `CallState`, ...) | no | no | no |
+| Typed header enums | `EventHeader` (26) + `ChannelVariable` (54) | no | no | no |
+| Channel timetable | yes (decoupled from event type) | no | no | no |
+| Command builders | 13 typed structs | none | basic | none |
+| Event types | ![Event Types](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/event-type-count.json) | — | — | — |
+| Test count | ![Tests](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/test-count.json) | — | — | — |
 
 ## License
 
