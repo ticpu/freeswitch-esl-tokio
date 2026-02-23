@@ -22,7 +22,14 @@ if ! doc_output=$(RUSTDOCFLAGS="-D missing_docs" cargo doc --no-deps 2>&1); then
     exit 1
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+echo "Running tests..."
+if ! test_output=$(cargo test 2>&1); then
+    echo "$test_output" | tail
+    echo "❌ Tests failed. Fix them before committing."
+    exit 1
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 echo "Checking EslEventType against C ESL..."
 if ! "$SCRIPT_DIR/check-event-types.sh"; then
     echo "❌ EslEventType enum is out of sync with C ESL. Update src/event.rs."

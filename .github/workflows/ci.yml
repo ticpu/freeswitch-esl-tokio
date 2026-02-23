@@ -43,7 +43,8 @@ jobs:
 
       - name: Test
         run: |
-          cargo test 2>&1 | tee test-output.txt
+          set -o pipefail
+          CARGO_TERM_COLOR=never cargo test 2>&1 | tee test-output.txt
           passed=$(grep '^test result:' test-output.txt | sed 's/.*ok\. \([0-9]*\) passed.*/\1/' | paste -sd+ | bc)
           echo "TEST_PASSED=$passed" >> "$GITHUB_ENV"
 

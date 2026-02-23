@@ -406,15 +406,15 @@ impl ChannelTimetable {
     /// use std::collections::HashMap;
     /// use freeswitch_esl_tokio::{ChannelTimetable, TimetablePrefix};
     ///
-    /// let mut headers = HashMap::new();
+    /// let mut headers: HashMap<String, String> = HashMap::new();
     /// headers.insert("Caller-Channel-Created-Time".into(), "1700000001000000".into());
     ///
     /// // With enum:
-    /// let tt = ChannelTimetable::from_lookup(TimetablePrefix::Caller, |k| headers.get(k).map(|v| v.as_str()));
+    /// let tt = ChannelTimetable::from_lookup(TimetablePrefix::Caller, |k| headers.get(k).map(|v: &String| v.as_str()));
     /// assert!(tt.unwrap().unwrap().created.is_some());
     ///
     /// // With raw string (e.g. for dynamic "Call-1" prefix):
-    /// let tt = ChannelTimetable::from_lookup("Caller", |k| headers.get(k).map(|v| v.as_str()));
+    /// let tt = ChannelTimetable::from_lookup("Caller", |k| headers.get(k).map(|v: &String| v.as_str()));
     /// assert!(tt.unwrap().unwrap().created.is_some());
     /// ```
     pub fn from_lookup<'a>(
