@@ -52,7 +52,7 @@ async fn handle_call(
         .connect_session()
         .await?;
     let channel = connect_resp
-        .header("Channel-Name")
+        .header(EventHeader::ChannelName)
         .unwrap_or("(unknown)");
     info!("Session established: {}", channel);
 
@@ -134,7 +134,7 @@ async fn handle_call(
                     .await?;
             }
             Some(EslEventType::Dtmf) => {
-                if let Some(digit) = event.header(EventHeader::DtmfDigit.as_str()) {
+                if let Some(digit) = event.header(EventHeader::DtmfDigit) {
                     info!("Received DTMF: {}", digit);
 
                     if digit == "#" {

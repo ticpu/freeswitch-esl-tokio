@@ -232,9 +232,19 @@ removed patterns are worse than no examples at all. Build all examples
 
 ### Typed API, not C ESL patterns
 
+- **`HeaderLookup` trait** is the primary typed header API. On `EslEvent` the
+  inherent `header(impl AsRef<str>)` accepts `EventHeader` variants directly
+  (via `AsRef<str>`), so you don't need to import `HeaderLookup` for `EslEvent`.
+  Import `HeaderLookup` when writing generic code or implementing it on custom
+  types (like `TrackedChannel` in `channel_tracker.rs`).
+- Use `EventHeader` enum variants for header lookups:
+  `event.header(EventHeader::ChannelName)` — never raw
+  `event.header("Channel-Name")` for headers that have variants.
 - Use typed accessors (`event.caller_id_number()`, `event.hangup_cause()`,
   `event.call_direction()`, `event.channel_state()`) — never raw
   `event.header("Caller-Caller-ID-Number")` for headers that have accessors.
+- For headers without an `EventHeader` variant, use `event.header_str("X")`
+  (from `HeaderLookup`) or `event.header("X")` (inherent on `EslEvent`).
 - Use `EslEventType`'s `Display` impl — never hardcode event name strings
   like `"CREATE"` or `"HANGUP"` when you have the enum value.
 - Don't store fields that are already in the data you're accumulating. If

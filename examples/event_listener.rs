@@ -89,7 +89,7 @@ fn process_event(
                     .caller_id_number()
                     .unwrap_or("Unknown");
                 let destination = event
-                    .header("Caller-Destination-Number")
+                    .header(EventHeader::CallerDestinationNumber)
                     .unwrap_or("Unknown");
                 let direction = event
                     .call_direction()
@@ -154,15 +154,14 @@ fn process_event(
             }
         }
         Some(EslEventType::Dtmf) => {
-            if let (Some(uuid), Some(digit)) = (
-                event.unique_id(),
-                event.header(EventHeader::DtmfDigit.as_str()),
-            ) {
+            if let (Some(uuid), Some(digit)) =
+                (event.unique_id(), event.header(EventHeader::DtmfDigit))
+            {
                 info!("DTMF: {} pressed '{}'", uuid, digit);
             }
         }
         Some(EslEventType::Heartbeat) => {
-            if let Some(sessions) = event.header("Session-Count") {
+            if let Some(sessions) = event.header_str("Session-Count") {
                 info!("Heartbeat - active sessions: {}", sessions);
             }
         }

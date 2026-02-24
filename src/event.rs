@@ -338,6 +338,23 @@ impl EslEvent {
             .map(|s| s.as_str())
     }
 
+    /// Look up a header by its raw wire name.
+    ///
+    /// Equivalent to [`header()`](Self::header) but matches the
+    /// [`HeaderLookup`] trait signature, so code written against
+    /// `HeaderLookup` reads the same on `EslEvent`.
+    pub fn header_str(&self, name: &str) -> Option<&str> {
+        self.header(name)
+    }
+
+    /// Look up a channel variable by its bare name.
+    ///
+    /// Equivalent to [`variable()`](Self::variable) but matches the
+    /// [`HeaderLookup`] trait signature.
+    pub fn variable_str(&self, name: &str) -> Option<&str> {
+        self.variable(name)
+    }
+
     /// All headers as a map.
     pub fn headers(&self) -> &HashMap<String, String> {
         &self.headers

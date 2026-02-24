@@ -34,7 +34,7 @@
 //! dialplan application. You run a TCP listener and accept connections:
 //!
 //! ```rust,no_run
-//! use freeswitch_esl_tokio::{EslClient, EslError, AppCommand, EventFormat};
+//! use freeswitch_esl_tokio::{EslClient, EslError, AppCommand, EventFormat, EventHeader};
 //! use tokio::net::TcpListener;
 //!
 //! #[tokio::main]
@@ -47,7 +47,8 @@
 //!     // First command must be connect_session — establishes the session
 //!     // and returns all channel variables as headers.
 //!     let channel_data = client.connect_session().await?;
-//!     println!("Channel: {}", channel_data.header("Channel-Name").unwrap_or("?"));
+//!     // HeaderLookup trait provides typed header access via EventHeader enum
+//!     println!("Channel: {}", channel_data.header(EventHeader::ChannelName).unwrap_or("?"));
 //!
 //!     client.myevents(EventFormat::Plain).await?;
 //!     client.linger(None).await?; // keep socket open after hangup
@@ -117,7 +118,10 @@
 //!     ]).await?;
 //!
 //!     while let Some(Ok(event)) = events.recv().await {
-//!         println!("Received event: {:?}", event.event_type());
+//!         // Typed accessors parse headers into enums automatically
+//!         if let Some(state) = event.channel_state() {
+//!             println!("{:?}: {}", event.event_type(), state);
+//!         }
 //!     }
 //!
 //!     Ok(())
