@@ -6,6 +6,7 @@ use crate::{
     event::EslEvent,
     headers::EventHeader,
 };
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt;
 
@@ -537,6 +538,33 @@ impl EslCommand {
                 Ok(Self::format_simple_command("getvar", &[name]))
             }
             EslCommand::Connect => Ok(Self::format_simple_command("connect", &[])),
+        }
+    }
+
+    /// Return a log-safe version of the wire-format string.
+    ///
+    /// Passwords are replaced with `[REDACTED]`. The mandatory `\n\n` wire
+    /// terminator is stripped so the result fits on one log line; all other
+    /// content is preserved verbatim. Non-sensitive commands borrow the input
+    /// (zero allocation).
+    pub fn redact_wire<'a>(&self, wire: &'a str) -> Cow<'a, str> {
+        match self {
+            EslCommand::Auth { .. } => Cow::Owned(
+                Self::format_simple_command("auth", &["[REDACTED]"])
+                    .strip_suffix(HEADER_TERMINATOR)
+                    .unwrap_or_default()
+                    .to_owned(),
+            ),
+            EslCommand::UserAuth { user, .. } => Cow::Owned(
+                Self::format_simple_command("userauth", &[&format!("{}:[REDACTED]", user)])
+                    .strip_suffix(HEADER_TERMINATOR)
+                    .unwrap_or_default()
+                    .to_owned(),
+            ),
+            _ => Cow::Borrowed(
+                wire.strip_suffix(HEADER_TERMINATOR)
+                    .unwrap_or(wire),
+            ),
         }
     }
 }

@@ -255,7 +255,7 @@ async fn authenticate(
     };
 
     let command_str = auth_cmd.to_wire_format()?;
-    debug!("Sending command: auth [REDACTED]");
+    debug!(">> {}", auth_cmd.redact_wire(&command_str));
     stream
         .write_all(command_str.as_bytes())
         .await
@@ -638,13 +638,7 @@ impl EslClient {
         }
 
         let command_str = command.to_wire_format()?;
-        match &command {
-            EslCommand::Auth { .. } => debug!("Sending command: auth [REDACTED]"),
-            EslCommand::UserAuth { user, .. } => {
-                debug!("Sending command: userauth {}:[REDACTED]", user)
-            }
-            _ => debug!("Sending command: {}", command_str.trim()),
-        }
+        debug!(">> {}", command.redact_wire(&command_str));
 
         // Lock writer — serializes concurrent commands and holds through reply.
         let mut writer = self

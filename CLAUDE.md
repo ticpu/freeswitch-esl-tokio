@@ -57,6 +57,12 @@ whole story, a brief one-liner suffices.
 markdown files or comments — these go stale when variants are added. Use dynamic
 badges (CI-generated) in README or just omit the count.
 
+## Logging Accuracy
+
+Logged wire data must be accurate. Never use `.trim()` on wire content for
+cosmetic reasons — it can eat meaningful whitespace. Strip only known protocol
+suffixes by name (e.g. `strip_suffix(HEADER_TERMINATOR)`).
+
 ## Correctness Over Recovery
 
 Correctness is the highest priority. Never silently absorb protocol violations
