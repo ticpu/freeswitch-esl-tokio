@@ -6,6 +6,7 @@
 //! escaping and validation so callers don't need to worry about wire-format
 //! details.
 
+pub mod bridge;
 pub mod channel;
 pub mod conference;
 pub mod endpoint;
