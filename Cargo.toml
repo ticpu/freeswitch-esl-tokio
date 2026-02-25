@@ -52,3 +52,7 @@ path = "examples/outbound_test.rs"
 [[example]]
 name = "channel_tracker"
 path = "examples/channel_tracker.rs"
+
+[[example]]
+name = "originate_examples"
+path = "examples/originate_examples.rs"

@@ -172,6 +172,8 @@ timeout). `bgapi()` returns immediately with a Job-UUID; the result arrives
 as a `BACKGROUND_JOB` event:
 
 ```rust
+use freeswitch_esl_tokio::HeaderLookup;
+
 client.subscribe_events(EventFormat::Plain, &[
     EslEventType::BackgroundJob,
 ]).await?;
@@ -452,7 +454,7 @@ let pidf = body.by_mime_type("application/pidf+xml");
 instead of returning raw strings:
 
 ```rust
-use freeswitch_esl_tokio::{ChannelState, CallDirection};
+use freeswitch_esl_tokio::{ChannelState, CallDirection, HeaderLookup};
 
 // Typed enums parsed from headers, no string matching needed
 if let Some(state) = event.channel_state() {
@@ -474,7 +476,7 @@ let cause = event.hangup_cause();       // Option<&str>
 Call lifecycle timestamps via `ChannelTimetable`:
 
 ```rust
-use freeswitch_esl_tokio::TimetablePrefix;
+use freeswitch_esl_tokio::{HeaderLookup, TimetablePrefix};
 
 // Extracts Caller-Channel-*-Time headers from the event
 let timetable = event.caller_timetable()?;
