@@ -24,6 +24,7 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
+use super::find_matching_bracket;
 use super::originate::{OriginateError, Variables};
 
 /// Common interface for anything that formats as a FreeSWITCH dial string.
@@ -54,6 +55,9 @@ fn write_variables(f: &mut fmt::Formatter<'_>, vars: &Option<Variables>) -> fmt:
 
 /// Extract a leading variable block (`{...}`, `[...]`, or `<...>`) from a
 /// dial string, returning the parsed variables and the remaining URI portion.
+///
+/// Uses depth-aware bracket matching so nested brackets in values (e.g.
+/// `<sip_h_Call-Info=<url>>`) don't cause premature closure.
 fn extract_variables(s: &str) -> Result<(Option<Variables>, &str), OriginateError> {
     let (open, close_ch) = match s
         .as_bytes()
@@ -64,8 +68,7 @@ fn extract_variables(s: &str) -> Result<(Option<Variables>, &str), OriginateErro
         Some(b'<') => ('<', '>'),
         _ => return Ok((None, s)),
     };
-    let close = s
-        .find(close_ch)
+    let close = find_matching_bracket(s, open, close_ch)
         .ok_or_else(|| OriginateError::ParseError(format!("unclosed {} in endpoint", open)))?;
     let var_str = &s[..=close];
     let vars: Variables = var_str.parse()?;
@@ -265,6 +268,28 @@ impl DialString for Endpoint {
 mod tests {
     use super::*;
     use crate::commands::originate::VariablesType;
+
+    // --- extract_variables depth-aware bracket matching ---
+
+    #[test]
+    fn extract_variables_nested_angle_brackets() {
+        let (vars, rest) = extract_variables("<sip_h_Call-Info=<url>>sofia/gw/x").unwrap();
+        assert_eq!(rest, "sofia/gw/x");
+        assert!(vars.is_some());
+    }
+
+    #[test]
+    fn extract_variables_nested_curly_brackets() {
+        let (vars, rest) = extract_variables("{a={b}}sofia/internal/1000").unwrap();
+        assert_eq!(rest, "sofia/internal/1000");
+        assert!(vars.is_some());
+    }
+
+    #[test]
+    fn extract_variables_unclosed_returns_error() {
+        let result = extract_variables("{a=b");
+        assert!(result.is_err());
+    }
 
     // --- Endpoint enum FromStr dispatch ---
 

@@ -9,6 +9,7 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 
 use super::endpoint::Endpoint;
+use super::find_matching_bracket;
 use super::originate::{OriginateError, Variables};
 
 /// Typed bridge dial string.
@@ -71,7 +72,7 @@ impl FromStr for BridgeDialString {
 
         // Extract leading {global_vars} if present
         let (variables, rest) = if s.starts_with('{') {
-            let close = find_matching_brace(s, '{', '}').ok_or_else(|| {
+            let close = find_matching_bracket(s, '{', '}').ok_or_else(|| {
                 OriginateError::ParseError("unclosed { in bridge dial string".into())
             })?;
             let var_str = &s[..=close];
@@ -108,22 +109,6 @@ impl FromStr for BridgeDialString {
 
         Ok(Self { variables, groups })
     }
-}
-
-/// Find the index of the closing bracket matching the opener at position 0.
-fn find_matching_brace(s: &str, open: char, close: char) -> Option<usize> {
-    let mut depth = 0;
-    for (i, ch) in s.char_indices() {
-        if ch == open {
-            depth += 1;
-        } else if ch == close {
-            depth -= 1;
-            if depth == 0 {
-                return Some(i);
-            }
-        }
-    }
-    None
 }
 
 /// Split a string on `sep` while skipping separators inside `{...}`, `[...]`,

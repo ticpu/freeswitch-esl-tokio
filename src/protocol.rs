@@ -236,7 +236,12 @@ impl EslParser {
                 let value = percent_decode_str(raw_value)
                     .decode_utf8()
                     .map(|s| s.into_owned())
-                    .unwrap_or_else(|_| raw_value.to_string());
+                    .map_err(|e| {
+                        EslError::protocol_error(format!(
+                            "invalid UTF-8 in header '{}': {}",
+                            key, e
+                        ))
+                    })?;
                 headers.insert(key, value);
             } else {
                 return Err(EslError::InvalidHeader {
@@ -299,8 +304,17 @@ impl EslParser {
                 let value = percent_decode_str(raw_value)
                     .decode_utf8()
                     .map(|s| s.into_owned())
-                    .unwrap_or_else(|_| raw_value.to_string());
+                    .map_err(|e| {
+                        EslError::protocol_error(format!(
+                            "invalid UTF-8 in event header '{}': {}",
+                            key, e
+                        ))
+                    })?;
                 event.set_header(key, value);
+            } else {
+                return Err(EslError::InvalidHeader {
+                    header: line.to_string(),
+                });
             }
         }
 
@@ -312,12 +326,11 @@ impl EslParser {
             }
         }
 
-        if let Some(event_name) = event
+        let event_name = event
             .header(EventHeader::EventName)
-            .map(|s| s.to_string())
-        {
-            event.set_event_type(EslEventType::parse_event_type(&event_name));
-        }
+            .ok_or_else(|| EslError::protocol_error("event missing Event-Name header"))?
+            .to_string();
+        event.set_event_type(EslEventType::parse_event_type(&event_name));
 
         Ok(event)
     }
@@ -341,14 +354,13 @@ impl EslParser {
                 };
                 event.set_header(key.clone(), value_str);
             }
-
-            if let Some(event_name) = event
-                .header(EventHeader::EventName)
-                .map(|s| s.to_string())
-            {
-                event.set_event_type(EslEventType::parse_event_type(&event_name));
-            }
         }
+
+        let event_name = event
+            .header(EventHeader::EventName)
+            .ok_or_else(|| EslError::protocol_error("event missing Event-Name header"))?
+            .to_string();
+        event.set_event_type(EslEventType::parse_event_type(&event_name));
 
         Ok(event)
     }
@@ -423,12 +435,11 @@ impl EslParser {
             }
         }
 
-        if let Some(event_name) = event
+        let event_name = event
             .header(EventHeader::EventName)
-            .map(|s| s.to_string())
-        {
-            event.set_event_type(EslEventType::parse_event_type(&event_name));
-        }
+            .ok_or_else(|| EslError::protocol_error("event missing Event-Name header"))?
+            .to_string();
+        event.set_event_type(EslEventType::parse_event_type(&event_name));
 
         Ok(event)
     }
@@ -902,13 +913,51 @@ mod tests {
                 .get("X-Bad")
                 .map(|s| s.as_str()),
             Some("%ZZinvalid"),
-            "Invalid percent sequence should fall back to raw value"
+            "Invalid percent sequence passes through as-is (still valid UTF-8)"
         );
         assert_eq!(
             headers
                 .get("X-Good")
                 .map(|s| s.as_str()),
             Some("clean")
+        );
+    }
+
+    #[test]
+    fn test_parse_headers_invalid_utf8_is_error() {
+        let parser = EslParser::new();
+        // %FF decodes to byte 0xFF which is invalid UTF-8
+        let result = parser.parse_headers("X-Bad: %FF");
+        assert!(
+            result.is_err(),
+            "invalid UTF-8 after percent-decode must be an error"
+        );
+        let err = result.unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("invalid UTF-8"),
+            "error should mention invalid UTF-8: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn test_parse_plain_event_invalid_utf8_is_error() {
+        let parser = EslParser::new();
+        let body = "Event-Name: HEARTBEAT\nX-Bad: %FF\n\n";
+        let msg = EslMessage::new(
+            MessageType::Event,
+            {
+                let mut h = HashMap::new();
+                h.insert("Content-Type".to_string(), "text/event-plain".to_string());
+                h
+            },
+            Some(body.to_string()),
+        );
+        let result = parser.parse_event(msg, EventFormat::Plain);
+        assert!(
+            result.is_err(),
+            "invalid UTF-8 in event header must be an error"
         );
     }
 
