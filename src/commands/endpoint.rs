@@ -131,7 +131,7 @@ pub struct ErrorEndpoint {
 /// Polymorphic endpoint wrapping all concrete types.
 ///
 /// Use this in [`Originate`](super::originate::Originate) and
-/// [`BridgeDialString`] where any endpoint type must be accepted.
+/// [`BridgeDialString`](super::bridge::BridgeDialString) where any endpoint type must be accepted.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Endpoint {

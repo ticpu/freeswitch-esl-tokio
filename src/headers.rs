@@ -17,7 +17,7 @@ define_header_enum! {
     /// Top-level header names that appear in FreeSWITCH ESL events.
     ///
     /// These are the headers on the parsed event itself (not protocol framing
-    /// headers like `Content-Type`). Use with [`EslEvent::header()`] for
+    /// headers like `Content-Type`). Use with [`EslEvent::header()`](crate::EslEvent::header) for
     /// type-safe lookups.
     pub enum EventHeader {
         EventName => "Event-Name",
