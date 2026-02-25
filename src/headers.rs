@@ -47,6 +47,7 @@ define_header_enum! {
         CoreUuid => "Core-UUID",
         DtmfDigit => "DTMF-Digit",
         Priority => "priority",
+        LogLevel => "Log-Level",
     }
 }
 
@@ -135,6 +136,7 @@ mod tests {
             EventHeader::CoreUuid,
             EventHeader::DtmfDigit,
             EventHeader::Priority,
+            EventHeader::LogLevel,
         ];
         for v in variants {
             let wire = v.to_string();
