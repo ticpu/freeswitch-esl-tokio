@@ -9,6 +9,11 @@ This is a **library-first** crate. There is an examples/ folder buildable binari
 formatting, clippy warnings, all tests (including doctests), `-D missing_docs`
 doc coverage, and EslEventType sync with C ESL.
 
+**When adding new `EslEventType` variants**, check whether they belong in any
+of the event group constants (`CHANNEL_EVENTS`, `MEDIA_EVENTS`,
+`PRESENCE_EVENTS`, `SYSTEM_EVENTS`, `CONFERENCE_EVENTS`) in `src/event.rs`
+and update them accordingly.
+
 ```sh
 cargo fmt
 cargo check --message-format=short
