@@ -604,11 +604,41 @@ async fn live_originate_inline_target() {
         context: None,
         cid_name: None,
         cid_num: None,
-        timeout: Some(5),
+        timeout: None,
     };
 
     // answer+hangup is instant, bgapi returns the result quickly
     let uuid = bgapi_originate_ok(&client, &mut events, &cmd).await;
     // Channel already hung up, but kill just in case
+    kill_channel(&client, &uuid).await;
+}
+
+#[tokio::test]
+#[ignore]
+async fn live_originate_timeout_fills_positional_gaps() {
+    let (client, mut events) = connect().await;
+
+    client
+        .subscribe_events(EventFormat::Plain, &[EslEventType::BackgroundJob])
+        .await
+        .unwrap();
+
+    // Timeout without cid_name/cid_num forces `undef` placeholders on the wire.
+    // Verifies FreeSWITCH accepts `undef` as a NULL positional arg.
+    let cmd = Originate {
+        endpoint: Endpoint::Loopback(LoopbackEndpoint {
+            extension: "9199".into(),
+            context: "test".into(),
+            variables: None,
+        }),
+        target: Application::simple("park").into(),
+        dialplan: None,
+        context: None,
+        cid_name: None,
+        cid_num: None,
+        timeout: Some(5),
+    };
+
+    let uuid = bgapi_originate_ok(&client, &mut events, &cmd).await;
     kill_channel(&client, &uuid).await;
 }

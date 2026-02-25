@@ -275,3 +275,11 @@ This project follows test-driven development:
 4. Implement the fix/feature
 5. Confirm all tests pass
 6. Commit the implementation (hooks run normally)
+
+### Test failures reveal bugs, not inconveniences
+
+When a test fails against real FreeSWITCH, **assume the library has a bug**
+until proven otherwise. Never work around a test failure by removing the
+triggering input (e.g. dropping a timeout value, switching to a simpler
+endpoint). If the library produces a command that FreeSWITCH rejects, the
+serialization is wrong — fix the serializer, not the test.
