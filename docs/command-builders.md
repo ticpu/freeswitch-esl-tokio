@@ -47,7 +47,9 @@ src/
 │   └── dptools.rs          # AppCommand (moved from command.rs) — answer, hangup, bridge, etc.
 ├── commands/               # API command string builders (→ api()/bgapi())
 │   ├── mod.rs              # Re-exports, originate_split() tokenizer
-│   ├── originate.rs        # Variables, Endpoint, Application, Originate
+│   ├── endpoint.rs         # Endpoint types, Variables, DialString trait
+│   ├── originate.rs        # Application, Originate, DialplanType
+│   ├── bridge.rs           # BridgeDialString (multi-endpoint dial strings)
 │   ├── channel.rs          # uuid_answer, uuid_bridge, uuid_kill, uuid_setvar, ...
 │   └── conference.rs       # conference mute/unmute/hold/dtmf
 ├── variables/              # Channel variable format parsers
@@ -75,7 +77,7 @@ have no relationship to command construction.
 
 ### Originate
 
-Ported from Python `c911p/freeswitch/esl/originate.py`.
+Ported from a Python originate builder implementation.
 
 **Variables** — channel variable bag with scope. FreeSWITCH uses three bracket types:
 
@@ -89,11 +91,25 @@ values containing spaces → wrapped in single quotes.
 Uses `indexmap::IndexMap` to preserve insertion order — variable order matters for
 readability and debugging, and round-trip parsing should produce identical output.
 
-**Endpoint** — enum with three variants matching FreeSWITCH's endpoint formats:
+**Endpoint** — enum wrapping concrete structs, one per FreeSWITCH endpoint module.
+Each struct implements `Display`, `FromStr`, `Serialize`, `Deserialize`, and the
+`DialString` trait. The enum provides serde-compatible polymorphism.
 
-- `Generic` — `{vars}uri` (sofia/user, verto, etc.)
-- `Loopback` — `{vars}loopback/uri/context`
-- `SofiaGateway` — `{vars}sofia/gateway/name/uri`
+Real endpoints:
+
+- `SofiaEndpoint` — `{vars}sofia/profile/destination`
+- `SofiaGateway` — `{vars}sofia/gateway/[profile::]name/destination`
+- `LoopbackEndpoint` — `{vars}loopback/extension/context`
+- `UserEndpoint` — `{vars}user/name[@domain]`
+
+Expression endpoints (produce FS runtime expressions, not expanded by library):
+
+- `SofiaContact` — `{vars}${sofia_contact([profile/]user@domain)}`
+- `GroupCall` — `{vars}${group_call(group@domain[+order])}`
+- `ErrorEndpoint` — `error/cause`
+
+See [dial-string-format.md](dial-string-format.md) for full endpoint and
+variable scoping documentation.
 
 **Application** — inline (`name:args`) or XML (`&name(args)`) format.
 
@@ -139,13 +155,70 @@ Parses SIP multipart bodies stored in `variable_sip_multipart` channel variables
 Each element is `mime/type:body_data` within an `ARRAY::` container. Provides
 `by_mime_type()` for typed extraction (e.g., getting PIDF+XML geolocation data).
 
-## Dependencies Added
 
-- `indexmap` — ordered map for `Variables` (preserves insertion order with O(1) lookup)
+### BridgeDialString
+
+Typed builder for bridge dial strings with multiple endpoints, simultaneous
+ring, and sequential failover. Implements `Display`/`FromStr`/`Serialize`/
+`Deserialize`.
+
+Structure: `Vec<Vec<Endpoint>>` — outer vec is sequential groups (`|`),
+inner vec is simultaneous endpoints (`,`). Global `{variables}` apply to
+all endpoints. Per-endpoint `[variables]` are carried on each `Endpoint`.
+
+```rust
+let bridge = BridgeDialString {
+    variables: Some(vars),
+    groups: vec![
+        vec![ep1, ep2],  // ring ep1 and ep2 simultaneously
+        vec![ep3],       // if both fail, try ep3
+    ],
+};
+// Wire: {vars}ep1,ep2|ep3
+```
+
+See [dial-string-format.md](dial-string-format.md) for full separator
+and variable scoping semantics.
+
+### DialString trait
+
+Common interface for anything that formats as a FreeSWITCH dial string:
+
+```rust
+pub trait DialString: fmt::Display {
+    fn variables(&self) -> Option<&Variables>;
+    fn variables_mut(&mut self) -> Option<&mut Variables>;
+    fn set_variables(&mut self, vars: Option<Variables>);
+}
+```
+
+Implemented on each concrete endpoint struct and on the `Endpoint` enum.
+Downstream crates can implement `DialString` on custom endpoint types.
+
+## Serde Support
+
+All command builder types implement `Serialize`/`Deserialize` for config-driven
+command construction (YAML/JSON -> struct -> wire format).
+
+Key design choices:
+
+- **`DialplanType`** — serde uses `"xml"`/`"inline"` (lowercase, config-friendly).
+  `Display` uses `"XML"`/`"inline"` (wire format). Independent representations.
+- **`Variables`** — flat YAML map deserializes as `VariablesType::Default` (the
+  99% case). Explicit `{scope, vars}` form for Enterprise/Channel scopes.
+- **`Endpoint`** — externally tagged enum with `snake_case` variant names.
+- **`Originate`/`BridgeDialString`** — straightforward derives with
+  `skip_serializing_if` on Option fields.
+
+## Dependencies
+
+- `indexmap` — ordered map for `Variables` (preserves insertion order, O(1) lookup,
+  serde support via `features = ["serde"]`)
 
 ## What This Does Not Cover
 
-- Automatic dispatch (no `client.originate(cmd)` method — just `client.bgapi(&cmd.to_string())`)
-- Response parsing for specific commands (e.g., parsing `uuid_dump` output into a struct)
+- Automatic dispatch (no `client.originate(cmd)` — just `client.bgapi(&cmd.to_string())`)
+- Response parsing for specific commands (e.g., parsing `uuid_dump` output)
 - SIP URI type (future extension point)
-- Endpoint groups / enterprise originate with `|` separator
+- Enterprise originate with `:_:` separator (deferred, documented in
+  [dial-string-format.md](dial-string-format.md))
