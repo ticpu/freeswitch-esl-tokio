@@ -1,0 +1,346 @@
+# FreeSWITCH Dial String Format
+
+Reference for endpoint strings, variable scoping, and bridge semantics as they
+appear on the ESL wire and in FreeSWITCH configuration. Based on FreeSWITCH
+1.10.x source code (`switch_ivr_originate.c`, `mod_sofia.c`, `mod_loopback.c`,
+`mod_dptools.c`).
+
+## Endpoint types
+
+FreeSWITCH endpoints are **module-specific**. The core splits the dial string
+on the first `/`, looks up the module name in an endpoint hash table
+(`switch_loadable_module_get_endpoint_interface()`), and delegates all
+remaining parsing to the module's `outgoing_channel` callback. There is no
+universal endpoint grammar -- each module defines its own format.
+
+### sofia (SIP)
+
+Direct profile routing:
+
+```
+sofia/{profile}/{destination}
+sofia/internal/1000@pbx.example.com
+sofia/external/18005551234@carrier.example.com
+```
+
+Gateway routing (uses pre-configured gateway credentials and transport):
+
+```
+sofia/gateway/{gateway_name}/{destination}
+sofia/gateway/my_provider/18005551234
+```
+
+Gateway with explicit profile qualifier:
+
+```
+sofia/gateway/{profile}::{gateway_name}/{destination}
+sofia/gateway/internal::my_provider/18005551234
+```
+
+Source: `mod_sofia.c` -- checks if remainder starts with `gateway/`, then
+parses as 3-part `gateway/name/dest`; otherwise parses as 2-part
+`profile/dest` and formats the destination as a SIP URI.
+
+### loopback
+
+Re-enters the dialplan on a new channel pair. Useful for applying dialplan
+logic to an originated call or for codec renegotiation.
+
+```
+loopback/{extension}[/{context}[/{dialplan}]]
+loopback/9199
+loopback/9199/default
+loopback/9199/default/xml
+loopback/app=lua:script.lua
+```
+
+Context defaults to `"default"`, dialplan defaults to `"xml"`.
+
+Source: `mod_loopback.c` -- checks for `app=` prefix (direct application
+execution), otherwise splits on `/` for extension/context/dialplan.
+
+### user
+
+Directory-based endpoint. Resolves via the user's `dial-string` parameter
+in the FreeSWITCH directory XML. Typically expands to a `sofia_contact()`
+expression.
+
+```
+user/{name}[@{domain}]
+user/1000
+user/bob@pbx.example.com
+```
+
+Common directory `dial-string` configuration:
+
+```xml
+<param name="dial-string"
+  value="{^^:sip_invite_domain=${dialed_domain}:presence_id=${dialed_user}@${dialed_domain}}${sofia_contact(*/${dialed_user}@${dialed_domain})}"/>
+```
+
+### error
+
+Pseudo-endpoint that terminates the call with a specific hangup cause.
+Used in bridge dial strings for explicit failure routing.
+
+```
+error/{hangup_cause}
+error/user_busy
+error/user_not_registered
+error/no_route_destination
+```
+
+### group
+
+Directory-based group endpoint. Resolves to the `group_call()` API function
+result.
+
+```
+group/{group_name}@{domain}
+group/support@pbx.example.com
+```
+
+Equivalent to `${group_call(support@pbx.example.com)}`.
+
+## Variable scoping
+
+Channel variables can be set on the B-leg (destination) of an originate or
+bridge via bracket notation in the dial string. Three bracket types exist
+with different scopes, listed in order of precedence (highest first):
+
+### `[k=v]` -- channel (local) scope
+
+Applies only to the **immediately following endpoint**. Highest precedence --
+overrides global and enterprise variables.
+
+```
+[origination_caller_id_number=1234]sofia/internal/1000@domain
+```
+
+Multiple blocks accumulate:
+
+```
+[var1=a][var2=b]sofia/internal/1000@domain
+```
+
+### `{k=v}` -- default (global) scope
+
+Applies to **all endpoints** in the current originate/bridge set. Multiple
+blocks accumulate.
+
+```
+{hangup_after_bridge=true}sofia/gateway/gw/1234
+{ignore_early_media=true}{call_timeout=30}sofia/gateway/gw/1234
+```
+
+### `<k=v>` -- enterprise (ultra-global) scope
+
+Applies across **all threads** in an enterprise originate (`:_:` separated
+sections). Lowest precedence.
+
+```
+<originate_timeout=60>{thread1_var=a}endpoint1:_:{thread2_var=b}endpoint2
+```
+
+### Combined example
+
+```
+<ultra_global=1>{thread_global=2}[per_endpoint=3]sofia/internal/1000@domain
+```
+
+Effective variables on the channel: `ultra_global=1`, `thread_global=2`,
+`per_endpoint=3`. If a key appears in multiple scopes, the narrower scope wins.
+
+## Variable value escaping
+
+Variable values in bracket notation need escaping when they contain special
+characters.
+
+### Backslash escaping
+
+Commas and single quotes are escaped with backslash:
+
+```
+{sip_h_Call-Info=<url>;meta=123\,<uri>}endpoint
+{greeting=it\'s_me}endpoint
+```
+
+Values containing spaces are wrapped in single quotes:
+
+```
+{sip_h_X-Info='value with spaces'}endpoint
+```
+
+### `^^X` custom delimiter
+
+Alternative to backslash-escaping for values containing commas. The value
+starts with `^^` followed by a replacement character. FreeSWITCH converts
+the replacement character back to commas when setting the channel variable.
+
+```
+{absolute_codec_string=^^:PCMA@8000h@20i:PCMU@8000h@20i:G729@8000h@20i}endpoint
+```
+
+Here `:` replaces `,` in the codec list. The channel variable is set to
+`PCMA@8000h@20i,PCMU@8000h@20i,G729@8000h@20i`.
+
+Also supported inside brackets: `[^^var=val]`.
+
+### Bracket-level `^^:` delimiter
+
+When used at the **block level** (as the first element after the opening
+bracket), changes the delimiter between key=value pairs for the entire block:
+
+```
+{^^:sip_invite_domain=example.com:presence_id=bob@example.com}endpoint
+```
+
+Here `:` separates variables instead of `,`.
+
+## Bridge separators
+
+Bridge and originate dial strings support multiple endpoints with different
+failure/concurrency semantics.
+
+### `,` -- simultaneous ring (forked dialing)
+
+All endpoints in a comma-separated group ring at the same time. The first
+endpoint to **provide media** (answer or early media) wins; others stop
+ringing.
+
+```
+sofia/internal/100@domain,sofia/internal/101@domain
+```
+
+Use `ignore_early_media=true` on the A-leg to prevent early media (ringback,
+music) from prematurely selecting a winner -- common with cell phones.
+
+### `|` -- sequential failover
+
+Endpoints separated by pipe are tried **one at a time**, in order. The next
+endpoint is tried only after the previous one fails.
+
+```
+sofia/gateway/primary/1234|sofia/gateway/secondary/1234|sofia/gateway/backup/1234
+```
+
+### `:_:` -- enterprise originate
+
+Each `:_:`-separated section is originated in a **separate thread**.
+Enterprise-scope `<>` variables apply across all threads. Each thread can
+have its own `{}` global variables.
+
+```
+<originate_timeout=30>{thread1_cid=100}sofia/gw/a/1234:_:{thread2_cid=200}sofia/gw/b/1234
+```
+
+Constant: `SWITCH_ENT_ORIGINATE_DELIM = ":_:"` in `switch_types.h`.
+
+### Combined example
+
+```
+{hangup_after_bridge=true}[t=10]sofia/gw/a/1234,[t=10]sofia/gw/b/1234|sofia/gw/backup/1234
+```
+
+Ring gateways `a` and `b` simultaneously (10s timeout each). If both fail,
+try `backup` sequentially.
+
+## Runtime expressions
+
+FreeSWITCH supports `${}` variable expansion in dial strings. Some
+expressions resolve to endpoint strings at call time.
+
+### `sofia_contact`
+
+Resolves the current registered SIP contact URI for a directory user. Returns
+`error/user_not_registered` if no active registration.
+
+```
+${sofia_contact(user@domain)}
+${sofia_contact(profile/user@domain)}
+${sofia_contact(*/user@domain)}
+```
+
+The `*` searches all profiles. An optional `~user_agent` suffix filters by
+User-Agent header.
+
+Source: `mod_sofia.c` lines 4400-4531.
+
+### `group_call`
+
+Resolves directory group members to a multi-endpoint dial string.
+
+```
+${group_call(group@domain)}
+${group_call(group@domain+A)}
+${group_call(group@domain+E)}
+${group_call(group@domain+F)}
+```
+
+Flags: `A` = all (simultaneous), `E` = enterprise (`:_:` separated),
+`F` = first match only.
+
+### `eval` prefix (API evaluation)
+
+Some applications evaluate an `eval` prefix by calling the FreeSWITCH API
+first, then using the result as the dial string:
+
+```
+eval ${group_call(calltakers@${domain_name}+A)}
+```
+
+This is an application-level convention, not a core FreeSWITCH feature.
+
+## Special bridge features
+
+### `^` -- SIP To: header override
+
+Appended after `@host` to override the To: header in the outbound SIP INVITE.
+Useful for number portability routing where the Request-URI needs extra
+parameters but the To: header should contain the clean number.
+
+```
+sip:12135551212;rn=12135550000;npdi=yes@1.2.3.4:5060^12135551212
+```
+
+### Bridge control variables
+
+Common variables that affect bridge behavior (set on the A-leg before bridge):
+
+| Variable | Effect |
+|----------|--------|
+| `call_timeout` | Seconds to wait for answer |
+| `originate_timeout` | Per-endpoint timeout in originate |
+| `hangup_after_bridge` | Hang up A-leg after B-leg disconnects |
+| `bypass_media` | SDP passthrough (RTP flows directly between endpoints) |
+| `ignore_early_media` | Don't select winner on early media (183/180+SDP) |
+| `ringback` | Play tone/file to A-leg during ringing |
+| `transfer_ringback` | Play during attended transfer |
+| `fail_on_single_reject` | Fail entire bridge if any endpoint rejects |
+| `hangup_on_single_reject` | Hang up if any endpoint rejects |
+| `continue_on_fail` | Continue dialplan after bridge failure |
+| `bridge_early_media` | Bridge early media to A-leg |
+
+## Wire format in ESL
+
+When constructing dial strings via ESL (`api originate`, `bgapi originate`,
+`sendmsg execute bridge`), the complete format is:
+
+```
+originate <[vars]endpoint> <app> [dialplan] [context] [cid_name] [cid_num] [timeout]
+```
+
+For bridge (via sendmsg):
+
+```
+execute bridge <[vars]endpoint[,endpoint][|endpoint]>
+```
+
+Application arguments containing spaces must be single-quoted in originate:
+
+```
+originate loopback/9199/test '&socket(127.0.0.1:8040 async full)'
+```
+
+The `freeswitch-esl-tokio` library handles this quoting automatically via
+`originate_quote()` / `originate_unquote()`.
