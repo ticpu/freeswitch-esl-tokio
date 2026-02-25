@@ -1217,4 +1217,69 @@ mod tests {
             "originate sofia/internal/123@example.com &park()"
         );
     }
+
+    #[test]
+    fn originate_timeout_only_fills_positional_gaps() {
+        let cmd = Originate {
+            endpoint: Endpoint::Loopback(LoopbackEndpoint {
+                extension: "9199".into(),
+                context: "test".into(),
+                variables: None,
+            }),
+            target: Application::simple("park").into(),
+            dialplan: None,
+            context: None,
+            cid_name: None,
+            cid_num: None,
+            timeout: Some(30),
+        };
+        // timeout is arg 7; dialplan/context/cid must be filled so FS
+        // doesn't interpret "30" as the dialplan name
+        assert_eq!(
+            cmd.to_string(),
+            "originate loopback/9199/test &park() XML default '' '' 30"
+        );
+    }
+
+    #[test]
+    fn originate_cid_num_only_fills_preceding_gaps() {
+        let cmd = Originate {
+            endpoint: Endpoint::Loopback(LoopbackEndpoint {
+                extension: "9199".into(),
+                context: "test".into(),
+                variables: None,
+            }),
+            target: Application::simple("park").into(),
+            dialplan: None,
+            context: None,
+            cid_name: None,
+            cid_num: Some("5551234".into()),
+            timeout: None,
+        };
+        assert_eq!(
+            cmd.to_string(),
+            "originate loopback/9199/test &park() XML default '' 5551234"
+        );
+    }
+
+    #[test]
+    fn originate_context_only_fills_dialplan() {
+        let cmd = Originate {
+            endpoint: Endpoint::Loopback(LoopbackEndpoint {
+                extension: "9199".into(),
+                context: "test".into(),
+                variables: None,
+            }),
+            target: OriginateTarget::Extension("1000".into()),
+            dialplan: None,
+            context: Some("myctx".into()),
+            cid_name: None,
+            cid_num: None,
+            timeout: None,
+        };
+        assert_eq!(
+            cmd.to_string(),
+            "originate loopback/9199/test 1000 XML myctx"
+        );
+    }
 }
