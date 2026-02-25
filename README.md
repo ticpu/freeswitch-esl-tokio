@@ -23,28 +23,44 @@ use freeswitch_esl_tokio::commands::*;
 async fn main() -> Result<(), EslError> {
     let (client, mut events) = EslClient::connect("localhost", 8021, "ClueCon").await?;
 
-    // Place a call through a SIP gateway
+    client.subscribe_events(EventFormat::Plain, &[
+        EslEventType::BackgroundJob,
+        EslEventType::ChannelCreate,
+        EslEventType::ChannelDestroy,
+    ]).await?;
+
     let cmd = Originate {
         endpoint: Endpoint::SofiaGateway(SofiaGateway {
             gateway: "my_provider".into(),
             destination: "18005551234".into(),
             profile: None, variables: None,
         }),
-        applications: Application::simple("park").into(),
+        target: Application::new(
+            "playback",
+            Some("/usr/share/freeswitch/sounds/en/us/callie/ivr/ivr-welcome.wav"),
+        ).into(),
         dialplan: None, context: None, cid_name: None, cid_num: None,
         timeout: Some(30),
     };
-    let response = client.bgapi(&cmd.to_string()).await?;
-    let job_uuid = response.job_uuid().expect("bgapi always returns Job-UUID");
 
-    // Wait for the result
-    client.subscribe_events(EventFormat::Plain, &[EslEventType::BackgroundJob]).await?;
+    let response = client.bgapi(&cmd.to_string()).await?;
+    response.into_result()?;
+
     while let Some(Ok(event)) = events.recv().await {
-        if event.is_event_type(EslEventType::BackgroundJob)
-            && event.job_uuid() == Some(&job_uuid)
-        {
-            println!("{}", event.body().unwrap());
-            break;
+        match event.event_type() {
+            Some(EslEventType::ChannelCreate) => {
+                println!("channel created: {}", event.channel_name().unwrap_or("?"));
+            }
+            Some(EslEventType::ChannelDestroy) => {
+                println!("channel destroyed: {} ({})",
+                    event.channel_name().unwrap_or("?"),
+                    event.hangup_cause().unwrap_or("unknown"));
+                break;
+            }
+            Some(EslEventType::BackgroundJob) => {
+                println!("bgapi result: {}", event.body().unwrap_or(""));
+            }
+            _ => {}
         }
     }
     Ok(())
@@ -269,13 +285,25 @@ let cmd = Originate {
         profile: None,
         variables: None,
     }),
-    applications: ApplicationList(vec![
-        Application::new("conference", Some("room1")),
-    ]),
+    target: vec![Application::new("conference", Some("room1"))].into(),
     dialplan: Some(DialplanType::Inline),
     context: None, cid_name: None, cid_num: None, timeout: None,
 };
 // -> "originate sofia/gateway/my_provider/18005551234 conference:room1 inline"
+
+// Originate to a dialplan extension
+let ext_cmd = Originate {
+    endpoint: Endpoint::SofiaGateway(SofiaGateway {
+        gateway: "my_provider".into(),
+        destination: "18005551234".into(),
+        profile: None, variables: None,
+    }),
+    target: OriginateTarget::Extension("1000".into()),
+    dialplan: Some(DialplanType::Xml),
+    context: Some("default".into()),
+    cid_name: None, cid_num: None, timeout: None,
+};
+// -> "originate sofia/gateway/my_provider/18005551234 1000 XML default"
 client.bgapi(&cmd.to_string()).await?;
 
 // Round-trip: parse <-> display
@@ -363,7 +391,7 @@ and bridge commands can be driven entirely from config files:
       "destination": "18005551234"
     }
   },
-  "applications": [{"name": "park"}],
+  "application": {"name": "park"},
   "timeout": 30
 }
 ```

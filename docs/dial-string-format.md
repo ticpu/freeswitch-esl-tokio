@@ -102,6 +102,23 @@ group/support@pbx.example.com
 
 Equivalent to `${group_call(support@pbx.example.com)}`.
 
+### portaudio / pulseaudio / alsa
+
+Audio device endpoints for local sound hardware. The destination is optional
+and typically `auto_answer` or a device identifier.
+
+```
+portaudio
+portaudio/auto_answer
+pulseaudio
+pulseaudio/auto_answer
+alsa
+alsa/auto_answer
+```
+
+All three share the same `AudioEndpoint` struct in the library and differ
+only in the module prefix.
+
 ## Variable scoping
 
 Channel variables can be set on the B-leg (destination) of an originate or

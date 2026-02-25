@@ -7,9 +7,7 @@
 //! Usage: cargo run --example outbound_test
 
 use freeswitch_esl_tokio::commands::endpoint::LoopbackEndpoint;
-use freeswitch_esl_tokio::commands::originate::{
-    Application, ApplicationList, Endpoint, Originate,
-};
+use freeswitch_esl_tokio::commands::originate::{Application, Endpoint, Originate};
 use freeswitch_esl_tokio::{EslClient, EslEventType, EventFormat};
 use std::time::Duration;
 use tokio::net::TcpListener;
@@ -55,10 +53,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             context: "test".into(),
             variables: None,
         }),
-        applications: ApplicationList(vec![Application::new(
+        target: Application::new(
             "socket",
             Some(format!("127.0.0.1:{} async full", outbound_port)),
-        )]),
+        )
+        .into(),
         dialplan: None,
         context: None,
         cid_name: None,

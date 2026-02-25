@@ -1,0 +1,98 @@
+use std::fmt;
+
+use serde::{Deserialize, Serialize};
+
+use super::{extract_variables, write_variables};
+use crate::commands::originate::{OriginateError, Variables};
+
+/// Audio device endpoint for portaudio, pulseaudio, or ALSA modules.
+///
+/// Wire format: `{module}[/{destination}]` where destination is typically
+/// empty or `auto_answer` (recognized by portaudio and pulseaudio).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AudioEndpoint {
+    /// Destination string (e.g. `auto_answer`). `None` for bare module name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub destination: Option<String>,
+    /// Per-channel variables prepended as `{key=value}`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub variables: Option<Variables>,
+}
+
+impl AudioEndpoint {
+    /// Format with the given module prefix (`portaudio`, `pulseaudio`, `alsa`).
+    pub fn fmt_with_prefix(&self, f: &mut fmt::Formatter<'_>, prefix: &str) -> fmt::Result {
+        write_variables(f, &self.variables)?;
+        match &self.destination {
+            Some(dest) => write!(f, "{}/{}", prefix, dest),
+            None => f.write_str(prefix),
+        }
+    }
+
+    /// Parse from a dial string with the given module prefix.
+    pub fn parse_with_prefix(s: &str, prefix: &str) -> Result<Self, OriginateError> {
+        let (variables, uri) = extract_variables(s)?;
+        let rest = uri
+            .strip_prefix(prefix)
+            .ok_or_else(|| OriginateError::ParseError(format!("not a {} endpoint", prefix)))?;
+        let destination = rest
+            .strip_prefix('/')
+            .and_then(|d| {
+                if d.is_empty() {
+                    None
+                } else {
+                    Some(d.to_string())
+                }
+            });
+        Ok(Self {
+            destination,
+            variables,
+        })
+    }
+}
+
+impl fmt::Display for AudioEndpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.fmt_with_prefix(f, "audio")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_with_prefix_portaudio() {
+        let ep = AudioEndpoint::parse_with_prefix("portaudio/auto_answer", "portaudio").unwrap();
+        assert_eq!(
+            ep.destination
+                .as_deref(),
+            Some("auto_answer")
+        );
+        assert!(ep
+            .variables
+            .is_none());
+    }
+
+    #[test]
+    fn parse_with_prefix_bare() {
+        let ep = AudioEndpoint::parse_with_prefix("alsa", "alsa").unwrap();
+        assert!(ep
+            .destination
+            .is_none());
+    }
+
+    #[test]
+    fn parse_with_prefix_trailing_slash() {
+        let ep = AudioEndpoint::parse_with_prefix("pulseaudio/", "pulseaudio").unwrap();
+        assert!(ep
+            .destination
+            .is_none());
+    }
+
+    #[test]
+    fn parse_with_prefix_wrong_module() {
+        let result = AudioEndpoint::parse_with_prefix("portaudio/x", "alsa");
+        assert!(result.is_err());
+    }
+}

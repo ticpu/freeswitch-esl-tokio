@@ -77,7 +77,8 @@
 //! Typed builders for common API commands — no raw string assembly needed:
 //!
 //! ```rust
-//! use freeswitch_esl_tokio::{Originate, Endpoint, SofiaGateway, ApplicationList, Application};
+//! use freeswitch_esl_tokio::{Originate, Endpoint, Application, OriginateTarget};
+//! use freeswitch_esl_tokio::commands::SofiaGateway;
 //!
 //! let cmd = Originate {
 //!     endpoint: Endpoint::SofiaGateway(SofiaGateway {
@@ -86,9 +87,7 @@
 //!         gateway: "my_provider".into(),
 //!         variables: None,
 //!     }),
-//!     applications: ApplicationList(vec![
-//!         Application::new("park", None::<&str>),
-//!     ]),
+//!     target: Application::simple("park").into(),
 //!     dialplan: None,
 //!     context: None,
 //!     cid_name: Some("Outbound Call".into()),
@@ -153,9 +152,7 @@ pub use channel::{
 };
 pub use command::{CommandBuilder, EslResponse, ReplyStatus};
 pub use commands::{
-    Application, ApplicationList, BridgeDialString, ConferenceDtmf, ConferenceHold, ConferenceMute,
-    DialString, DialplanType, Endpoint, ErrorEndpoint, GroupCall, HoldAction, LoopbackEndpoint,
-    MuteAction, Originate, OriginateError, SofiaContact, SofiaEndpoint, SofiaGateway, UserEndpoint,
+    Application, DialString, DialplanType, Endpoint, Originate, OriginateError, OriginateTarget,
     UuidAnswer, UuidBridge, UuidDeflect, UuidGetVar, UuidHold, UuidKill, UuidSendDtmf, UuidSetVar,
     UuidTransfer, Variables, VariablesType,
 };

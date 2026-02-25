@@ -108,12 +108,24 @@ Expression endpoints (produce FS runtime expressions, not expanded by library):
 - `GroupCall` — `{vars}${group_call(group@domain[+order])}`
 - `ErrorEndpoint` — `error/cause`
 
+Audio device endpoints (shared `AudioEndpoint` struct):
+
+- `PortAudio` — `{vars}portaudio[/destination]`
+- `PulseAudio` — `{vars}pulseaudio[/destination]`
+- `Alsa` — `{vars}alsa[/destination]`
+
 See [dial-string-format.md](dial-string-format.md) for full endpoint and
 variable scoping documentation.
 
-**Application** — inline (`name:args`) or XML (`&name(args)`) format.
+**Application** — inline (`name` or `name:args`) or XML (`&name(args)`) format.
 
-**Originate** — full command: `originate {endpoint} {apps} [dialplan] [context] [cid_name] [cid_num] [timeout]`
+**OriginateTarget** — the second argument to originate, one of:
+
+- `Extension(String)` — route through the dialplan engine (e.g. `1000`)
+- `Application(Application)` — single XML-format app (e.g. `&park()`)
+- `InlineApplications(Vec<Application>)` — one or more inline apps (e.g. `park,hangup:NORMAL_CLEARING`)
+
+**Originate** — full command: `originate {endpoint} {target} [dialplan] [context] [cid_name] [cid_num] [timeout]`
 
 **originate_split()** — quote-aware tokenizer. Splits on a delimiter (space or comma)
 while respecting single-quoted regions and backslash escapes. Ported from the Python

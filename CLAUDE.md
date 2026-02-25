@@ -152,7 +152,15 @@ src/
 │   └── dptools.rs         # AppCommand — answer, hangup, bridge, playback, ...
 ├── commands/              # API command string builders (→ api()/bgapi())
 │   ├── mod.rs             # Re-exports, originate_quote/unquote, originate_split()
-│   ├── originate.rs       # Variables, Endpoint, Application, Originate
+│   ├── originate.rs       # Variables, Application, OriginateTarget, Originate
+│   ├── endpoint/          # Endpoint types (DialString trait, Endpoint enum)
+│   │   ├── mod.rs         # DialString trait, Endpoint enum, helpers
+│   │   ├── sofia.rs       # SofiaEndpoint, SofiaGateway, SofiaContact
+│   │   ├── loopback.rs    # LoopbackEndpoint
+│   │   ├── user.rs        # UserEndpoint
+│   │   ├── audio.rs       # AudioEndpoint (portaudio/pulseaudio/alsa)
+│   │   ├── group_call.rs  # GroupCall
+│   │   └── error.rs       # ErrorEndpoint
 │   ├── channel.rs         # UuidAnswer, UuidBridge, UuidKill, UuidSetVar, ...
 │   └── conference.rs      # ConferenceMute, ConferenceHold, ConferenceDtmf
 └── variables/             # Channel variable format parsers

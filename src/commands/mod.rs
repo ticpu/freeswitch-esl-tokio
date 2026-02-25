@@ -19,11 +19,11 @@ pub use channel::{
 };
 pub use conference::{ConferenceDtmf, ConferenceHold, ConferenceMute, HoldAction, MuteAction};
 pub use endpoint::{
-    DialString, ErrorEndpoint, GroupCall, LoopbackEndpoint, SofiaContact, SofiaEndpoint,
-    SofiaGateway, UserEndpoint,
+    AudioEndpoint, DialString, ErrorEndpoint, GroupCall, LoopbackEndpoint, SofiaContact,
+    SofiaEndpoint, SofiaGateway, UserEndpoint,
 };
 pub use originate::{
-    Application, ApplicationList, DialplanType, Endpoint, Originate, OriginateError, Variables,
+    Application, DialplanType, Endpoint, Originate, OriginateError, OriginateTarget, Variables,
     VariablesType,
 };
 
@@ -111,27 +111,27 @@ pub fn originate_split(line: &str, split_at: char) -> Result<Vec<String>, Origin
     Ok(tokens)
 }
 
-/// Parse an application list string into individual applications.
+/// Parse the target argument of an originate command.
 ///
-/// Handles three formats:
-/// - Bare extension: `"123"` → single app with name=extension, no args
-/// - XML format: `"&app(args)"` → single app
-/// - Inline format: `"app1:args1,app2:args2"` → multiple apps
-pub fn parse_application_list(
+/// Determines whether the target is a dialplan extension or application(s):
+/// - If dialplan is `Inline`: parse as inline apps → `InlineApplications`
+/// - If string starts with `&`: parse as XML app → `Application`
+/// - Otherwise: bare string → `Extension`
+pub fn parse_originate_target(
     s: &str,
     dialplan: Option<&DialplanType>,
-) -> Result<ApplicationList, OriginateError> {
+) -> Result<OriginateTarget, OriginateError> {
     if matches!(dialplan, Some(DialplanType::Inline)) {
         let mut apps = Vec::new();
         for part in originate_split(s, ',')? {
-            let (name, args) = part
-                .split_once(':')
-                .ok_or_else(|| {
-                    OriginateError::ParseError(format!("invalid inline application: {}", part))
-                })?;
-            apps.push(Application::new(name, Some(args)));
+            let (name, args) = match part.split_once(':') {
+                Some((n, "")) => (n, None),
+                Some((n, a)) => (n, Some(a)),
+                None => (part.as_str(), None),
+            };
+            apps.push(Application::new(name, args));
         }
-        Ok(ApplicationList(apps))
+        Ok(OriginateTarget::InlineApplications(apps))
     } else if let Some(rest) = s.strip_prefix('&') {
         let rest = rest
             .strip_suffix(')')
@@ -140,9 +140,9 @@ pub fn parse_application_list(
             .split_once('(')
             .ok_or_else(|| OriginateError::ParseError("missing opening paren".into()))?;
         let args = if args.is_empty() { None } else { Some(args) };
-        Ok(ApplicationList(vec![Application::new(name, args)]))
+        Ok(OriginateTarget::Application(Application::new(name, args)))
     } else {
-        Ok(ApplicationList(vec![Application::new(s, None::<&str>)]))
+        Ok(OriginateTarget::Extension(s.to_string()))
     }
 }
 
@@ -251,65 +251,113 @@ mod tests {
     }
 
     #[test]
-    fn parse_application_list_bare_extension() {
-        let list = parse_application_list("123", None).unwrap();
-        assert_eq!(list.0[0].name, "123");
-        assert!(list.0[0]
-            .args
-            .is_none());
+    fn parse_target_bare_extension() {
+        let target = parse_originate_target("123", None).unwrap();
+        assert!(matches!(target, OriginateTarget::Extension(ref e) if e == "123"));
     }
 
     #[test]
-    fn parse_application_list_xml_no_args() {
-        let list = parse_application_list("&conference()", None).unwrap();
-        assert_eq!(list.0[0].name, "conference");
-        assert!(list.0[0]
-            .args
-            .is_none());
-    }
-
-    #[test]
-    fn parse_application_list_xml_with_args() {
-        let list = parse_application_list("&conference(1)", None).unwrap();
-        assert_eq!(
-            list.0
-                .len(),
-            1
-        );
-        assert_eq!(list.0[0].name, "conference");
-        assert_eq!(
-            list.0[0]
+    fn parse_target_xml_no_args() {
+        let target = parse_originate_target("&conference()", None).unwrap();
+        if let OriginateTarget::Application(app) = target {
+            assert_eq!(app.name, "conference");
+            assert!(app
                 .args
-                .as_deref(),
-            Some("1")
-        );
+                .is_none());
+        } else {
+            panic!("expected Application");
+        }
     }
 
     #[test]
-    fn parse_application_list_two_inline_apps() {
-        let list = parse_application_list(
+    fn parse_target_xml_with_args() {
+        let target = parse_originate_target("&conference(1)", None).unwrap();
+        if let OriginateTarget::Application(app) = target {
+            assert_eq!(app.name, "conference");
+            assert_eq!(
+                app.args
+                    .as_deref(),
+                Some("1")
+            );
+        } else {
+            panic!("expected Application");
+        }
+    }
+
+    #[test]
+    fn parse_target_two_inline_apps() {
+        let target = parse_originate_target(
             "conference:1,hangup:NORMAL_CLEARING",
             Some(&DialplanType::Inline),
         )
         .unwrap();
-        assert_eq!(
-            list.0
-                .len(),
-            2
-        );
-        assert_eq!(list.0[0].name, "conference");
-        assert_eq!(
-            list.0[0]
+        if let OriginateTarget::InlineApplications(apps) = target {
+            assert_eq!(apps.len(), 2);
+            assert_eq!(apps[0].name, "conference");
+            assert_eq!(
+                apps[0]
+                    .args
+                    .as_deref(),
+                Some("1")
+            );
+            assert_eq!(apps[1].name, "hangup");
+            assert_eq!(
+                apps[1]
+                    .args
+                    .as_deref(),
+                Some("NORMAL_CLEARING")
+            );
+        } else {
+            panic!("expected InlineApplications");
+        }
+    }
+
+    #[test]
+    fn parse_target_inline_bare_name() {
+        let target = parse_originate_target("hangup", Some(&DialplanType::Inline)).unwrap();
+        if let OriginateTarget::InlineApplications(apps) = target {
+            assert_eq!(apps.len(), 1);
+            assert_eq!(apps[0].name, "hangup");
+            assert!(apps[0]
                 .args
-                .as_deref(),
-            Some("1")
-        );
-        assert_eq!(list.0[1].name, "hangup");
-        assert_eq!(
-            list.0[1]
+                .is_none());
+        } else {
+            panic!("expected InlineApplications");
+        }
+    }
+
+    #[test]
+    fn parse_target_inline_mixed_bare_and_args() {
+        let target =
+            parse_originate_target("park,hangup:NORMAL_CLEARING", Some(&DialplanType::Inline))
+                .unwrap();
+        if let OriginateTarget::InlineApplications(apps) = target {
+            assert_eq!(apps.len(), 2);
+            assert_eq!(apps[0].name, "park");
+            assert!(apps[0]
                 .args
-                .as_deref(),
-            Some("NORMAL_CLEARING")
-        );
+                .is_none());
+            assert_eq!(apps[1].name, "hangup");
+            assert_eq!(
+                apps[1]
+                    .args
+                    .as_deref(),
+                Some("NORMAL_CLEARING")
+            );
+        } else {
+            panic!("expected InlineApplications");
+        }
+    }
+
+    #[test]
+    fn parse_target_inline_trailing_colon_collapses_to_none() {
+        let target = parse_originate_target("park:", Some(&DialplanType::Inline)).unwrap();
+        if let OriginateTarget::InlineApplications(apps) = target {
+            assert!(apps[0]
+                .args
+                .is_none());
+        } else {
+            panic!("expected InlineApplications");
+        }
     }
 }

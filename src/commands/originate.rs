@@ -283,7 +283,7 @@ pub use super::endpoint::Endpoint;
 /// A single dialplan application with optional arguments.
 ///
 /// Formats differently depending on [`DialplanType`]:
-/// - Inline: `name:args`
+/// - Inline: `name` or `name:args`
 /// - XML: `&name(args)`
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Application {
@@ -313,87 +313,57 @@ impl Application {
 
     /// Format as inline (`name:args`) or XML (`&name(args)`) syntax.
     pub fn to_string_with_dialplan(&self, dialplan: &DialplanType) -> String {
-        let args = self
-            .args
-            .as_deref()
-            .unwrap_or("");
         match dialplan {
-            DialplanType::Inline => format!("{}:{}", self.name, args),
-            DialplanType::Xml => format!("&{}({})", self.name, args),
-        }
-    }
-}
-
-/// Ordered list of applications for an originate command.
-///
-/// Inline dialplan allows multiple comma-separated apps; XML dialplan allows exactly one.
-///
-/// Converts from a single [`Application`], an array of applications, or a `Vec`:
-/// ```
-/// # use freeswitch_esl_tokio::commands::originate::*;
-/// let single: ApplicationList = Application::simple("park").into();
-/// let multi: ApplicationList = [
-///     Application::new("conference", Some("room1")),
-///     Application::new("hangup", Some("NORMAL_CLEARING")),
-/// ].into();
-/// ```
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ApplicationList(pub Vec<Application>);
-
-impl From<Application> for ApplicationList {
-    fn from(app: Application) -> Self {
-        Self(vec![app])
-    }
-}
-
-impl From<Vec<Application>> for ApplicationList {
-    fn from(apps: Vec<Application>) -> Self {
-        Self(apps)
-    }
-}
-
-impl<const N: usize> From<[Application; N]> for ApplicationList {
-    fn from(apps: [Application; N]) -> Self {
-        Self(apps.into())
-    }
-}
-
-impl ApplicationList {
-    /// Format the list for the given dialplan type. XML allows exactly one app.
-    pub fn to_string_with_dialplan(
-        &self,
-        dialplan: &DialplanType,
-    ) -> Result<String, OriginateError> {
-        if self
-            .0
-            .is_empty()
-        {
-            return Err(OriginateError::NoApplications);
-        }
-        match dialplan {
-            DialplanType::Inline => {
-                let parts: Vec<String> = self
-                    .0
-                    .iter()
-                    .map(|app| app.to_string_with_dialplan(dialplan))
-                    .collect();
-                Ok(parts.join(","))
-            }
+            DialplanType::Inline => match &self.args {
+                Some(args) => format!("{}:{}", self.name, args),
+                None => self
+                    .name
+                    .clone(),
+            },
             DialplanType::Xml => {
-                if self
-                    .0
-                    .len()
-                    != 1
-                {
-                    return Err(OriginateError::TooManyApplications);
-                }
-                Ok(self.0[0].to_string_with_dialplan(dialplan))
+                let args = self
+                    .args
+                    .as_deref()
+                    .unwrap_or("");
+                format!("&{}({})", self.name, args)
             }
         }
     }
 }
 
-/// Originate command builder: `originate <endpoint> <app> [dialplan] [context] [cid_name] [cid_num] [timeout]`.
+/// The target of an originate command: either a dialplan extension or
+/// application(s) to execute directly.
+///
+/// FreeSWITCH syntax: `originate <endpoint> <target> [dialplan] ...`
+/// where `<target>` is either a bare extension string (routes through
+/// the dialplan engine) or `&app(args)` / `app:args` (executes inline).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OriginateTarget {
+    /// Route through the dialplan engine to this extension.
+    Extension(String),
+    /// Single application for XML dialplan: `&app(args)`.
+    Application(Application),
+    /// One or more applications for inline dialplan: `app:args,app:args`.
+    InlineApplications(Vec<Application>),
+}
+
+impl From<Application> for OriginateTarget {
+    fn from(app: Application) -> Self {
+        Self::Application(app)
+    }
+}
+
+impl From<Vec<Application>> for OriginateTarget {
+    fn from(apps: Vec<Application>) -> Self {
+        Self::InlineApplications(apps)
+    }
+}
+
+/// Originate command builder: `originate <endpoint> <target> [dialplan] [context] [cid_name] [cid_num] [timeout]`.
+///
+/// The target is either a dialplan extension, a single XML-format application,
+/// or a list of inline applications. See [`OriginateTarget`].
 ///
 /// Application arguments containing spaces are automatically single-quoted.
 /// Implements both `Display` (for wire format) and `FromStr` (for round-trip parsing).
@@ -401,8 +371,9 @@ impl ApplicationList {
 pub struct Originate {
     /// Dial target (sofia gateway, loopback, or raw URI).
     pub endpoint: Endpoint,
-    /// Application(s) to execute on the originated channel.
-    pub applications: ApplicationList,
+    /// What to do with the answered channel.
+    #[serde(flatten)]
+    pub target: OriginateTarget,
     /// Dialplan engine. `None` defaults to XML.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dialplan: Option<DialplanType>,
@@ -422,17 +393,41 @@ pub struct Originate {
 
 impl fmt::Display for Originate {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let dialplan = self
-            .dialplan
-            .unwrap_or(DialplanType::Xml);
-        let apps = self
-            .applications
-            .to_string_with_dialplan(&dialplan)
-            .map_err(|_| fmt::Error)?;
+        let target_str = match &self.target {
+            OriginateTarget::Extension(ext) => {
+                if self.dialplan == Some(DialplanType::Inline) {
+                    return Err(fmt::Error);
+                }
+                ext.clone()
+            }
+            OriginateTarget::Application(app) => app.to_string_with_dialplan(&DialplanType::Xml),
+            OriginateTarget::InlineApplications(apps) => {
+                if apps.is_empty() {
+                    return Err(fmt::Error);
+                }
+                let parts: Vec<String> = apps
+                    .iter()
+                    .map(|a| a.to_string_with_dialplan(&DialplanType::Inline))
+                    .collect();
+                parts.join(",")
+            }
+        };
 
-        write!(f, "originate {} {}", self.endpoint, originate_quote(&apps))?;
+        write!(
+            f,
+            "originate {} {}",
+            self.endpoint,
+            originate_quote(&target_str)
+        )?;
 
-        if let Some(ref dp) = self.dialplan {
+        let dialplan = match &self.target {
+            OriginateTarget::InlineApplications(_) => Some(
+                self.dialplan
+                    .unwrap_or(DialplanType::Inline),
+            ),
+            _ => self.dialplan,
+        };
+        if let Some(dp) = dialplan {
             write!(f, " {}", dp)?;
         }
         if let Some(ref ctx) = self.context {
@@ -470,11 +465,11 @@ impl FromStr for Originate {
 
         if args.is_empty() {
             return Err(OriginateError::ParseError(
-                "missing application in originate".into(),
+                "missing target in originate".into(),
             ));
         }
 
-        let app_str = originate_unquote(&args.remove(0));
+        let target_str = originate_unquote(&args.remove(0));
 
         let dialplan = args
             .first()
@@ -486,7 +481,7 @@ impl FromStr for Originate {
             args.remove(0);
         }
 
-        let applications = super::parse_application_list(&app_str, dialplan.as_ref())?;
+        let target = super::parse_originate_target(&target_str, dialplan.as_ref())?;
 
         let context = if !args.is_empty() {
             Some(args.remove(0))
@@ -515,7 +510,7 @@ impl FromStr for Originate {
 
         Ok(Self {
             endpoint,
-            applications,
+            target,
             dialplan,
             context,
             cid_name,
@@ -531,12 +526,6 @@ pub enum OriginateError {
     /// A single-quoted token was never closed.
     #[error("unclosed quote at: {0}")]
     UnclosedQuote(String),
-    /// At least one application is required.
-    #[error("no applications specified")]
-    NoApplications,
-    /// XML dialplan only allows one application; multiple were given.
-    #[error("too many applications for non-inline dialplan")]
-    TooManyApplications,
     /// General parse failure with a description.
     #[error("parse error: {0}")]
     ParseError(String),
@@ -720,66 +709,10 @@ mod tests {
         );
     }
 
-    // --- ApplicationList ---
-
     #[test]
-    fn application_list_single_xml() {
-        let list = ApplicationList(vec![Application::new("testApp1", Some("testArg1"))]);
-        assert_eq!(
-            list.to_string_with_dialplan(&DialplanType::Xml)
-                .unwrap(),
-            "&testApp1(testArg1)"
-        );
-    }
-
-    #[test]
-    fn application_list_single_inline() {
-        let list = ApplicationList(vec![Application::new("testApp1", Some("testArg1"))]);
-        assert_eq!(
-            list.to_string_with_dialplan(&DialplanType::Inline)
-                .unwrap(),
-            "testApp1:testArg1"
-        );
-    }
-
-    #[test]
-    fn application_list_empty_xml_errors() {
-        let list = ApplicationList(vec![]);
-        assert!(list
-            .to_string_with_dialplan(&DialplanType::Xml)
-            .is_err());
-    }
-
-    #[test]
-    fn application_list_empty_inline_errors() {
-        let list = ApplicationList(vec![]);
-        assert!(list
-            .to_string_with_dialplan(&DialplanType::Inline)
-            .is_err());
-    }
-
-    #[test]
-    fn application_list_two_xml_errors() {
-        let list = ApplicationList(vec![
-            Application::new("testApp1", Some("testArg1")),
-            Application::new("testApp2", Some("testArg2")),
-        ]);
-        assert!(list
-            .to_string_with_dialplan(&DialplanType::Xml)
-            .is_err());
-    }
-
-    #[test]
-    fn application_list_two_inline() {
-        let list = ApplicationList(vec![
-            Application::new("testApp1", Some("testArg1")),
-            Application::new("testApp2", Some("testArg2")),
-        ]);
-        assert_eq!(
-            list.to_string_with_dialplan(&DialplanType::Inline)
-                .unwrap(),
-            "testApp1:testArg1,testApp2:testArg2"
-        );
+    fn application_inline_no_args() {
+        let app = Application::simple("park");
+        assert_eq!(app.to_string_with_dialplan(&DialplanType::Inline), "park");
     }
 
     // --- Originate ---
@@ -791,10 +724,9 @@ mod tests {
             destination: "123@example.com".into(),
             variables: None,
         });
-        let apps = ApplicationList(vec![Application::new("conference", Some("1"))]);
         let orig = Originate {
             endpoint: ep,
-            applications: apps,
+            target: Application::new("conference", Some("1")).into(),
             dialplan: Some(DialplanType::Xml),
             context: None,
             cid_name: None,
@@ -814,10 +746,9 @@ mod tests {
             destination: "123@example.com".into(),
             variables: None,
         });
-        let apps = ApplicationList(vec![Application::new("conference", Some("1"))]);
         let orig = Originate {
             endpoint: ep,
-            applications: apps,
+            target: vec![Application::new("conference", Some("1"))].into(),
             dialplan: Some(DialplanType::Inline),
             context: None,
             cid_name: None,
@@ -831,15 +762,76 @@ mod tests {
     }
 
     #[test]
+    fn originate_extension_display() {
+        let ep = Endpoint::Sofia(SofiaEndpoint {
+            profile: "internal".into(),
+            destination: "123@example.com".into(),
+            variables: None,
+        });
+        let orig = Originate {
+            endpoint: ep,
+            target: OriginateTarget::Extension("1000".into()),
+            dialplan: Some(DialplanType::Xml),
+            context: Some("default".into()),
+            cid_name: None,
+            cid_num: None,
+            timeout: None,
+        };
+        assert_eq!(
+            orig.to_string(),
+            "originate sofia/internal/123@example.com 1000 XML default"
+        );
+    }
+
+    #[test]
+    fn originate_extension_round_trip() {
+        let input = "originate sofia/internal/test@example.com 1000 XML default";
+        let parsed: Originate = input
+            .parse()
+            .unwrap();
+        assert_eq!(parsed.to_string(), input);
+        assert!(matches!(parsed.target, OriginateTarget::Extension(ref e) if e == "1000"));
+    }
+
+    #[test]
+    fn originate_extension_no_dialplan() {
+        let input = "originate sofia/internal/test@example.com 1000";
+        let parsed: Originate = input
+            .parse()
+            .unwrap();
+        assert!(matches!(parsed.target, OriginateTarget::Extension(ref e) if e == "1000"));
+        assert_eq!(parsed.to_string(), input);
+    }
+
+    #[test]
+    fn originate_extension_with_inline_errors() {
+        let ep = Endpoint::Sofia(SofiaEndpoint {
+            profile: "internal".into(),
+            destination: "123@example.com".into(),
+            variables: None,
+        });
+        let orig = Originate {
+            endpoint: ep,
+            target: OriginateTarget::Extension("1000".into()),
+            dialplan: Some(DialplanType::Inline),
+            context: None,
+            cid_name: None,
+            cid_num: None,
+            timeout: None,
+        };
+        use std::fmt::Write;
+        let mut buf = String::new();
+        assert!(write!(buf, "{}", orig).is_err());
+    }
+
+    #[test]
     fn originate_from_string_round_trip() {
         let input = "originate {test='variable with quote'}sofia/internal/test@example.com 123";
         let orig: Originate = input
             .parse()
             .unwrap();
-        assert!(orig
-            .endpoint
-            .to_string()
-            .contains("sofia/internal/test@example.com"));
+        assert!(matches!(orig.target, OriginateTarget::Extension(ref e) if e == "123"));
+        assert_eq!(orig.to_string(), input);
     }
 
     #[test]
@@ -849,13 +841,9 @@ mod tests {
             context: "test".into(),
             variables: None,
         });
-        let apps = ApplicationList(vec![Application::new(
-            "socket",
-            Some("127.0.0.1:8040 async full"),
-        )]);
         let orig = Originate {
             endpoint: ep,
-            applications: apps,
+            target: Application::new("socket", Some("127.0.0.1:8040 async full")).into(),
             dialplan: None,
             context: None,
             cid_name: None,
@@ -875,14 +863,15 @@ mod tests {
             .parse()
             .unwrap();
         assert_eq!(parsed.to_string(), input);
-        assert_eq!(
-            parsed
-                .applications
-                .0[0]
-                .args
-                .as_deref(),
-            Some("127.0.0.1:8040 async full")
-        );
+        if let OriginateTarget::Application(ref app) = parsed.target {
+            assert_eq!(
+                app.args
+                    .as_deref(),
+                Some("127.0.0.1:8040 async full")
+            );
+        } else {
+            panic!("expected Application target");
+        }
     }
 
     #[test]
@@ -892,10 +881,9 @@ mod tests {
             destination: "123@example.com".into(),
             variables: None,
         });
-        let apps = ApplicationList(vec![Application::new("conference", Some("1"))]);
         let orig = Originate {
             endpoint: ep,
-            applications: apps,
+            target: Application::new("conference", Some("1")).into(),
             dialplan: Some(DialplanType::Xml),
             context: None,
             cid_name: None,
@@ -907,6 +895,53 @@ mod tests {
             .parse()
             .unwrap();
         assert_eq!(parsed.to_string(), s);
+    }
+
+    #[test]
+    fn originate_inline_no_args_round_trip() {
+        let input = "originate sofia/internal/123@example.com park inline";
+        let parsed: Originate = input
+            .parse()
+            .unwrap();
+        assert_eq!(parsed.to_string(), input);
+        if let OriginateTarget::InlineApplications(ref apps) = parsed.target {
+            assert!(apps[0]
+                .args
+                .is_none());
+        } else {
+            panic!("expected InlineApplications target");
+        }
+    }
+
+    #[test]
+    fn originate_inline_multi_app_round_trip() {
+        let input =
+            "originate sofia/internal/123@example.com playback:/tmp/test.wav,hangup:NORMAL_CLEARING inline";
+        let parsed: Originate = input
+            .parse()
+            .unwrap();
+        assert_eq!(parsed.to_string(), input);
+    }
+
+    #[test]
+    fn originate_inline_auto_dialplan() {
+        let ep = Endpoint::Sofia(SofiaEndpoint {
+            profile: "internal".into(),
+            destination: "123@example.com".into(),
+            variables: None,
+        });
+        let orig = Originate {
+            endpoint: ep,
+            target: vec![Application::simple("park")].into(),
+            dialplan: None,
+            context: None,
+            cid_name: None,
+            cid_num: None,
+            timeout: None,
+        };
+        assert!(orig
+            .to_string()
+            .contains("inline"));
     }
 
     // --- DialplanType ---
@@ -1025,18 +1060,7 @@ mod tests {
     }
 
     #[test]
-    fn serde_application_list() {
-        let list = ApplicationList(vec![
-            Application::new("park", None::<&str>),
-            Application::new("conference", Some("1")),
-        ]);
-        let json = serde_json::to_string(&list).unwrap();
-        let parsed: ApplicationList = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed, list);
-    }
-
-    #[test]
-    fn serde_originate_round_trip() {
+    fn serde_originate_application_round_trip() {
         let ep = Endpoint::Sofia(SofiaEndpoint {
             profile: "internal".into(),
             destination: "123@example.com".into(),
@@ -1044,7 +1068,7 @@ mod tests {
         });
         let orig = Originate {
             endpoint: ep,
-            applications: ApplicationList(vec![Application::new("park", None::<&str>)]),
+            target: Application::new("park", None::<&str>).into(),
             dialplan: Some(DialplanType::Xml),
             context: Some("default".into()),
             cid_name: Some("Test".into()),
@@ -1052,8 +1076,45 @@ mod tests {
             timeout: Some(30),
         };
         let json = serde_json::to_string(&orig).unwrap();
+        assert!(json.contains("\"application\""));
         let parsed: Originate = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, orig);
+    }
+
+    #[test]
+    fn serde_originate_extension() {
+        let json = r#"{
+            "endpoint": {"sofia": {"profile": "internal", "destination": "123@example.com"}},
+            "extension": "1000",
+            "dialplan": "xml",
+            "context": "default"
+        }"#;
+        let orig: Originate = serde_json::from_str(json).unwrap();
+        assert!(matches!(orig.target, OriginateTarget::Extension(ref e) if e == "1000"));
+        assert_eq!(
+            orig.to_string(),
+            "originate sofia/internal/123@example.com 1000 XML default"
+        );
+    }
+
+    #[test]
+    fn serde_originate_inline_applications() {
+        let json = r#"{
+            "endpoint": {"sofia": {"profile": "internal", "destination": "123@example.com"}},
+            "inline_applications": [
+                {"name": "playback", "args": "/tmp/test.wav"},
+                {"name": "hangup", "args": "NORMAL_CLEARING"}
+            ]
+        }"#;
+        let orig: Originate = serde_json::from_str(json).unwrap();
+        if let OriginateTarget::InlineApplications(ref apps) = orig.target {
+            assert_eq!(apps.len(), 2);
+        } else {
+            panic!("expected InlineApplications");
+        }
+        assert!(orig
+            .to_string()
+            .contains("inline"));
     }
 
     #[test]
@@ -1065,7 +1126,7 @@ mod tests {
         });
         let orig = Originate {
             endpoint: ep,
-            applications: ApplicationList(vec![Application::new("park", None::<&str>)]),
+            target: Application::new("park", None::<&str>).into(),
             dialplan: None,
             context: None,
             cid_name: None,
@@ -1084,7 +1145,7 @@ mod tests {
     fn serde_originate_to_wire_format() {
         let json = r#"{
             "endpoint": {"sofia": {"profile": "internal", "destination": "123@example.com"}},
-            "applications": [{"name": "park"}],
+            "application": {"name": "park"},
             "dialplan": "xml",
             "context": "default"
         }"#;
@@ -1113,51 +1174,30 @@ mod tests {
         assert_eq!(app.to_string_with_dialplan(&DialplanType::Xml), "&park()");
     }
 
-    // --- ApplicationList From impls ---
+    // --- OriginateTarget From impls ---
 
     #[test]
-    fn application_list_from_single() {
-        let list: ApplicationList = Application::simple("park").into();
-        assert_eq!(
-            list.0
-                .len(),
-            1
-        );
-        assert_eq!(list.0[0].name, "park");
+    fn originate_target_from_application() {
+        let target: OriginateTarget = Application::simple("park").into();
+        assert!(matches!(target, OriginateTarget::Application(_)));
     }
 
     #[test]
-    fn application_list_from_vec() {
-        let list: ApplicationList = vec![
+    fn originate_target_from_vec() {
+        let target: OriginateTarget = vec![
             Application::new("conference", Some("1")),
             Application::new("hangup", Some("NORMAL_CLEARING")),
         ]
         .into();
-        assert_eq!(
-            list.0
-                .len(),
-            2
-        );
-        assert_eq!(list.0[0].name, "conference");
-        assert_eq!(list.0[1].name, "hangup");
+        if let OriginateTarget::InlineApplications(apps) = target {
+            assert_eq!(apps.len(), 2);
+        } else {
+            panic!("expected InlineApplications");
+        }
     }
 
     #[test]
-    fn application_list_from_array() {
-        let list: ApplicationList = [
-            Application::new("conference", Some("room1")),
-            Application::new("hangup", Some("NORMAL_CLEARING")),
-        ]
-        .into();
-        assert_eq!(
-            list.0
-                .len(),
-            2
-        );
-    }
-
-    #[test]
-    fn application_list_from_single_wire_format() {
+    fn originate_target_application_wire_format() {
         let ep = Endpoint::Sofia(SofiaEndpoint {
             profile: "internal".into(),
             destination: "123@example.com".into(),
@@ -1165,7 +1205,7 @@ mod tests {
         });
         let orig = Originate {
             endpoint: ep,
-            applications: Application::simple("park").into(),
+            target: Application::simple("park").into(),
             dialplan: None,
             context: None,
             cid_name: None,
