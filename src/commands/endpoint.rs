@@ -8,7 +8,7 @@
 use std::fmt;
 use std::str::FromStr;
 
-use super::originate::{OriginateError, Variables, VariablesType};
+use super::originate::{OriginateError, Variables};
 
 /// Common interface for anything that formats as a FreeSWITCH dial string.
 ///
@@ -139,7 +139,7 @@ pub enum Endpoint {
 }
 
 // ---------------------------------------------------------------------------
-// Stub Display impls (red phase -- produce wrong output)
+// Helper
 // ---------------------------------------------------------------------------
 
 fn write_variables(f: &mut fmt::Formatter<'_>, vars: &Option<Variables>) -> fmt::Result {
@@ -151,45 +151,87 @@ fn write_variables(f: &mut fmt::Formatter<'_>, vars: &Option<Variables>) -> fmt:
     Ok(())
 }
 
+/// Extract leading `{...}` variable block from a dial string, returning
+/// the parsed variables and the remaining URI portion.
+fn extract_variables(s: &str) -> Result<(Option<Variables>, &str), OriginateError> {
+    if s.starts_with('{') {
+        let close = s
+            .find('}')
+            .ok_or_else(|| OriginateError::ParseError("unclosed { in endpoint".into()))?;
+        let var_str = &s[..=close];
+        let vars: Variables = var_str.parse()?;
+        let vars = if vars.is_empty() { None } else { Some(vars) };
+        Ok((vars, s[close + 1..].trim()))
+    } else {
+        Ok((None, s))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Display impls
+// ---------------------------------------------------------------------------
+
 impl fmt::Display for SofiaEndpoint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "TODO")
+        write_variables(f, &self.variables)?;
+        write!(f, "sofia/{}/{}", self.profile, self.destination)
     }
 }
 
 impl fmt::Display for SofiaGateway {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "TODO")
+        write_variables(f, &self.variables)?;
+        match &self.profile {
+            Some(p) => write!(
+                f,
+                "sofia/gateway/{}::{}/{}",
+                p, self.gateway, self.destination
+            ),
+            None => write!(f, "sofia/gateway/{}/{}", self.gateway, self.destination),
+        }
     }
 }
 
 impl fmt::Display for LoopbackEndpoint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "TODO")
+        write_variables(f, &self.variables)?;
+        write!(f, "loopback/{}/{}", self.extension, self.context)
     }
 }
 
 impl fmt::Display for UserEndpoint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "TODO")
+        write_variables(f, &self.variables)?;
+        match &self.domain {
+            Some(d) => write!(f, "user/{}@{}", self.name, d),
+            None => write!(f, "user/{}", self.name),
+        }
     }
 }
 
 impl fmt::Display for SofiaContact {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "TODO")
+        write_variables(f, &self.variables)?;
+        match &self.profile {
+            Some(p) => write!(f, "${{sofia_contact({}/{}@{})}}", p, self.user, self.domain),
+            None => write!(f, "${{sofia_contact({}@{})}}", self.user, self.domain),
+        }
     }
 }
 
 impl fmt::Display for GroupCall {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "TODO")
+        write_variables(f, &self.variables)?;
+        match &self.order {
+            Some(o) => write!(f, "${{group_call({}@{}+{})}}", self.group, self.domain, o),
+            None => write!(f, "${{group_call({}@{})}}", self.group, self.domain),
+        }
     }
 }
 
 impl fmt::Display for ErrorEndpoint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "TODO")
+        write!(f, "error/{}", self.cause)
     }
 }
 
@@ -208,62 +250,194 @@ impl fmt::Display for Endpoint {
 }
 
 // ---------------------------------------------------------------------------
-// Stub FromStr impls (red phase -- always error)
+// FromStr impls
 // ---------------------------------------------------------------------------
 
 impl FromStr for SofiaEndpoint {
     type Err = OriginateError;
-    fn from_str(_s: &str) -> Result<Self, Self::Err> {
-        Err(OriginateError::ParseError("not implemented".into()))
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (variables, uri) = extract_variables(s)?;
+        let rest = uri
+            .strip_prefix("sofia/")
+            .ok_or_else(|| OriginateError::ParseError("not a sofia endpoint".into()))?;
+        let (profile, destination) = rest
+            .split_once('/')
+            .ok_or_else(|| {
+                OriginateError::ParseError("sofia endpoint needs profile/destination".into())
+            })?;
+        Ok(Self {
+            profile: profile.into(),
+            destination: destination.into(),
+            variables,
+        })
     }
 }
 
 impl FromStr for SofiaGateway {
     type Err = OriginateError;
-    fn from_str(_s: &str) -> Result<Self, Self::Err> {
-        Err(OriginateError::ParseError("not implemented".into()))
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (variables, uri) = extract_variables(s)?;
+        let rest = uri
+            .strip_prefix("sofia/gateway/")
+            .ok_or_else(|| OriginateError::ParseError("not a sofia gateway endpoint".into()))?;
+        let (gateway_part, destination) = rest
+            .split_once('/')
+            .ok_or_else(|| {
+                OriginateError::ParseError("sofia gateway needs gateway/destination".into())
+            })?;
+        let (profile, gateway) = if let Some((p, g)) = gateway_part.split_once("::") {
+            (Some(p.to_string()), g.to_string())
+        } else {
+            (None, gateway_part.to_string())
+        };
+        Ok(Self {
+            gateway,
+            destination: destination.into(),
+            profile,
+            variables,
+        })
     }
 }
 
 impl FromStr for LoopbackEndpoint {
     type Err = OriginateError;
-    fn from_str(_s: &str) -> Result<Self, Self::Err> {
-        Err(OriginateError::ParseError("not implemented".into()))
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (variables, uri) = extract_variables(s)?;
+        let rest = uri
+            .strip_prefix("loopback/")
+            .ok_or_else(|| OriginateError::ParseError("not a loopback endpoint".into()))?;
+        let (extension, context) = rest
+            .split_once('/')
+            .unwrap_or((rest, "default"));
+        Ok(Self {
+            extension: extension.into(),
+            context: context.into(),
+            variables,
+        })
     }
 }
 
 impl FromStr for UserEndpoint {
     type Err = OriginateError;
-    fn from_str(_s: &str) -> Result<Self, Self::Err> {
-        Err(OriginateError::ParseError("not implemented".into()))
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (variables, uri) = extract_variables(s)?;
+        let rest = uri
+            .strip_prefix("user/")
+            .ok_or_else(|| OriginateError::ParseError("not a user endpoint".into()))?;
+        let (name, domain) = if let Some((n, d)) = rest.split_once('@') {
+            (n.to_string(), Some(d.to_string()))
+        } else {
+            (rest.to_string(), None)
+        };
+        Ok(Self {
+            name,
+            domain,
+            variables,
+        })
     }
 }
 
 impl FromStr for SofiaContact {
     type Err = OriginateError;
-    fn from_str(_s: &str) -> Result<Self, Self::Err> {
-        Err(OriginateError::ParseError("not implemented".into()))
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (variables, uri) = extract_variables(s)?;
+        let inner = uri
+            .strip_prefix("${sofia_contact(")
+            .and_then(|r| r.strip_suffix(")}"))
+            .ok_or_else(|| OriginateError::ParseError("not a sofia_contact expression".into()))?;
+        let (profile, user_at_domain) = if let Some((p, rest)) = inner.split_once('/') {
+            (Some(p.to_string()), rest)
+        } else {
+            (None, inner)
+        };
+        let (user, domain) = user_at_domain
+            .split_once('@')
+            .ok_or_else(|| OriginateError::ParseError("sofia_contact needs user@domain".into()))?;
+        Ok(Self {
+            user: user.into(),
+            domain: domain.into(),
+            profile,
+            variables,
+        })
     }
 }
 
 impl FromStr for GroupCall {
     type Err = OriginateError;
-    fn from_str(_s: &str) -> Result<Self, Self::Err> {
-        Err(OriginateError::ParseError("not implemented".into()))
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (variables, uri) = extract_variables(s)?;
+        let inner = uri
+            .strip_prefix("${group_call(")
+            .and_then(|r| r.strip_suffix(")}"))
+            .ok_or_else(|| OriginateError::ParseError("not a group_call expression".into()))?;
+        let (group_at_domain, order) = if let Some((gd, o)) = inner.split_once('+') {
+            (gd, Some(o.to_string()))
+        } else {
+            (inner, None)
+        };
+        let (group, domain) = group_at_domain
+            .split_once('@')
+            .ok_or_else(|| OriginateError::ParseError("group_call needs group@domain".into()))?;
+        Ok(Self {
+            group: group.into(),
+            domain: domain.into(),
+            order,
+            variables,
+        })
     }
 }
 
 impl FromStr for ErrorEndpoint {
     type Err = OriginateError;
-    fn from_str(_s: &str) -> Result<Self, Self::Err> {
-        Err(OriginateError::ParseError("not implemented".into()))
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let cause = s
+            .strip_prefix("error/")
+            .ok_or_else(|| OriginateError::ParseError("not an error endpoint".into()))?;
+        Ok(Self {
+            cause: cause.into(),
+        })
     }
 }
 
 impl FromStr for Endpoint {
     type Err = OriginateError;
-    fn from_str(_s: &str) -> Result<Self, Self::Err> {
-        Err(OriginateError::ParseError("not implemented".into()))
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (variables, uri) = extract_variables(s)?;
+        // Re-assemble with variables for individual FromStr impls
+        let full = if variables.is_some() {
+            s.to_string()
+        } else {
+            uri.to_string()
+        };
+
+        if uri.starts_with("${sofia_contact(") {
+            Ok(Self::SofiaContact(full.parse()?))
+        } else if uri.starts_with("${group_call(") {
+            Ok(Self::GroupCall(full.parse()?))
+        } else if uri.starts_with("error/") {
+            Ok(Self::Error(full.parse()?))
+        } else if uri.starts_with("loopback/") {
+            Ok(Self::Loopback(full.parse()?))
+        } else if uri.starts_with("sofia/gateway/") {
+            Ok(Self::SofiaGateway(full.parse()?))
+        } else if uri.starts_with("sofia/") {
+            Ok(Self::Sofia(full.parse()?))
+        } else if uri.starts_with("user/") {
+            Ok(Self::User(full.parse()?))
+        } else {
+            Err(OriginateError::ParseError(format!(
+                "unknown endpoint type: {}",
+                uri
+            )))
+        }
     }
 }
 
@@ -349,6 +523,7 @@ impl DialString for Endpoint {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::originate::VariablesType;
 
     // === SofiaEndpoint ===
 
