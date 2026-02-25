@@ -629,7 +629,7 @@ mod tests {
             .parse_event(message, EventFormat::Plain)
             .unwrap();
 
-        assert_eq!(event.event_type(), None);
+        assert_eq!(event.event_type(), Some(EslEventType::Log));
         assert_eq!(event.header(EventHeader::LogLevel), Some("6"));
         assert_eq!(event.header_str("Content-Type"), Some("log/data"));
         assert_eq!(event.header_str("Log-File"), Some("mod_sofia.c"));
