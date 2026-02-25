@@ -46,11 +46,14 @@ impl FromStr for EventFormat {
     type Err = ParseEventFormatError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "plain" => Ok(Self::Plain),
-            "json" => Ok(Self::Json),
-            "xml" => Ok(Self::Xml),
-            _ => Err(ParseEventFormatError(s.to_string())),
+        if s.eq_ignore_ascii_case("plain") {
+            Ok(Self::Plain)
+        } else if s.eq_ignore_ascii_case("json") {
+            Ok(Self::Json)
+        } else if s.eq_ignore_ascii_case("xml") {
+            Ok(Self::Xml)
+        } else {
+            Err(ParseEventFormatError(s.to_string()))
         }
     }
 }
@@ -881,6 +884,14 @@ mod tests {
         assert!("foo"
             .parse::<EventFormat>()
             .is_err());
+    }
+
+    #[test]
+    fn test_event_format_from_str_case_insensitive() {
+        assert_eq!("PLAIN".parse::<EventFormat>(), Ok(EventFormat::Plain));
+        assert_eq!("Json".parse::<EventFormat>(), Ok(EventFormat::Json));
+        assert_eq!("XML".parse::<EventFormat>(), Ok(EventFormat::Xml));
+        assert_eq!("Xml".parse::<EventFormat>(), Ok(EventFormat::Xml));
     }
 
     #[test]

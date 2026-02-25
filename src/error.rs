@@ -185,7 +185,8 @@ impl EslError {
 
     /// `true` if the TCP session is dead and the caller should reconnect.
     ///
-    /// Matches: `Io`, `NotConnected`, `ConnectionClosed`, `HeartbeatExpired`.
+    /// Matches: `Io`, `NotConnected`, `ConnectionClosed`, `HeartbeatExpired`,
+    /// `ProtocolError`.
     pub fn is_connection_error(&self) -> bool {
         matches!(
             self,
@@ -193,6 +194,7 @@ impl EslError {
                 | EslError::NotConnected
                 | EslError::ConnectionClosed
                 | EslError::HeartbeatExpired { .. }
+                | EslError::ProtocolError { .. }
         )
     }
 }

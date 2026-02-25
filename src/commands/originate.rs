@@ -1332,4 +1332,37 @@ mod tests {
             "originate loopback/9199/test 1000 XML myctx"
         );
     }
+
+    /// `context: None` with a later positional arg emits `"default"` as a
+    /// gap-filler. `FromStr` reads it back as `Some("default")` because
+    /// `"default"` is also a valid user-specified context. The wire format
+    /// round-trips correctly (identical string), but the struct-level
+    /// representation differs. This is an accepted asymmetry.
+    #[test]
+    fn originate_context_gap_filler_round_trip_asymmetry() {
+        let cmd = Originate {
+            endpoint: Endpoint::Loopback(LoopbackEndpoint {
+                extension: "9199".into(),
+                context: "test".into(),
+                variables: None,
+            }),
+            target: Application::simple("park").into(),
+            dialplan: None,
+            context: None,
+            cid_name: Some("Alice".into()),
+            cid_num: None,
+            timeout: None,
+        };
+        let wire = cmd.to_string();
+        assert!(wire.contains("default"), "gap-filler should emit 'default'");
+
+        let parsed: Originate = wire
+            .parse()
+            .unwrap();
+        // Struct-level asymmetry: None became Some("default")
+        assert_eq!(parsed.context, Some("default".into()));
+
+        // Wire format is identical (the important invariant)
+        assert_eq!(parsed.to_string(), wire);
+    }
 }

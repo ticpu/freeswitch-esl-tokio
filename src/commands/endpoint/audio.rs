@@ -51,6 +51,12 @@ impl AudioEndpoint {
     }
 }
 
+/// **Warning:** This `Display` impl exists only to satisfy the `DialString: Display`
+/// trait bound. The `"audio"` prefix is not a valid FreeSWITCH endpoint.
+/// Always use `AudioEndpoint` through [`Endpoint::PortAudio`](super::Endpoint::PortAudio),
+/// [`Endpoint::PulseAudio`](super::Endpoint::PulseAudio), or
+/// [`Endpoint::Alsa`](super::Endpoint::Alsa) which call
+/// [`fmt_with_prefix`](AudioEndpoint::fmt_with_prefix) with the correct module name.
 impl fmt::Display for AudioEndpoint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.fmt_with_prefix(f, "audio")
