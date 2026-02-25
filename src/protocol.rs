@@ -326,11 +326,12 @@ impl EslParser {
             }
         }
 
-        let event_name = event
+        if let Some(event_name) = event
             .header(EventHeader::EventName)
-            .ok_or_else(|| EslError::protocol_error("event missing Event-Name header"))?
-            .to_string();
-        event.set_event_type(EslEventType::parse_event_type(&event_name));
+            .map(|s| s.to_string())
+        {
+            event.set_event_type(EslEventType::parse_event_type(&event_name));
+        }
 
         Ok(event)
     }
@@ -356,11 +357,12 @@ impl EslParser {
             }
         }
 
-        let event_name = event
+        if let Some(event_name) = event
             .header(EventHeader::EventName)
-            .ok_or_else(|| EslError::protocol_error("event missing Event-Name header"))?
-            .to_string();
-        event.set_event_type(EslEventType::parse_event_type(&event_name));
+            .map(|s| s.to_string())
+        {
+            event.set_event_type(EslEventType::parse_event_type(&event_name));
+        }
 
         Ok(event)
     }
@@ -435,11 +437,12 @@ impl EslParser {
             }
         }
 
-        let event_name = event
+        if let Some(event_name) = event
             .header(EventHeader::EventName)
-            .ok_or_else(|| EslError::protocol_error("event missing Event-Name header"))?
-            .to_string();
-        event.set_event_type(EslEventType::parse_event_type(&event_name));
+            .map(|s| s.to_string())
+        {
+            event.set_event_type(EslEventType::parse_event_type(&event_name));
+        }
 
         Ok(event)
     }
@@ -596,6 +599,41 @@ mod tests {
         assert_eq!(event.event_type(), Some(EslEventType::BackgroundJob));
         assert_eq!(event.header(EventHeader::JobUuid), Some("abc-123"));
         assert_eq!(event.body(), Some("+OK Status\n"));
+    }
+
+    #[test]
+    fn test_parse_log_data_event() {
+        let mut parser = EslParser::new();
+        let log_text = "2024-01-01 00:00:00.000000 [INFO] mod_sofia.c:1234 Registration ok\n";
+        let body_headers = format!(
+            "Content-Type: log/data\nLog-Level: 6\nText-Channel: 0\nLog-File: mod_sofia.c\nLog-Func: sofia_reg_handle\nLog-Line: 1234\nUser-Data: \n\n{}",
+            log_text
+        );
+        let envelope = format!(
+            "Content-Length: {}\nContent-Type: log/data\n\n",
+            body_headers.len()
+        );
+        let data = format!("{}{}", envelope, body_headers);
+
+        parser
+            .add_data(data.as_bytes())
+            .unwrap();
+        let message = parser
+            .parse_message()
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(message.message_type, MessageType::Event);
+
+        let event = parser
+            .parse_event(message, EventFormat::Plain)
+            .unwrap();
+
+        assert_eq!(event.event_type(), None);
+        assert_eq!(event.header(EventHeader::LogLevel), Some("6"));
+        assert_eq!(event.header_str("Content-Type"), Some("log/data"));
+        assert_eq!(event.header_str("Log-File"), Some("mod_sofia.c"));
+        assert_eq!(event.body(), Some(log_text));
     }
 
     #[test]
