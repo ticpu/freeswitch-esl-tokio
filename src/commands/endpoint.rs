@@ -1146,4 +1146,245 @@ mod tests {
             .variables()
             .is_some());
     }
+
+    // === Serde round-trips ===
+
+    #[test]
+    fn serde_sofia_endpoint() {
+        let ep = SofiaEndpoint {
+            profile: "internal".into(),
+            destination: "1000@domain.com".into(),
+            variables: None,
+        };
+        let json = serde_json::to_string(&ep).unwrap();
+        let parsed: SofiaEndpoint = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, ep);
+    }
+
+    #[test]
+    fn serde_sofia_endpoint_with_variables() {
+        let mut vars = Variables::new(VariablesType::Default);
+        vars.insert("originate_timeout", "30");
+        let ep = SofiaEndpoint {
+            profile: "internal".into(),
+            destination: "1000@domain.com".into(),
+            variables: Some(vars),
+        };
+        let json = serde_json::to_string(&ep).unwrap();
+        let parsed: SofiaEndpoint = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, ep);
+    }
+
+    #[test]
+    fn serde_sofia_gateway() {
+        let ep = SofiaGateway {
+            gateway: "my_provider".into(),
+            destination: "18005551234".into(),
+            profile: None,
+            variables: None,
+        };
+        let json = serde_json::to_string(&ep).unwrap();
+        let parsed: SofiaGateway = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, ep);
+    }
+
+    #[test]
+    fn serde_sofia_gateway_with_profile() {
+        let ep = SofiaGateway {
+            gateway: "my_provider".into(),
+            destination: "18005551234".into(),
+            profile: Some("external".into()),
+            variables: None,
+        };
+        let json = serde_json::to_string(&ep).unwrap();
+        let parsed: SofiaGateway = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, ep);
+    }
+
+    #[test]
+    fn serde_loopback_endpoint() {
+        let ep = LoopbackEndpoint {
+            extension: "9199".into(),
+            context: "default".into(),
+            variables: None,
+        };
+        let json = serde_json::to_string(&ep).unwrap();
+        let parsed: LoopbackEndpoint = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, ep);
+    }
+
+    #[test]
+    fn serde_user_endpoint() {
+        let ep = UserEndpoint {
+            name: "1000".into(),
+            domain: Some("domain.com".into()),
+            variables: None,
+        };
+        let json = serde_json::to_string(&ep).unwrap();
+        let parsed: UserEndpoint = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, ep);
+    }
+
+    #[test]
+    fn serde_user_endpoint_no_domain() {
+        let ep = UserEndpoint {
+            name: "1000".into(),
+            domain: None,
+            variables: None,
+        };
+        let json = serde_json::to_string(&ep).unwrap();
+        let parsed: UserEndpoint = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, ep);
+    }
+
+    #[test]
+    fn serde_sofia_contact() {
+        let ep = SofiaContact {
+            user: "1000".into(),
+            domain: "domain.com".into(),
+            profile: Some("*".into()),
+            variables: None,
+        };
+        let json = serde_json::to_string(&ep).unwrap();
+        let parsed: SofiaContact = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, ep);
+    }
+
+    #[test]
+    fn serde_group_call() {
+        let ep = GroupCall {
+            group: "support".into(),
+            domain: "domain.com".into(),
+            order: Some("A".into()),
+            variables: None,
+        };
+        let json = serde_json::to_string(&ep).unwrap();
+        let parsed: GroupCall = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, ep);
+    }
+
+    #[test]
+    fn serde_error_endpoint() {
+        let ep = ErrorEndpoint {
+            cause: "user_busy".into(),
+        };
+        let json = serde_json::to_string(&ep).unwrap();
+        let parsed: ErrorEndpoint = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, ep);
+    }
+
+    #[test]
+    fn serde_endpoint_enum_sofia() {
+        let ep = Endpoint::Sofia(SofiaEndpoint {
+            profile: "internal".into(),
+            destination: "1000@domain.com".into(),
+            variables: None,
+        });
+        let json = serde_json::to_string(&ep).unwrap();
+        assert!(json.contains("\"sofia\""));
+        let parsed: Endpoint = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, ep);
+    }
+
+    #[test]
+    fn serde_endpoint_enum_sofia_gateway() {
+        let ep = Endpoint::SofiaGateway(SofiaGateway {
+            gateway: "gw1".into(),
+            destination: "1234".into(),
+            profile: None,
+            variables: None,
+        });
+        let json = serde_json::to_string(&ep).unwrap();
+        assert!(json.contains("\"sofia_gateway\""));
+        let parsed: Endpoint = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, ep);
+    }
+
+    #[test]
+    fn serde_endpoint_enum_loopback() {
+        let ep = Endpoint::Loopback(LoopbackEndpoint {
+            extension: "9199".into(),
+            context: "default".into(),
+            variables: None,
+        });
+        let json = serde_json::to_string(&ep).unwrap();
+        assert!(json.contains("\"loopback\""));
+        let parsed: Endpoint = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, ep);
+    }
+
+    #[test]
+    fn serde_endpoint_enum_user() {
+        let ep = Endpoint::User(UserEndpoint {
+            name: "bob".into(),
+            domain: Some("example.com".into()),
+            variables: None,
+        });
+        let json = serde_json::to_string(&ep).unwrap();
+        assert!(json.contains("\"user\""));
+        let parsed: Endpoint = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, ep);
+    }
+
+    #[test]
+    fn serde_endpoint_enum_sofia_contact() {
+        let ep = Endpoint::SofiaContact(SofiaContact {
+            user: "1000".into(),
+            domain: "domain.com".into(),
+            profile: None,
+            variables: None,
+        });
+        let json = serde_json::to_string(&ep).unwrap();
+        assert!(json.contains("\"sofia_contact\""));
+        let parsed: Endpoint = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, ep);
+    }
+
+    #[test]
+    fn serde_endpoint_enum_group_call() {
+        let ep = Endpoint::GroupCall(GroupCall {
+            group: "support".into(),
+            domain: "domain.com".into(),
+            order: Some("A".into()),
+            variables: None,
+        });
+        let json = serde_json::to_string(&ep).unwrap();
+        assert!(json.contains("\"group_call\""));
+        let parsed: Endpoint = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, ep);
+    }
+
+    #[test]
+    fn serde_endpoint_enum_error() {
+        let ep = Endpoint::Error(ErrorEndpoint {
+            cause: "user_busy".into(),
+        });
+        let json = serde_json::to_string(&ep).unwrap();
+        assert!(json.contains("\"error\""));
+        let parsed: Endpoint = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, ep);
+    }
+
+    #[test]
+    fn serde_endpoint_skips_none_variables() {
+        let ep = SofiaEndpoint {
+            profile: "internal".into(),
+            destination: "1000".into(),
+            variables: None,
+        };
+        let json = serde_json::to_string(&ep).unwrap();
+        assert!(!json.contains("variables"));
+    }
+
+    #[test]
+    fn serde_endpoint_skips_none_profile() {
+        let ep = SofiaGateway {
+            gateway: "gw".into(),
+            destination: "1234".into(),
+            profile: None,
+            variables: None,
+        };
+        let json = serde_json::to_string(&ep).unwrap();
+        assert!(!json.contains("profile"));
+    }
 }

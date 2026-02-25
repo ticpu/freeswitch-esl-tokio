@@ -623,10 +623,10 @@ mod tests {
     #[test]
     fn endpoint_uri_only() {
         let ep = Endpoint::Generic {
-            uri: "sofia/internal/123@cauca.ca".into(),
+            uri: "sofia/internal/123@example.com".into(),
             variables: None,
         };
-        assert_eq!(ep.to_string(), "sofia/internal/123@cauca.ca");
+        assert_eq!(ep.to_string(), "sofia/internal/123@example.com");
     }
 
     #[test]
@@ -634,12 +634,12 @@ mod tests {
         let mut vars = Variables::new(VariablesType::Default);
         vars.insert("one_variable", "1");
         let ep = Endpoint::Generic {
-            uri: "sofia/internal/123@cauca.ca".into(),
+            uri: "sofia/internal/123@example.com".into(),
             variables: Some(vars),
         };
         assert_eq!(
             ep.to_string(),
-            "{one_variable=1}sofia/internal/123@cauca.ca"
+            "{one_variable=1}sofia/internal/123@example.com"
         );
     }
 
@@ -648,12 +648,12 @@ mod tests {
         let mut vars = Variables::new(VariablesType::Default);
         vars.insert("one_variable", "one'quote");
         let ep = Endpoint::Generic {
-            uri: "sofia/internal/123@cauca.ca".into(),
+            uri: "sofia/internal/123@example.com".into(),
             variables: Some(vars),
         };
         assert_eq!(
             ep.to_string(),
-            "{one_variable=one\\'quote}sofia/internal/123@cauca.ca"
+            "{one_variable=one\\'quote}sofia/internal/123@example.com"
         );
     }
 
@@ -774,7 +774,7 @@ mod tests {
     #[test]
     fn originate_xml_display() {
         let ep = Endpoint::Generic {
-            uri: "sofia/internal/123@cauca.ca".into(),
+            uri: "sofia/internal/123@example.com".into(),
             variables: None,
         };
         let apps = ApplicationList(vec![Application::new("conference", Some("1"))]);
@@ -789,14 +789,14 @@ mod tests {
         };
         assert_eq!(
             orig.to_string(),
-            "originate sofia/internal/123@cauca.ca &conference(1) XML"
+            "originate sofia/internal/123@example.com &conference(1) XML"
         );
     }
 
     #[test]
     fn originate_inline_display() {
         let ep = Endpoint::Generic {
-            uri: "sofia/internal/123@cauca.ca".into(),
+            uri: "sofia/internal/123@example.com".into(),
             variables: None,
         };
         let apps = ApplicationList(vec![Application::new("conference", Some("1"))]);
@@ -811,7 +811,7 @@ mod tests {
         };
         assert_eq!(
             orig.to_string(),
-            "originate sofia/internal/123@cauca.ca conference:1 inline"
+            "originate sofia/internal/123@example.com conference:1 inline"
         );
     }
 
@@ -873,7 +873,7 @@ mod tests {
     #[test]
     fn originate_display_round_trip() {
         let ep = Endpoint::Generic {
-            uri: "sofia/internal/123@cauca.ca".into(),
+            uri: "sofia/internal/123@example.com".into(),
             variables: None,
         };
         let apps = ApplicationList(vec![Application::new("conference", Some("1"))]);
@@ -915,5 +915,166 @@ mod tests {
                 .unwrap(),
             DialplanType::Xml
         );
+    }
+
+    // --- Serde ---
+
+    #[test]
+    fn serde_dialplan_type_xml() {
+        let json = serde_json::to_string(&DialplanType::Xml).unwrap();
+        assert_eq!(json, "\"xml\"");
+        let parsed: DialplanType = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, DialplanType::Xml);
+    }
+
+    #[test]
+    fn serde_dialplan_type_inline() {
+        let json = serde_json::to_string(&DialplanType::Inline).unwrap();
+        assert_eq!(json, "\"inline\"");
+        let parsed: DialplanType = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, DialplanType::Inline);
+    }
+
+    #[test]
+    fn serde_variables_type() {
+        let json = serde_json::to_string(&VariablesType::Enterprise).unwrap();
+        assert_eq!(json, "\"enterprise\"");
+        let parsed: VariablesType = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, VariablesType::Enterprise);
+    }
+
+    #[test]
+    fn serde_variables_flat_default() {
+        let mut vars = Variables::new(VariablesType::Default);
+        vars.insert("key1", "val1");
+        vars.insert("key2", "val2");
+        let json = serde_json::to_string(&vars).unwrap();
+        // Default scope serializes as a flat map
+        let parsed: Variables = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.vars_type, VariablesType::Default);
+        assert_eq!(parsed.get("key1"), Some("val1"));
+        assert_eq!(parsed.get("key2"), Some("val2"));
+    }
+
+    #[test]
+    fn serde_variables_scoped_enterprise() {
+        let mut vars = Variables::new(VariablesType::Enterprise);
+        vars.insert("key1", "val1");
+        let json = serde_json::to_string(&vars).unwrap();
+        // Non-default scope serializes as {scope, vars}
+        assert!(json.contains("\"enterprise\""));
+        let parsed: Variables = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.vars_type, VariablesType::Enterprise);
+        assert_eq!(parsed.get("key1"), Some("val1"));
+    }
+
+    #[test]
+    fn serde_variables_flat_map_deserializes_as_default() {
+        let json = r#"{"key1":"val1","key2":"val2"}"#;
+        let vars: Variables = serde_json::from_str(json).unwrap();
+        assert_eq!(vars.vars_type, VariablesType::Default);
+        assert_eq!(vars.get("key1"), Some("val1"));
+        assert_eq!(vars.get("key2"), Some("val2"));
+    }
+
+    #[test]
+    fn serde_variables_scoped_deserializes() {
+        let json = r#"{"scope":"channel","vars":{"k":"v"}}"#;
+        let vars: Variables = serde_json::from_str(json).unwrap();
+        assert_eq!(vars.vars_type, VariablesType::Channel);
+        assert_eq!(vars.get("k"), Some("v"));
+    }
+
+    #[test]
+    fn serde_application() {
+        let app = Application::new("park", None::<&str>);
+        let json = serde_json::to_string(&app).unwrap();
+        let parsed: Application = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, app);
+    }
+
+    #[test]
+    fn serde_application_with_args() {
+        let app = Application::new("conference", Some("1"));
+        let json = serde_json::to_string(&app).unwrap();
+        let parsed: Application = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, app);
+    }
+
+    #[test]
+    fn serde_application_skips_none_args() {
+        let app = Application::new("park", None::<&str>);
+        let json = serde_json::to_string(&app).unwrap();
+        assert!(!json.contains("args"));
+    }
+
+    #[test]
+    fn serde_application_list() {
+        let list = ApplicationList(vec![
+            Application::new("park", None::<&str>),
+            Application::new("conference", Some("1")),
+        ]);
+        let json = serde_json::to_string(&list).unwrap();
+        let parsed: ApplicationList = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, list);
+    }
+
+    #[test]
+    fn serde_originate_round_trip() {
+        let ep = Endpoint::Generic {
+            uri: "sofia/internal/123@example.com".into(),
+            variables: None,
+        };
+        let orig = Originate {
+            endpoint: ep,
+            applications: ApplicationList(vec![Application::new("park", None::<&str>)]),
+            dialplan: Some(DialplanType::Xml),
+            context: Some("default".into()),
+            cid_name: Some("Test".into()),
+            cid_num: Some("5551234".into()),
+            timeout: Some(30),
+        };
+        let json = serde_json::to_string(&orig).unwrap();
+        let parsed: Originate = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, orig);
+    }
+
+    #[test]
+    fn serde_originate_skips_none_fields() {
+        let ep = Endpoint::Generic {
+            uri: "sofia/internal/123@example.com".into(),
+            variables: None,
+        };
+        let orig = Originate {
+            endpoint: ep,
+            applications: ApplicationList(vec![Application::new("park", None::<&str>)]),
+            dialplan: None,
+            context: None,
+            cid_name: None,
+            cid_num: None,
+            timeout: None,
+        };
+        let json = serde_json::to_string(&orig).unwrap();
+        assert!(!json.contains("dialplan"));
+        assert!(!json.contains("context"));
+        assert!(!json.contains("cid_name"));
+        assert!(!json.contains("cid_num"));
+        assert!(!json.contains("timeout"));
+    }
+
+    #[test]
+    fn serde_originate_to_wire_format() {
+        let json = r#"{
+            "endpoint": {"generic": {"uri": "sofia/internal/123@example.com"}},
+            "applications": [{"name": "park"}],
+            "dialplan": "xml",
+            "context": "default"
+        }"#;
+        let orig: Originate = serde_json::from_str(json).unwrap();
+        let wire = orig.to_string();
+        assert!(wire.starts_with("originate"));
+        assert!(wire.contains("sofia/internal/123@example.com"));
+        assert!(wire.contains("&park()"));
+        assert!(wire.contains("XML"));
     }
 }
