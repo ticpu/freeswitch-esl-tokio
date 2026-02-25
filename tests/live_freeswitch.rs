@@ -646,3 +646,66 @@ async fn live_originate_timeout_fills_positional_gaps() {
     let uuid = bgapi_originate_ok(&client, &mut events, &cmd).await;
     kill_channel(&client, &uuid).await;
 }
+
+#[tokio::test]
+#[ignore]
+async fn live_log_events_have_log_type() {
+    let (client, mut events) = connect().await;
+
+    // Enable log forwarding at DEBUG level to generate log traffic
+    let resp = client
+        .log("DEBUG")
+        .await
+        .unwrap();
+    assert!(
+        resp.is_success(),
+        "log command failed: {:?}",
+        resp.reply_text()
+    );
+
+    // Trigger log output by running an API command
+    client
+        .api("status")
+        .await
+        .unwrap();
+
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline {
+        match tokio::time::timeout_at(deadline, events.recv()).await {
+            Ok(Some(Ok(evt))) => {
+                if evt.event_type() == Some(EslEventType::Log) {
+                    // Verify log-specific headers are present
+                    assert!(
+                        evt.header(EventHeader::LogLevel)
+                            .is_some(),
+                        "log event should have Log-Level header"
+                    );
+                    assert!(
+                        evt.header_str("Log-File")
+                            .is_some(),
+                        "log event should have Log-File header"
+                    );
+                    assert!(
+                        evt.body()
+                            .is_some(),
+                        "log event should have a body with the log text"
+                    );
+
+                    // Disable log forwarding before returning
+                    let _ = client
+                        .nolog()
+                        .await;
+                    return;
+                }
+            }
+            Ok(Some(Err(e))) => panic!("event error: {}", e),
+            Ok(None) => panic!("event stream closed"),
+            Err(_) => break,
+        }
+    }
+
+    let _ = client
+        .nolog()
+        .await;
+    panic!("did not receive any log event with EslEventType::Log");
+}

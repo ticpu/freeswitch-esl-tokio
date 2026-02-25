@@ -5,8 +5,9 @@ use crate::{
     command::EslResponse,
     constants::{
         CONTENT_TYPE_API_RESPONSE, CONTENT_TYPE_AUTH_REQUEST, CONTENT_TYPE_COMMAND_REPLY,
-        CONTENT_TYPE_TEXT_EVENT_JSON, CONTENT_TYPE_TEXT_EVENT_PLAIN, CONTENT_TYPE_TEXT_EVENT_XML,
-        HEADER_CONTENT_LENGTH, HEADER_CONTENT_TYPE, HEADER_TERMINATOR, MAX_MESSAGE_SIZE,
+        CONTENT_TYPE_LOG_DATA, CONTENT_TYPE_TEXT_EVENT_JSON, CONTENT_TYPE_TEXT_EVENT_PLAIN,
+        CONTENT_TYPE_TEXT_EVENT_XML, HEADER_CONTENT_LENGTH, HEADER_CONTENT_TYPE, HEADER_TERMINATOR,
+        MAX_MESSAGE_SIZE,
     },
     error::{EslError, EslResult},
     event::{EslEvent, EslEventType, EventFormat},
@@ -42,7 +43,7 @@ impl MessageType {
             CONTENT_TYPE_TEXT_EVENT_PLAIN
             | CONTENT_TYPE_TEXT_EVENT_JSON
             | CONTENT_TYPE_TEXT_EVENT_XML
-            | "log/data" => MessageType::Event,
+            | CONTENT_TYPE_LOG_DATA => MessageType::Event,
             "text/disconnect-notice" => MessageType::Disconnect,
             _ => MessageType::Unknown(content_type.to_string()),
         }
@@ -253,13 +254,44 @@ impl EslParser {
         Ok(headers)
     }
 
-    /// Parse event from message, handling different formats
+    /// Parse event from message, handling different formats.
+    ///
+    /// log/data messages use single-level framing (metadata in outer envelope,
+    /// raw log text as body) unlike normal events which use two-level framing.
     pub fn parse_event(&self, message: EslMessage, format: EventFormat) -> EslResult<EslEvent> {
-        match format {
+        if message
+            .headers
+            .get(HEADER_CONTENT_TYPE)
+            .map(|s| s.as_str())
+            == Some(CONTENT_TYPE_LOG_DATA)
+        {
+            return Self::parse_log_event(message);
+        }
+
+        let event = match format {
             EventFormat::Plain => self.parse_plain_event(message),
             EventFormat::Json => self.parse_json_event(message),
             EventFormat::Xml => self.parse_xml_event(message),
+        }?;
+
+        Ok(event)
+    }
+
+    /// Parse log/data message.
+    ///
+    /// FreeSWITCH log/data wire format uses single-level framing, unlike
+    /// normal events. Log metadata (Log-Level, Log-File, etc.) lives in the
+    /// outer envelope headers and the body is raw log text.
+    fn parse_log_event(message: EslMessage) -> EslResult<EslEvent> {
+        let mut event = EslEvent::new();
+        for (key, value) in &message.headers {
+            event.set_header(key.clone(), value.clone());
         }
+        if let Some(body) = message.body {
+            event.set_body(body);
+        }
+        event.set_event_type(Some(EslEventType::Log));
+        Ok(event)
     }
 
     /// Parse plain text event
@@ -601,22 +633,20 @@ mod tests {
         assert_eq!(event.body(), Some("+OK Status\n"));
     }
 
+    /// log/data uses single-level framing: metadata in outer envelope,
+    /// raw log text as body. This matches mod_event_socket.c's output.
     #[test]
     fn test_parse_log_data_event() {
         let mut parser = EslParser::new();
         let log_text = "2024-01-01 00:00:00.000000 [INFO] mod_sofia.c:1234 Registration ok\n";
-        let body_headers = format!(
-            "Content-Type: log/data\nLog-Level: 6\nText-Channel: 0\nLog-File: mod_sofia.c\nLog-Func: sofia_reg_handle\nLog-Line: 1234\nUser-Data: \n\n{}",
-            log_text
-        );
         let envelope = format!(
-            "Content-Length: {}\nContent-Type: log/data\n\n",
-            body_headers.len()
+            "Content-Type: log/data\nContent-Length: {}\nLog-Level: 6\nText-Channel: 0\nLog-File: mod_sofia.c\nLog-Func: sofia_reg_handle\nLog-Line: 1234\nUser-Data: \n\n{}",
+            log_text.len(),
+            log_text,
         );
-        let data = format!("{}{}", envelope, body_headers);
 
         parser
-            .add_data(data.as_bytes())
+            .add_data(envelope.as_bytes())
             .unwrap();
         let message = parser
             .parse_message()
@@ -633,6 +663,8 @@ mod tests {
         assert_eq!(event.header(EventHeader::LogLevel), Some("6"));
         assert_eq!(event.header_str("Content-Type"), Some("log/data"));
         assert_eq!(event.header_str("Log-File"), Some("mod_sofia.c"));
+        assert_eq!(event.header_str("Log-Func"), Some("sofia_reg_handle"));
+        assert_eq!(event.header_str("Log-Line"), Some("1234"));
         assert_eq!(event.body(), Some(log_text));
     }
 
