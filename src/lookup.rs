@@ -10,7 +10,7 @@ use crate::channel::{
 };
 use crate::event::EslEventPriority;
 use crate::headers::EventHeader;
-use crate::variables::ChannelVariable;
+use crate::variables::VariableName;
 
 /// Trait for looking up ESL headers and channel variables from any key-value store.
 ///
@@ -61,8 +61,8 @@ pub trait HeaderLookup {
         self.header_str(name.as_str())
     }
 
-    /// Look up a channel variable by its [`ChannelVariable`] enum variant.
-    fn variable(&self, name: ChannelVariable) -> Option<&str> {
+    /// Look up a channel variable by its typed enum variant.
+    fn variable(&self, name: impl VariableName) -> Option<&str> {
         self.variable_str(name.as_str())
     }
 
@@ -168,6 +168,7 @@ pub trait HeaderLookup {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::variables::ChannelVariable;
     use std::collections::HashMap;
 
     struct TestStore(HashMap<String, String>);

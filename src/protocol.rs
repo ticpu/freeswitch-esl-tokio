@@ -343,7 +343,7 @@ impl EslParser {
             }
 
             if let Some(event_name) = event
-                .header("Event-Name")
+                .header(EventHeader::EventName)
                 .map(|s| s.to_string())
             {
                 event.set_event_type(EslEventType::parse_event_type(&event_name));
@@ -550,8 +550,8 @@ mod tests {
             .unwrap();
 
         assert_eq!(event.event_type(), Some(EslEventType::Heartbeat));
-        assert_eq!(event.header("Up-Time"), Some("0 years, 0 days"));
-        assert_eq!(event.header("Event-Info"), Some("System Ready"));
+        assert_eq!(event.header_str("Up-Time"), Some("0 years, 0 days"));
+        assert_eq!(event.header_str("Event-Info"), Some("System Ready"));
     }
 
     #[test]
@@ -582,7 +582,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(event.event_type(), Some(EslEventType::BackgroundJob));
-        assert_eq!(event.header("Job-UUID"), Some("abc-123"));
+        assert_eq!(event.header(EventHeader::JobUuid), Some("abc-123"));
         assert_eq!(event.body(), Some("+OK Status\n"));
     }
 
@@ -631,11 +631,14 @@ mod tests {
             .unwrap();
 
         assert_eq!(event.event_type(), Some(EslEventType::NotifyIn));
-        assert_eq!(event.header("event"), Some("emergency-AbandonedCall"));
+        assert_eq!(event.header_str("event"), Some("emergency-AbandonedCall"));
         // pl_data must be percent-decoded back to raw JSON
-        assert_eq!(event.header("pl_data"), Some(json_payload));
-        assert_eq!(event.header("sip_content_type"), Some("application/json"));
-        assert_eq!(event.header("gateway_name"), Some("ng911-bcf"));
+        assert_eq!(event.header_str("pl_data"), Some(json_payload));
+        assert_eq!(
+            event.header_str("sip_content_type"),
+            Some("application/json")
+        );
+        assert_eq!(event.header_str("gateway_name"), Some("ng911-bcf"));
     }
 
     #[test]
@@ -667,8 +670,8 @@ mod tests {
             .unwrap();
 
         assert_eq!(event.event_type(), Some(EslEventType::Heartbeat));
-        assert_eq!(event.header("Core-UUID"), Some("abc-123"));
-        assert_eq!(event.header("Up-Time"), Some("0 years, 1 day"));
+        assert_eq!(event.header(EventHeader::CoreUuid), Some("abc-123"));
+        assert_eq!(event.header_str("Up-Time"), Some("0 years, 1 day"));
     }
 
     #[test]
@@ -700,7 +703,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(event.event_type(), Some(EslEventType::BackgroundJob));
-        assert_eq!(event.header("Job-UUID"), Some("def-456"));
+        assert_eq!(event.header(EventHeader::JobUuid), Some("def-456"));
         assert_eq!(event.body(), Some("+OK result data"));
     }
 

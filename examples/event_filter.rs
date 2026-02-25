@@ -15,7 +15,7 @@
 //!   # With userauth (user@domain format required)
 //!   cargo run --example event_filter -- -u admin@default -p secret -e ALL
 
-use freeswitch_esl_tokio::{EslClient, EslError, EslEventType, EventFormat};
+use freeswitch_esl_tokio::{EslClient, EslError, EslEventType, EventFormat, EventHeader};
 
 fn print_usage() {
     eprintln!(
@@ -224,7 +224,7 @@ fn format_event_summary(event: &freeswitch_esl_tokio::EslEvent) -> String {
         .caller_id_number()
         .unwrap_or("-");
     let dest = event
-        .header("Caller-Destination-Number")
+        .header(EventHeader::CallerDestinationNumber)
         .unwrap_or("-");
     let direction = event
         .call_direction()

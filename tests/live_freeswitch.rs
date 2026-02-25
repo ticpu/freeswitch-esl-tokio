@@ -6,7 +6,7 @@
 use freeswitch_esl_tokio::commands::{LoopbackEndpoint, UuidKill};
 use freeswitch_esl_tokio::{
     Application, DialplanType, Endpoint, EslClient, EslError, EslEvent, EslEventPriority,
-    EslEventType, EventFormat, Originate, OriginateTarget, ReplyStatus,
+    EslEventType, EventFormat, EventHeader, Originate, OriginateTarget, ReplyStatus,
 };
 use std::time::Duration;
 use tokio::time::Instant;
@@ -57,7 +57,7 @@ async fn live_subscribe_and_recv_heartbeat() {
 
     assert_eq!(event.event_type(), Some(EslEventType::Heartbeat));
     assert!(event
-        .header("Core-UUID")
+        .header(EventHeader::CoreUuid)
         .is_some());
 }
 
@@ -95,7 +95,7 @@ async fn live_sendevent_with_array_header() {
     event.push_header("X-Test-Array", "value3");
 
     assert_eq!(
-        event.header("X-Test-Array"),
+        event.header_str("X-Test-Array"),
         Some("ARRAY::value1|:value2|:value3")
     );
 
@@ -137,9 +137,9 @@ async fn live_recv_custom_sendevent() {
     while tokio::time::Instant::now() < deadline {
         match tokio::time::timeout_at(deadline, events.recv()).await {
             Ok(Some(Ok(evt))) => {
-                if evt.header("Event-Subclass") == Some(subclass.as_str()) {
-                    assert_eq!(evt.header("priority"), Some("NORMAL"));
-                    assert_eq!(evt.header("X-Test-Data"), Some("ARRAY::hello|:world"));
+                if evt.header(EventHeader::EventSubclass) == Some(subclass.as_str()) {
+                    assert_eq!(evt.header(EventHeader::Priority), Some("NORMAL"));
+                    assert_eq!(evt.header_str("X-Test-Data"), Some("ARRAY::hello|:world"),);
                     return;
                 }
             }
@@ -264,7 +264,11 @@ async fn live_noevents_stops_delivery() {
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
         match tokio::time::timeout_at(deadline, events.recv()).await {
-            Ok(Some(Ok(evt))) if evt.header("Event-Subclass") == Some(subclass.as_str()) => break,
+            Ok(Some(Ok(evt)))
+                if evt.header(EventHeader::EventSubclass) == Some(subclass.as_str()) =>
+            {
+                break
+            }
             Ok(Some(Ok(_))) => continue,
             other => panic!("expected custom event before noevents: {:?}", other),
         }
@@ -291,7 +295,7 @@ async fn live_noevents_stops_delivery() {
         Ok(Some(Ok(evt))) => panic!(
             "received event after noevents: {:?} phase={}",
             evt.event_type(),
-            evt.header("X-Phase")
+            evt.header_str("X-Phase")
                 .unwrap_or("?")
         ),
         Ok(Some(Err(e))) => panic!("event error: {}", e),
@@ -338,7 +342,7 @@ async fn live_nixevent_selective_unsubscribe() {
                     Some(EslEventType::Heartbeat),
                     "received HEARTBEAT after nixevent"
                 );
-                if evt.header("Event-Subclass") == Some(subclass.as_str()) {
+                if evt.header(EventHeader::EventSubclass) == Some(subclass.as_str()) {
                     return; // custom event delivered — nixevent was selective
                 }
             }

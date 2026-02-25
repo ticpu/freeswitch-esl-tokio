@@ -4,7 +4,7 @@ mod mock_server;
 
 use freeswitch_esl_tokio::{
     ConnectionStatus, DisconnectReason, EslClient, EslError, EslEvent, EslEventStream,
-    EslEventType, EventFormat,
+    EslEventType, EventFormat, EventHeader,
 };
 use mock_server::{setup_connected_pair, MockClient, MockEslServer};
 use std::collections::HashMap;
@@ -327,13 +327,13 @@ async fn test_heartbeat_event_headers() {
 
     assert_eq!(event.event_type(), Some(EslEventType::Heartbeat));
     // Values should be percent-decoded
-    assert_eq!(event.header("Event-Info"), Some("System Ready"));
+    assert_eq!(event.header_str("Event-Info"), Some("System Ready"));
     assert_eq!(
-        event.header("Up-Time"),
+        event.header_str("Up-Time"),
         Some("0 years, 0 days, 1 hour, 23 minutes")
     );
-    assert_eq!(event.header("Session-Count"), Some("5"));
-    assert_eq!(event.header("Heartbeat-Interval"), Some("20"));
+    assert_eq!(event.header_str("Session-Count"), Some("5"));
+    assert_eq!(event.header_str("Heartbeat-Interval"), Some("20"));
 }
 
 #[tokio::test]
@@ -352,9 +352,12 @@ async fn test_url_decoded_headers() {
     let event = recv_event(&mut events).await;
 
     // Percent-encoded values should be decoded
-    assert_eq!(event.header("Caller-Caller-ID-Name"), Some("John Doe"));
     assert_eq!(
-        event.header("variable_sip_from_display"),
+        event.header(EventHeader::CallerCallerIdName),
+        Some("John Doe")
+    );
+    assert_eq!(
+        event.header_str("variable_sip_from_display"),
         Some("Test User (123)")
     );
 }

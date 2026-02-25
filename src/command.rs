@@ -476,7 +476,7 @@ impl EslCommand {
                     .map(|t| t.to_string())
                     .or_else(|| {
                         event
-                            .header("Event-Name")
+                            .header(EventHeader::EventName)
                             .map(|s| s.to_string())
                     })
                     .unwrap_or_else(|| "CUSTOM".to_string());

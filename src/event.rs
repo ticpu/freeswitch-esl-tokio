@@ -331,20 +331,25 @@ impl EslEvent {
         self.event_type = event_type;
     }
 
-    /// Look up a header by name (case-sensitive).
-    pub fn header(&self, name: impl AsRef<str>) -> Option<&str> {
+    /// Look up a header by its [`EventHeader`] enum variant (case-sensitive).
+    ///
+    /// For headers not covered by `EventHeader`, use [`header_str()`](Self::header_str).
+    pub fn header(&self, name: EventHeader) -> Option<&str> {
         self.headers
-            .get(name.as_ref())
+            .get(name.as_str())
             .map(|s| s.as_str())
     }
 
-    /// Look up a header by its raw wire name.
+    /// Look up a header by its raw wire name (case-sensitive).
     ///
-    /// Equivalent to [`header()`](Self::header) but matches the
-    /// [`HeaderLookup`] trait signature, so code written against
-    /// `HeaderLookup` reads the same on `EslEvent`.
+    /// Use [`header()`](Self::header) with an [`EventHeader`] variant for known
+    /// headers. This method is for headers not (yet) covered by the enum,
+    /// such as custom `X-` headers or FreeSWITCH headers added after this
+    /// library was published.
     pub fn header_str(&self, name: &str) -> Option<&str> {
-        self.header(name)
+        self.headers
+            .get(name)
+            .map(|s| s.as_str())
     }
 
     /// Look up a channel variable by its bare name.
@@ -352,7 +357,8 @@ impl EslEvent {
     /// Equivalent to [`variable()`](Self::variable) but matches the
     /// [`HeaderLookup`] trait signature.
     pub fn variable_str(&self, name: &str) -> Option<&str> {
-        self.variable(name)
+        let key = format!("variable_{}", name);
+        self.header_str(&key)
     }
 
     /// All headers as a map.
@@ -409,7 +415,7 @@ impl EslEvent {
     /// let mut event = EslEvent::new();
     /// event.push_header("X-Test", "first");
     /// event.push_header("X-Test", "second");
-    /// assert_eq!(event.header("X-Test"), Some("ARRAY::first|:second"));
+    /// assert_eq!(event.header_str("X-Test"), Some("ARRAY::first|:second"));
     /// ```
     pub fn push_header(&mut self, name: &str, value: &str) {
         self.stack_header(name, value, EslArray::push);
@@ -424,7 +430,7 @@ impl EslEvent {
     /// let mut event = EslEvent::new();
     /// event.set_header("X-Test", "ARRAY::b|:c");
     /// event.unshift_header("X-Test", "a");
-    /// assert_eq!(event.header("X-Test"), Some("ARRAY::a|:b|:c"));
+    /// assert_eq!(event.header_str("X-Test"), Some("ARRAY::a|:b|:c"));
     /// ```
     pub fn unshift_header(&mut self, name: &str, value: &str) {
         self.stack_header(name, value, EslArray::unshift);
@@ -526,7 +532,7 @@ impl EslEvent {
         &self,
         prefix: &str,
     ) -> Result<Option<crate::channel::ChannelTimetable>, crate::channel::ParseTimetableError> {
-        crate::channel::ChannelTimetable::from_lookup(prefix, |key| self.header(key))
+        crate::channel::ChannelTimetable::from_lookup(prefix, |key| self.header_str(key))
     }
 
     /// Caller-leg channel timetable (`Caller-*-Time` headers).
@@ -548,13 +554,14 @@ impl EslEvent {
         self.header(EventHeader::EventSubclass)
     }
 
-    /// Look up a channel variable by name.
+    /// Look up a channel variable by its typed enum variant.
     ///
     /// Checks the `variable_{name}` header, which is how FreeSWITCH exposes
-    /// channel variables in events.
-    pub fn variable(&self, name: impl AsRef<str>) -> Option<&str> {
-        let key = format!("variable_{}", name.as_ref());
-        self.header(&key)
+    /// channel variables in events. For variables not covered by a typed enum,
+    /// use [`variable_str()`](Self::variable_str).
+    pub fn variable(&self, name: impl crate::variables::VariableName) -> Option<&str> {
+        let key = format!("variable_{}", name.as_str());
+        self.header_str(&key)
     }
 
     /// Check whether this event matches the given type.
@@ -720,9 +727,9 @@ mod tests {
         let removed = event.del_header("Foo");
         assert_eq!(removed, Some("bar".to_string()));
         assert!(event
-            .header("Foo")
+            .header_str("Foo")
             .is_none());
-        assert_eq!(event.header("Baz"), Some("qux"));
+        assert_eq!(event.header_str("Baz"), Some("qux"));
 
         let removed_again = event.del_header("Foo");
         assert_eq!(removed_again, None);
@@ -855,7 +862,7 @@ mod tests {
         let mut event = EslEvent::new();
         event.set_priority(EslEventPriority::Normal);
         assert_eq!(event.priority(), Some(EslEventPriority::Normal));
-        assert_eq!(event.header("priority"), Some("NORMAL"));
+        assert_eq!(event.header(EventHeader::Priority), Some("NORMAL"));
     }
 
     #[test]
@@ -863,7 +870,7 @@ mod tests {
         let mut event = EslEvent::new();
         event.set_priority(EslEventPriority::High);
         assert_eq!(event.priority(), Some(EslEventPriority::High));
-        assert_eq!(event.header("priority"), Some("HIGH"));
+        assert_eq!(event.header(EventHeader::Priority), Some("HIGH"));
     }
 
     #[test]
@@ -906,7 +913,7 @@ mod tests {
     fn test_push_header_new() {
         let mut event = EslEvent::new();
         event.push_header("X-Test", "first");
-        assert_eq!(event.header("X-Test"), Some("first"));
+        assert_eq!(event.header_str("X-Test"), Some("first"));
     }
 
     #[test]
@@ -914,7 +921,7 @@ mod tests {
         let mut event = EslEvent::new();
         event.set_header("X-Test", "first");
         event.push_header("X-Test", "second");
-        assert_eq!(event.header("X-Test"), Some("ARRAY::first|:second"));
+        assert_eq!(event.header_str("X-Test"), Some("ARRAY::first|:second"));
     }
 
     #[test]
@@ -922,14 +929,14 @@ mod tests {
         let mut event = EslEvent::new();
         event.set_header("X-Test", "ARRAY::a|:b");
         event.push_header("X-Test", "c");
-        assert_eq!(event.header("X-Test"), Some("ARRAY::a|:b|:c"));
+        assert_eq!(event.header_str("X-Test"), Some("ARRAY::a|:b|:c"));
     }
 
     #[test]
     fn test_unshift_header_new() {
         let mut event = EslEvent::new();
         event.unshift_header("X-Test", "only");
-        assert_eq!(event.header("X-Test"), Some("only"));
+        assert_eq!(event.header_str("X-Test"), Some("only"));
     }
 
     #[test]
@@ -937,7 +944,7 @@ mod tests {
         let mut event = EslEvent::new();
         event.set_header("X-Test", "ARRAY::b|:c");
         event.unshift_header("X-Test", "a");
-        assert_eq!(event.header("X-Test"), Some("ARRAY::a|:b|:c"));
+        assert_eq!(event.header_str("X-Test"), Some("ARRAY::a|:b|:c"));
     }
 
     #[test]
@@ -969,8 +976,8 @@ mod tests {
         assert_eq!(event.caller_id_name(), Some("Alice"));
         assert_eq!(event.hangup_cause(), Some("NORMAL_CLEARING"));
         assert_eq!(event.event_subclass(), Some("sofia::register"));
-        assert_eq!(event.variable("sip_from_display"), Some("Bob"));
-        assert_eq!(event.variable("nonexistent"), None);
+        assert_eq!(event.variable_str("sip_from_display"), Some("Bob"));
+        assert_eq!(event.variable_str("nonexistent"), None);
     }
 
     #[test]

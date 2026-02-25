@@ -109,7 +109,8 @@ primary API.
   `EslClient` calls `.to_string()`. Enables round-trip unit testing without ESL.
 - **`app/`** = sendmsg-based dptools (answer, hangup, bridge, etc.)
 - **`commands/`** = API command strings for `api()`/`bgapi()` (originate, uuid_*, conference)
-- **`variables/`** = channel variable format parsers (ARRAY::, SIP multipart)
+- **`variables/`** = typed variable name enums (`ChannelVariable`, `SofiaVariable`,
+  `VariableName` trait) and format parsers (ARRAY::, SIP multipart)
 - **Foundation for extension**: Application-specific crates (NGCS, X-Call-Info, SIP
   URI) can depend on these base types without reimplementing escaping or parsing.
 
@@ -163,11 +164,12 @@ src/
 │   │   └── error.rs       # ErrorEndpoint
 │   ├── channel.rs         # UuidAnswer, UuidBridge, UuidKill, UuidSetVar, ...
 │   └── conference.rs      # ConferenceMute, ConferenceHold, ConferenceDtmf
-└── variables/             # Channel variable format parsers
-    ├── mod.rs
+└── variables/             # Channel variable format parsers and typed name enums
+    ├── mod.rs             # VariableName trait, re-exports
+    ├── core.rs            # ChannelVariable enum (core FreeSWITCH variables)
+    ├── sofia.rs           # SofiaVariable enum (mod_sofia / SIP variables)
     ├── esl_array.rs       # ARRAY::item1|:item2 format
-    ├── sip_multipart.rs   # SIP multipart body extraction
-    └── channel_variable.rs # ChannelVariable enum
+    └── sip_multipart.rs   # SIP multipart body extraction
 
 tests/
 ├── integration_tests.rs   # Mock-server protocol tests
@@ -240,19 +242,17 @@ removed patterns are worse than no examples at all. Build all examples
 
 ### Typed API, not C ESL patterns
 
-- **`HeaderLookup` trait** is the primary typed header API. On `EslEvent` the
-  inherent `header(impl AsRef<str>)` accepts `EventHeader` variants directly
-  (via `AsRef<str>`), so you don't need to import `HeaderLookup` for `EslEvent`.
-  Import `HeaderLookup` when writing generic code or implementing it on custom
-  types (like `TrackedChannel` in `channel_tracker.rs`).
-- Use `EventHeader` enum variants for header lookups:
-  `event.header(EventHeader::ChannelName)` — never raw
-  `event.header("Channel-Name")` for headers that have variants.
+- **`HeaderLookup` trait** is the primary typed header API. Import `HeaderLookup`
+  when writing generic code or implementing it on custom types (like
+  `TrackedChannel` in `channel_tracker.rs`).
+- **`header(EventHeader)`** only accepts typed enum variants — the compiler
+  enforces this. For custom headers without a variant, use `header_str("X-Custom")`.
+- **`variable(impl VariableName)`** accepts `ChannelVariable`, `SofiaVariable`,
+  or any type implementing `VariableName`. For custom variables without an enum
+  variant, use `variable_str("custom_var")`.
 - Use typed accessors (`event.caller_id_number()`, `event.hangup_cause()`,
   `event.call_direction()`, `event.channel_state()`) — never raw
-  `event.header("Caller-Caller-ID-Number")` for headers that have accessors.
-- For headers without an `EventHeader` variant, use `event.header_str("X")`
-  (from `HeaderLookup`) or `event.header("X")` (inherent on `EslEvent`).
+  `event.header_str("Caller-Caller-ID-Number")` for headers that have accessors.
 - Use `EslEventType`'s `Display` impl — never hardcode event name strings
   like `"CREATE"` or `"HANGUP"` when you have the enum value.
 - Don't store fields that are already in the data you're accumulating. If
