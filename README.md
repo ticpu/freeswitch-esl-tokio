@@ -1,67 +1,55 @@
 # freeswitch-esl-tokio
 
 [![CI](https://github.com/ticpu/freeswitch-esl-tokio/actions/workflows/ci.yml/badge.svg)](https://github.com/ticpu/freeswitch-esl-tokio/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/test-count.json)](https://github.com/ticpu/freeswitch-esl-tokio/actions/workflows/ci.yml)
-[![Event Types](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/event-type-count.json)](https://github.com/ticpu/freeswitch-esl-tokio/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/freeswitch-esl-tokio)](https://crates.io/crates/freeswitch-esl-tokio)
 [![docs.rs](https://img.shields.io/docsrs/freeswitch-esl-tokio)](https://docs.rs/freeswitch-esl-tokio)
 
-Production-grade async Rust client for FreeSWITCH's
-[Event Socket Library](https://developer.signalwire.com/freeswitch/FreeSWITCH-Explained/Client-and-Developer-Interfaces/Event-Socket-Library/).
-Built on Tokio with a split reader/writer architecture that lets you send
-commands and receive events concurrently — something no other Rust ESL crate
-offers.
+[![Tests](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/test-count.json)](https://github.com/ticpu/freeswitch-esl-tokio/actions/workflows/ci.yml)
+[![Event Types](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/event-type-count.json)](https://github.com/ticpu/freeswitch-esl-tokio/actions/workflows/ci.yml)
+[![EventHeader](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/event-header-count.json)](https://docs.rs/freeswitch-esl-tokio)
+[![ChannelVariable](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/channel-var-count.json)](https://docs.rs/freeswitch-esl-tokio)
+[![HeaderLookup](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/header-lookup-count.json)](https://docs.rs/freeswitch-esl-tokio)
 
-## Why this crate
+Async Rust client for FreeSWITCH
+[ESL](https://developer.signalwire.com/freeswitch/FreeSWITCH-Explained/Client-and-Developer-Interfaces/Event-Socket-Library/).
+Typed endpoints, typed events, serde support, split reader/writer, liveness
+detection.
 
-- **Concurrent by design** — `EslClient` is `Clone + Send`. Pass it to any
-  Tokio task. Events arrive on a separate `EslEventStream` channel. No mutex
-  juggling, no blocking the event loop to send a command.
-- **Complete ESL coverage** — all protocol commands, event types verified
-  against the C ESL `EVENT_NAMES[]` array, inbound and outbound modes,
-  plain/JSON/XML event formats.
-- **Typed command builders** — `Originate`, `UuidKill`, `ConferenceDtmf`,
-  dptools (`answer`, `bridge`, `playback`, ...) — all implement `Display` with
-  no transport coupling. Build commands, unit test them, use them with
-  `client.api()` when ready.
-- **Typed channel state** — `ChannelState`, `CallState`, `AnswerState`,
-  `CallDirection` enums with `FromStr`/`Display`. `ChannelTimetable` extracts
-  call lifecycle timestamps. All decoupled from `EslEvent` — works with any
-  key-value store via closure-based lookup.
-- **Typed header/variable enums** — `EventHeader` and `ChannelVariable` enums
-  for compile-time header and variable name checking. The `HeaderLookup` trait
-  provides typed accessors to any key-value store that implements two methods —
-  not just `EslEvent`.
-- **Connection health** — liveness detection via HEARTBEAT subscription,
-  configurable command timeouts (default 5s), structured `DisconnectReason`,
-  `is_connection_error()` / `is_recoverable()` error classification.
-- **Correct wire format** — two-part event framing, percent-decoded headers,
-  Content-Type-based format detection. Matches `mod_event_socket.c` exactly.
-- **Extensively tested** — round-trip `parse` ↔ `to_string` on all builders,
-  mock-server integration tests, and live FreeSWITCH tests.
+```rust
+use freeswitch_esl_tokio::*;
+use freeswitch_esl_tokio::commands::*;
 
-## Architecture
+#[tokio::main]
+async fn main() -> Result<(), EslError> {
+    let (client, mut events) = EslClient::connect("localhost", 8021, "ClueCon").await?;
 
+    // Place a call through a SIP gateway
+    let cmd = Originate {
+        endpoint: Endpoint::SofiaGateway(SofiaGateway {
+            gateway: "my_provider".into(),
+            destination: "18005551234".into(),
+            profile: None, variables: None,
+        }),
+        applications: Application::simple("park").into(),
+        dialplan: None, context: None, cid_name: None, cid_num: None,
+        timeout: Some(30),
+    };
+    let response = client.bgapi(&cmd.to_string()).await?;
+    let job_uuid = response.job_uuid().expect("bgapi always returns Job-UUID");
+
+    // Wait for the result
+    client.subscribe_events(EventFormat::Plain, &[EslEventType::BackgroundJob]).await?;
+    while let Some(Ok(event)) = events.recv().await {
+        if event.is_event_type(EslEventType::BackgroundJob)
+            && event.job_uuid() == Some(&job_uuid)
+        {
+            println!("{}", event.body().unwrap());
+            break;
+        }
+    }
+    Ok(())
+}
 ```
-connect() → (EslClient, EslEventStream)
-
-EslClient (Clone + Send)         EslEventStream
-├ send commands from any task    ├ events via mpsc channel
-├ writer half behind Arc<Mutex>  └ connection status via watch
-└ replies via oneshot channel
-
-Background reader task
-├ owns the read half + parser
-├ routes CommandReply/ApiResponse → pending oneshot
-├ routes Event → mpsc channel
-├ tracks liveness (any TCP traffic resets timer)
-└ broadcasts ConnectionStatus on disconnect
-```
-
-See [docs/design-rationale.md](docs/design-rationale.md) for the full
-architecture story.
-
-## Quick start
 
 ```toml
 [dependencies]
@@ -69,29 +57,57 @@ freeswitch-esl-tokio = "1"
 tokio = { version = "1.0", features = ["full"] }
 ```
 
-### Connect and run a command
+## Features
 
-```rust
-use freeswitch_esl_tokio::{EslClient, EslError};
+- **Split reader/writer** -- `EslClient` is `Clone + Send`, events arrive on
+  a separate channel. Send commands from any task without blocking the event loop.
+- **Typed endpoints** -- `SofiaEndpoint`, `SofiaGateway`, `LoopbackEndpoint`,
+  `UserEndpoint`, `SofiaContact`, `GroupCall`, `ErrorEndpoint` with a
+  `DialString` trait. Extensible by downstream crates.
+- **Typed events** -- `ChannelState`, `CallDirection`, `EventHeader`,
+  `ChannelVariable` enums. `HeaderLookup` trait gives typed accessors to any
+  key-value store, not just `EslEvent`.
+- **Command builders** -- `Originate`, `BridgeDialString`, `UuidKill`,
+  `ConferenceDtmf`, dptools -- all `Display`/`FromStr`, no transport coupling.
+- **Serde** -- all builder types implement `Serialize`/`Deserialize`.
+  Config-driven originate and bridge from YAML/JSON.
+- **Connection health** -- liveness detection, command timeouts (default 5s),
+  `is_connection_error()` / `is_recoverable()` error classification.
+- **Correct wire format** -- two-part framing, percent-decoded headers,
+  Content-Type detection. Matches `mod_event_socket.c`.
 
-#[tokio::main]
-async fn main() -> Result<(), EslError> {
-    // connect() returns a client for sending commands and a stream for receiving events
-    let (client, mut events) = EslClient::connect("localhost", 8021, "ClueCon").await?;
+## Architecture
 
-    // api() sends a command and waits for the response
-    let response = client.api("status").await?;
-    // EslResponse has is_success(), reply_text(), body(), header(), etc.
-    // Some commands return data in body(), others only set reply_text().
-    // body_string() is a shorthand that returns "" when body() is None.
-    println!("{}", response.body_string());
+```
+connect() -> (EslClient, EslEventStream)
 
-    client.disconnect().await?;
-    Ok(())
-}
+EslClient (Clone + Send)         EslEventStream
+|- send commands from any task    |- events via mpsc channel
+|- writer half behind Arc<Mutex>  '- connection status via watch
+'- replies via oneshot channel
+
+Background reader task
+|- owns the read half + parser
+|- routes CommandReply/ApiResponse -> pending oneshot
+|- routes Event -> mpsc channel
+|- tracks liveness (any TCP traffic resets timer)
+'- broadcasts ConnectionStatus on disconnect
 ```
 
-Multi-tenant setups can authenticate as a specific ACL user:
+See [docs/design-rationale.md](docs/design-rationale.md) for the full story.
+
+## Usage
+
+### Inbound connection
+
+```rust
+let (client, mut events) = EslClient::connect("localhost", 8021, "ClueCon").await?;
+
+let response = client.api("status").await?;
+println!("{}", response.body_string());
+```
+
+Multi-tenant with per-user ACL:
 
 ```rust
 let (client, mut events) =
@@ -195,19 +211,61 @@ See [docs/outbound-esl-quirks.md](docs/outbound-esl-quirks.md) for outbound
 mode gotchas (`connect_session` ordering, `async full` requirement, socket app
 quoting).
 
-### Command builders
+## Command builders
 
 Typed builders for FreeSWITCH API commands. All implement `Display`, are
-independent of `EslClient`, and can be unit tested without a connection:
+independent of `EslClient`, and can be unit tested without a connection.
+
+### Endpoint types
+
+Each endpoint type is a concrete struct implementing the `DialString` trait.
+The `Endpoint` enum wraps them for polymorphic storage and serde.
+
+| Type | Wire format | Description |
+|---|---|---|
+| `SofiaEndpoint` | `sofia/{profile}/{destination}` | Direct SIP profile routing |
+| `SofiaGateway` | `sofia/gateway/{gateway}/{destination}` | SIP gateway routing |
+| `LoopbackEndpoint` | `loopback/{extension}/{context}` | Internal loopback |
+| `UserEndpoint` | `user/{name}@{domain}` | Directory-based dial-string lookup |
+| `SofiaContact` | `${sofia_contact(user@domain)}` | Resolve registered contacts (FS runtime expression) |
+| `GroupCall` | `${group_call(group@domain+A)}` | Resolve group members (FS runtime expression) |
+| `ErrorEndpoint` | `error/{cause}` | Bridge to hangup cause |
 
 ```rust
 use freeswitch_esl_tokio::commands::*;
 
-// Originate with typed endpoint
+// Direct SIP profile routing
+let ep = Endpoint::Sofia(SofiaEndpoint {
+    profile: "internal".into(),
+    destination: "1000@domain.com".into(),
+    variables: None,
+});
+assert_eq!(ep.to_string(), "sofia/internal/1000@domain.com");
+
+// SIP gateway routing
+let ep = Endpoint::SofiaGateway(SofiaGateway {
+    gateway: "my_provider".into(),
+    destination: "18005551234".into(),
+    profile: None,
+    variables: None,
+});
+assert_eq!(ep.to_string(), "sofia/gateway/my_provider/18005551234");
+
+// Parse from wire format
+let ep: Endpoint = "sofia/gateway/my_provider/18005551234".parse().unwrap();
+
+// Downstream crates can implement DialString on custom endpoint types
+```
+
+### Originate
+
+```rust
+use freeswitch_esl_tokio::commands::*;
+
 let cmd = Originate {
     endpoint: Endpoint::SofiaGateway(SofiaGateway {
-        gateway: "my-provider".into(),
-        destination: "18005551212".into(),
+        gateway: "my_provider".into(),
+        destination: "18005551234".into(),
         profile: None,
         variables: None,
     }),
@@ -217,33 +275,133 @@ let cmd = Originate {
     dialplan: Some(DialplanType::Inline),
     context: None, cid_name: None, cid_num: None, timeout: None,
 };
-// → "originate sofia/gateway/my-provider/18005551212 conference:room1 inline"
+// -> "originate sofia/gateway/my_provider/18005551234 conference:room1 inline"
 client.bgapi(&cmd.to_string()).await?;
 
-// Round-trip: parse ↔ display
+// Round-trip: parse <-> display
 let parsed: Originate = cmd.to_string().parse().unwrap();
 assert_eq!(parsed.to_string(), cmd.to_string());
+```
+
+### Bridge dial strings
+
+`BridgeDialString` builds multi-endpoint bridge arguments with simultaneous
+ring (`,`) and sequential failover (`|`):
+
+```rust
+use freeswitch_esl_tokio::commands::*;
+
+// Try primary and secondary simultaneously, then failover to backup
+let bridge = BridgeDialString {
+    variables: None,
+    groups: vec![
+        vec![
+            Endpoint::SofiaGateway(SofiaGateway {
+                gateway: "primary".into(),
+                destination: "18005551234".into(),
+                profile: None, variables: None,
+            }),
+            Endpoint::SofiaGateway(SofiaGateway {
+                gateway: "secondary".into(),
+                destination: "18005551234".into(),
+                profile: None, variables: None,
+            }),
+        ],
+        vec![Endpoint::SofiaGateway(SofiaGateway {
+            gateway: "backup".into(),
+            destination: "18005551234".into(),
+            profile: None, variables: None,
+        })],
+    ],
+};
+// -> "sofia/gateway/primary/18005551234,sofia/gateway/secondary/18005551234|sofia/gateway/backup/18005551234"
+
+// Use with the bridge dptools application
+client.send_command(AppCommand::bridge(bridge)).await?;
+```
+
+See [docs/dial-string-format.md](docs/dial-string-format.md) for the complete
+dial string reference (variable scoping, `^^:` custom delimiters, enterprise
+`:_:` originate).
+
+### UUID and conference commands
+
+```rust
+use freeswitch_esl_tokio::commands::*;
 
 // UUID commands
 let kill = UuidKill { uuid: uuid.into(), cause: Some("NORMAL_CLEARING".into()) };
-// → "uuid_kill <uuid> NORMAL_CLEARING"
+// -> "uuid_kill <uuid> NORMAL_CLEARING"
 client.api(&kill.to_string()).await?;
 
 // Conference commands
 let dtmf = ConferenceDtmf { name: "room1".into(), member: "all".into(), dtmf: "1".into() };
-// → "conference room1 dtmf all 1"
+// -> "conference room1 dtmf all 1"
 client.api(&dtmf.to_string()).await?;
 ```
 
 > Output strings verified by unit tests in
 > [`commands/originate.rs`](src/commands/originate.rs),
+> [`commands/endpoint.rs`](src/commands/endpoint.rs),
+> [`commands/bridge.rs`](src/commands/bridge.rs),
 > [`commands/channel.rs`](src/commands/channel.rs), and
 > [`commands/conference.rs`](src/commands/conference.rs).
 
 See [docs/command-builders.md](docs/command-builders.md) for the full builder
 architecture, all channel/conference command types, and escaping rules.
 
-### Variable parsers
+## Config-driven commands (serde)
+
+All command builder types implement `Serialize`/`Deserialize`, so originate
+and bridge commands can be driven entirely from config files:
+
+```json
+{
+  "endpoint": {
+    "sofia_gateway": {
+      "gateway": "my_provider",
+      "destination": "18005551234"
+    }
+  },
+  "applications": [{"name": "park"}],
+  "timeout": 30
+}
+```
+
+```rust
+let originate: Originate = serde_json::from_str(json)?;
+client.bgapi(&originate.to_string()).await?;
+```
+
+`Variables` deserializes ergonomically -- a flat map defaults to `Default` scope:
+
+```json
+{"originate_timeout": "600", "sip_h_X-Custom": "value"}
+```
+
+Other scopes use the explicit form:
+
+```json
+{"scope": "enterprise", "vars": {"key": "value"}}
+```
+
+### serde_yaml caveat
+
+The `Endpoint` enum uses serde's externally tagged newtype variants. With
+`serde_json` this produces `{"sofia": {...}}`. With `serde_yaml` v0.9, newtype
+enum variants serialize as YAML tags instead of mappings:
+
+```yaml
+# serde_yaml v0.9 format (uses YAML tags):
+endpoint: !sofia
+  profile: internal
+  destination: "1000@domain.com"
+```
+
+This is valid YAML and round-trips correctly, but differs from the
+`{"sofia": {...}}` format that `serde_json` produces.
+
+## Variable parsers
 
 ```rust
 use freeswitch_esl_tokio::variables::{EslArray, MultipartBody};
@@ -260,7 +418,7 @@ let pidf = body.by_mime_type("application/pidf+xml");
 > Verified in [`variables/esl_array.rs`](src/variables/esl_array.rs) and
 > [`variables/sip_multipart.rs`](src/variables/sip_multipart.rs).
 
-### Typed event accessors
+## Typed event accessors
 
 `EslEvent` provides typed accessors that parse header values into enums
 instead of returning raw strings:
@@ -283,6 +441,8 @@ let direction = event.call_direction(); // Option<CallDirection>
 let cause = event.hangup_cause();       // Option<&str>
 ```
 
+### Channel timetable
+
 Call lifecycle timestamps via `ChannelTimetable`:
 
 ```rust
@@ -300,6 +460,8 @@ if let Some(tt) = timetable {
     println!("Created: {:?}, Answered: {:?}", tt.created, tt.answered);
 }
 ```
+
+### Header and variable enums
 
 Compile-time header and variable name enums via `HeaderLookup`:
 
@@ -350,10 +512,10 @@ implementation using `HeaderLookup` for channel lifecycle monitoring.
 
 The pre-commit hook enforces:
 
-- `cargo fmt --check` — formatting
-- `cargo clippy -- -D warnings` — lint warnings as errors
-- `RUSTDOCFLAGS="-D missing_docs" cargo doc` — all public items documented
-- `hooks/check-event-types.sh` — `EslEventType` enum matches C ESL `EVENT_NAMES[]`
+- `cargo fmt --check` -- formatting
+- `cargo clippy -- -D warnings` -- lint warnings as errors
+- `RUSTDOCFLAGS="-D missing_docs" cargo doc` -- all public items documented
+- `hooks/check-event-types.sh` -- `EslEventType` enum matches C ESL `EVENT_NAMES[]`
 
 ### Testing
 
@@ -376,24 +538,19 @@ cargo test --test live_freeswitch -- --ignored
 - Rust 1.70+
 - Tokio async runtime
 
-## How it compares
+## Other Rust ESL crates
 
-| | freeswitch-esl-tokio | [freeswitch-esl](https://crates.io/crates/freeswitch-esl) | [eslrs](https://crates.io/crates/eslrs) | [freeswitch-esl-rs](https://crates.io/crates/freeswitch-esl-rs) |
-|---|---|---|---|---|
-| Async (Tokio) | yes | yes | yes | no (blocking) |
-| Split reader/writer | yes | no | no | n/a |
-| Inbound + outbound | both | both | both | inbound only |
-| Event formats | plain, JSON, XML | JSON only | plain, JSON, XML | plain only |
-| Liveness detection | yes | no | no | no |
-| Command timeout | yes (default 5s) | no | no | no |
-| Error classification | yes | no | no | no |
-| Typed state enums | 5 (`ChannelState`, `CallState`, ...) | no | no | no |
-| Typed header enums | ![EventHeader](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/event-header-count.json)<br>![ChannelVariable](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/channel-var-count.json)<br>![HeaderLookup](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/header-lookup-count.json) | no | no | no |
-| Channel timetable | yes (decoupled from event type) | no | no | no |
-| Command builders | 13 typed structs | none | basic | none |
-| Event types | ![Event Types](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/event-type-count.json) | — | — | — |
-| Test count | ![Tests](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/test-count.json) | — | — | — |
+- [freeswitch-esl](https://crates.io/crates/freeswitch-esl) -- async/tokio,
+  JSON-only events, no split reader/writer, no liveness detection, no command
+  builders or typed state. Stale since 2023.
+- [eslrs](https://crates.io/crates/eslrs) -- async, still in RC. Unified
+  stream (not split), silently discards unexpected responses, no timeouts.
+- [freeswitch-esl-rs](https://crates.io/crates/freeswitch-esl-rs) --
+  synchronous/blocking, inbound only, plain events only.
+
+None of them offer typed endpoints, serde support, command builders,
+`HeaderLookup`, or connection health monitoring.
 
 ## License
 
-MIT OR Apache-2.0 — see [LICENSE-MIT](LICENSE-MIT) and [LICENSE-APACHE](LICENSE-APACHE).
+MIT OR Apache-2.0 -- see [LICENSE-MIT](LICENSE-MIT) and [LICENSE-APACHE](LICENSE-APACHE).

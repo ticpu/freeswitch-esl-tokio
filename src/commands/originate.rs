@@ -303,6 +303,14 @@ impl Application {
         }
     }
 
+    /// Create an application with no arguments.
+    pub fn simple(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            args: None,
+        }
+    }
+
     /// Format as inline (`name:args`) or XML (`&name(args)`) syntax.
     pub fn to_string_with_dialplan(&self, dialplan: &DialplanType) -> String {
         let args = self
@@ -319,8 +327,36 @@ impl Application {
 /// Ordered list of applications for an originate command.
 ///
 /// Inline dialplan allows multiple comma-separated apps; XML dialplan allows exactly one.
+///
+/// Converts from a single [`Application`], an array of applications, or a `Vec`:
+/// ```
+/// # use freeswitch_esl_tokio::commands::originate::*;
+/// let single: ApplicationList = Application::simple("park").into();
+/// let multi: ApplicationList = [
+///     Application::new("conference", Some("room1")),
+///     Application::new("hangup", Some("NORMAL_CLEARING")),
+/// ].into();
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ApplicationList(pub Vec<Application>);
+
+impl From<Application> for ApplicationList {
+    fn from(app: Application) -> Self {
+        Self(vec![app])
+    }
+}
+
+impl From<Vec<Application>> for ApplicationList {
+    fn from(apps: Vec<Application>) -> Self {
+        Self(apps)
+    }
+}
+
+impl<const N: usize> From<[Application; N]> for ApplicationList {
+    fn from(apps: [Application; N]) -> Self {
+        Self(apps.into())
+    }
+}
 
 impl ApplicationList {
     /// Format the list for the given dialplan type. XML allows exactly one app.
@@ -1058,5 +1094,87 @@ mod tests {
         assert!(wire.contains("sofia/internal/123@example.com"));
         assert!(wire.contains("&park()"));
         assert!(wire.contains("XML"));
+    }
+
+    // --- Application::simple ---
+
+    #[test]
+    fn application_simple_no_args() {
+        let app = Application::simple("park");
+        assert_eq!(app.name, "park");
+        assert!(app
+            .args
+            .is_none());
+    }
+
+    #[test]
+    fn application_simple_xml_format() {
+        let app = Application::simple("park");
+        assert_eq!(app.to_string_with_dialplan(&DialplanType::Xml), "&park()");
+    }
+
+    // --- ApplicationList From impls ---
+
+    #[test]
+    fn application_list_from_single() {
+        let list: ApplicationList = Application::simple("park").into();
+        assert_eq!(
+            list.0
+                .len(),
+            1
+        );
+        assert_eq!(list.0[0].name, "park");
+    }
+
+    #[test]
+    fn application_list_from_vec() {
+        let list: ApplicationList = vec![
+            Application::new("conference", Some("1")),
+            Application::new("hangup", Some("NORMAL_CLEARING")),
+        ]
+        .into();
+        assert_eq!(
+            list.0
+                .len(),
+            2
+        );
+        assert_eq!(list.0[0].name, "conference");
+        assert_eq!(list.0[1].name, "hangup");
+    }
+
+    #[test]
+    fn application_list_from_array() {
+        let list: ApplicationList = [
+            Application::new("conference", Some("room1")),
+            Application::new("hangup", Some("NORMAL_CLEARING")),
+        ]
+        .into();
+        assert_eq!(
+            list.0
+                .len(),
+            2
+        );
+    }
+
+    #[test]
+    fn application_list_from_single_wire_format() {
+        let ep = Endpoint::Sofia(SofiaEndpoint {
+            profile: "internal".into(),
+            destination: "123@example.com".into(),
+            variables: None,
+        });
+        let orig = Originate {
+            endpoint: ep,
+            applications: Application::simple("park").into(),
+            dialplan: None,
+            context: None,
+            cid_name: None,
+            cid_num: None,
+            timeout: None,
+        };
+        assert_eq!(
+            orig.to_string(),
+            "originate sofia/internal/123@example.com &park()"
+        );
     }
 }
