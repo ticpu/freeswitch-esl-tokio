@@ -8,6 +8,7 @@
 
 pub mod channel;
 pub mod conference;
+pub mod endpoint;
 pub mod originate;
 
 pub use channel::{
