@@ -153,10 +153,11 @@ pub use channel::{
 };
 pub use command::{CommandBuilder, EslResponse, ReplyStatus};
 pub use commands::{
-    Application, ApplicationList, ConferenceDtmf, ConferenceHold, ConferenceMute, DialplanType,
-    Endpoint, HoldAction, MuteAction, Originate, OriginateError, UuidAnswer, UuidBridge,
-    UuidDeflect, UuidGetVar, UuidHold, UuidKill, UuidSendDtmf, UuidSetVar, UuidTransfer, Variables,
-    VariablesType,
+    Application, ApplicationList, BridgeDialString, ConferenceDtmf, ConferenceHold, ConferenceMute,
+    DialString, DialplanType, Endpoint, ErrorEndpoint, GroupCall, HoldAction, LoopbackEndpoint,
+    MuteAction, Originate, OriginateError, SofiaContact, SofiaEndpoint, SofiaGateway, UserEndpoint,
+    UuidAnswer, UuidBridge, UuidDeflect, UuidGetVar, UuidHold, UuidKill, UuidSendDtmf, UuidSetVar,
+    UuidTransfer, Variables, VariablesType,
 };
 pub use connection::{
     ConnectionMode, ConnectionStatus, DisconnectReason, EslClient, EslConnectOptions,

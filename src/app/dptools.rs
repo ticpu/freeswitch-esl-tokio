@@ -1,5 +1,7 @@
 //! FreeSWITCH dptools application commands (`answer`, `hangup`, `playback`, etc.).
 
+use std::fmt;
+
 use crate::command::EslCommand;
 
 /// Constructors for common dptools application commands.
@@ -37,8 +39,9 @@ impl AppCommand {
         }
     }
 
-    /// `destination`: dial string for the B-leg (e.g. `sofia/gateway/gw/number`).
-    pub fn bridge(destination: &str) -> EslCommand {
+    /// `destination`: dial string for the B-leg. Accepts `&str`,
+    /// [`BridgeDialString`](crate::BridgeDialString), [`Endpoint`](crate::Endpoint), etc.
+    pub fn bridge(destination: impl fmt::Display) -> EslCommand {
         EslCommand::Execute {
             app: "bridge".to_string(),
             args: Some(destination.to_string()),

@@ -164,20 +164,25 @@ fn write_variables(f: &mut fmt::Formatter<'_>, vars: &Option<Variables>) -> fmt:
     Ok(())
 }
 
-/// Extract leading `{...}` variable block from a dial string, returning
-/// the parsed variables and the remaining URI portion.
+/// Extract a leading variable block (`{...}`, `[...]`, or `<...>`) from a
+/// dial string, returning the parsed variables and the remaining URI portion.
 fn extract_variables(s: &str) -> Result<(Option<Variables>, &str), OriginateError> {
-    if s.starts_with('{') {
-        let close = s
-            .find('}')
-            .ok_or_else(|| OriginateError::ParseError("unclosed { in endpoint".into()))?;
-        let var_str = &s[..=close];
-        let vars: Variables = var_str.parse()?;
-        let vars = if vars.is_empty() { None } else { Some(vars) };
-        Ok((vars, s[close + 1..].trim()))
-    } else {
-        Ok((None, s))
-    }
+    let (open, close_ch) = match s
+        .as_bytes()
+        .first()
+    {
+        Some(b'{') => ('{', '}'),
+        Some(b'[') => ('[', ']'),
+        Some(b'<') => ('<', '>'),
+        _ => return Ok((None, s)),
+    };
+    let close = s
+        .find(close_ch)
+        .ok_or_else(|| OriginateError::ParseError(format!("unclosed {} in endpoint", open)))?;
+    let var_str = &s[..=close];
+    let vars: Variables = var_str.parse()?;
+    let vars = if vars.is_empty() { None } else { Some(vars) };
+    Ok((vars, s[close + 1..].trim()))
 }
 
 // ---------------------------------------------------------------------------

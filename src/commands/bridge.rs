@@ -30,17 +30,131 @@ pub struct BridgeDialString {
 }
 
 impl fmt::Display for BridgeDialString {
-    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        todo!("BridgeDialString::Display")
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(vars) = &self.variables {
+            if !vars.is_empty() {
+                write!(f, "{}", vars)?;
+            }
+        }
+        for (gi, group) in self
+            .groups
+            .iter()
+            .enumerate()
+        {
+            if gi > 0 {
+                f.write_str("|")?;
+            }
+            for (ei, ep) in group
+                .iter()
+                .enumerate()
+            {
+                if ei > 0 {
+                    f.write_str(",")?;
+                }
+                write!(f, "{}", ep)?;
+            }
+        }
+        Ok(())
     }
 }
 
 impl FromStr for BridgeDialString {
     type Err = OriginateError;
 
-    fn from_str(_s: &str) -> Result<Self, Self::Err> {
-        todo!("BridgeDialString::FromStr")
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s = s.trim();
+        if s.is_empty() {
+            return Err(OriginateError::ParseError(
+                "empty bridge dial string".into(),
+            ));
+        }
+
+        // Extract leading {global_vars} if present
+        let (variables, rest) = if s.starts_with('{') {
+            let close = find_matching_brace(s, '{', '}').ok_or_else(|| {
+                OriginateError::ParseError("unclosed { in bridge dial string".into())
+            })?;
+            let var_str = &s[..=close];
+            let vars: Variables = var_str.parse()?;
+            let vars = if vars.is_empty() { None } else { Some(vars) };
+            (vars, &s[close + 1..])
+        } else {
+            (None, s)
+        };
+
+        // Split on | for sequential groups, respecting brackets
+        let group_strs = split_respecting_brackets(rest, '|');
+        let mut groups = Vec::new();
+        for group_str in &group_strs {
+            let group_str = group_str.trim();
+            if group_str.is_empty() {
+                continue;
+            }
+            // Split on , for simultaneous endpoints, respecting brackets
+            let ep_strs = split_respecting_brackets(group_str, ',');
+            let mut endpoints = Vec::new();
+            for ep_str in &ep_strs {
+                let ep_str = ep_str.trim();
+                if ep_str.is_empty() {
+                    continue;
+                }
+                let ep: Endpoint = ep_str.parse()?;
+                endpoints.push(ep);
+            }
+            if !endpoints.is_empty() {
+                groups.push(endpoints);
+            }
+        }
+
+        Ok(Self { variables, groups })
     }
+}
+
+/// Find the index of the closing bracket matching the opener at position 0.
+fn find_matching_brace(s: &str, open: char, close: char) -> Option<usize> {
+    let mut depth = 0;
+    for (i, ch) in s.char_indices() {
+        if ch == open {
+            depth += 1;
+        } else if ch == close {
+            depth -= 1;
+            if depth == 0 {
+                return Some(i);
+            }
+        }
+    }
+    None
+}
+
+/// Split a string on `sep` while skipping separators inside `{...}`, `[...]`,
+/// `<...>`, and `${...}` blocks.
+fn split_respecting_brackets(s: &str, sep: char) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let mut depth = 0i32;
+    let mut start = 0;
+    let bytes = s.as_bytes();
+
+    for (i, &b) in bytes
+        .iter()
+        .enumerate()
+    {
+        match b {
+            b'{' | b'[' | b'<' | b'(' => depth += 1,
+            b'}' | b']' | b'>' | b')' => {
+                depth -= 1;
+                if depth < 0 {
+                    depth = 0;
+                }
+            }
+            _ if b == sep as u8 && depth == 0 => {
+                parts.push(&s[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    parts.push(&s[start..]);
+    parts
 }
 
 #[cfg(test)]

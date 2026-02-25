@@ -12,11 +12,16 @@ pub mod conference;
 pub mod endpoint;
 pub mod originate;
 
+pub use bridge::BridgeDialString;
 pub use channel::{
     UuidAnswer, UuidBridge, UuidDeflect, UuidGetVar, UuidHold, UuidKill, UuidSendDtmf, UuidSetVar,
     UuidTransfer,
 };
 pub use conference::{ConferenceDtmf, ConferenceHold, ConferenceMute, HoldAction, MuteAction};
+pub use endpoint::{
+    DialString, ErrorEndpoint, GroupCall, LoopbackEndpoint, SofiaContact, SofiaEndpoint,
+    SofiaGateway, UserEndpoint,
+};
 pub use originate::{
     Application, ApplicationList, DialplanType, Endpoint, Originate, OriginateError, Variables,
     VariablesType,
