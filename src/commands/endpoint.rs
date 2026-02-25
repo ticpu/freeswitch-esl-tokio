@@ -8,6 +8,8 @@
 use std::fmt;
 use std::str::FromStr;
 
+use serde::{Deserialize, Serialize};
+
 use super::originate::{OriginateError, Variables};
 
 /// Common interface for anything that formats as a FreeSWITCH dial string.
@@ -28,49 +30,55 @@ pub trait DialString: fmt::Display {
 // ---------------------------------------------------------------------------
 
 /// SIP endpoint via a named profile: `sofia/{profile}/{destination}`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SofiaEndpoint {
     /// SIP profile name (e.g. `internal`, `external`).
     pub profile: String,
     /// SIP URI or destination number.
     pub destination: String,
     /// Per-channel variables prepended as `{key=value}`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub variables: Option<Variables>,
 }
 
 /// SIP endpoint via a configured gateway:
 /// `sofia/gateway/[{profile}::]{gateway}/{destination}`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SofiaGateway {
     /// Gateway name as configured in the SIP profile.
     pub gateway: String,
     /// Destination number or SIP user part.
     pub destination: String,
     /// SIP profile name to qualify the gateway lookup.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profile: Option<String>,
     /// Per-channel variables prepended as `{key=value}`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub variables: Option<Variables>,
 }
 
 /// Internal loopback endpoint: `loopback/{extension}[/{context}]`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LoopbackEndpoint {
     /// Extension number or pattern.
     pub extension: String,
     /// Dialplan context (defaults to `"default"`).
     pub context: String,
     /// Per-channel variables prepended as `{key=value}`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub variables: Option<Variables>,
 }
 
 /// Directory-based endpoint: `user/{name}[@{domain}]`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UserEndpoint {
     /// User name from the directory.
     pub name: String,
     /// Domain name (optional, uses default domain if absent).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub domain: Option<String>,
     /// Per-channel variables prepended as `{key=value}`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub variables: Option<Variables>,
 }
 
@@ -79,34 +87,38 @@ pub struct UserEndpoint {
 ///
 /// The library produces the expression string; FreeSWITCH evaluates it
 /// at call time. Use `profile: Some("*".into())` to search all profiles.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SofiaContact {
     /// User part of the contact lookup.
     pub user: String,
     /// Domain for the contact lookup.
     pub domain: String,
     /// SIP profile name, or `"*"` for all profiles.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profile: Option<String>,
     /// Per-channel variables prepended as `{key=value}`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub variables: Option<Variables>,
 }
 
 /// Runtime expression resolving directory group members:
 /// `${group_call(group@domain[+order])}`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GroupCall {
     /// Group name from the directory.
     pub group: String,
     /// Domain for the group lookup.
     pub domain: String,
     /// Distribution order: `A` (all), `E` (enterprise), `F` (first).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub order: Option<String>,
     /// Per-channel variables prepended as `{key=value}`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub variables: Option<Variables>,
 }
 
 /// Bridge to a specific hangup cause: `error/{cause}`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ErrorEndpoint {
     /// Hangup cause string (e.g. `user_busy`, `no_answer`).
     pub cause: String,
@@ -120,7 +132,8 @@ pub struct ErrorEndpoint {
 ///
 /// Use this in [`Originate`](super::originate::Originate) and
 /// [`BridgeDialString`] where any endpoint type must be accepted.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Endpoint {
     /// `sofia/{profile}/{destination}`
     Sofia(SofiaEndpoint),

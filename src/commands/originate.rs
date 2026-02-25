@@ -5,11 +5,15 @@ use std::fmt;
 use std::str::FromStr;
 
 use indexmap::IndexMap;
+use serde::de::Deserializer;
+use serde::ser::Serializer;
+use serde::{Deserialize, Serialize};
 
 use super::{originate_quote, originate_split, originate_unquote};
 
 /// FreeSWITCH dialplan type for originate commands.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum DialplanType {
     /// Inline dialplan: applications execute directly without XML lookup.
     Inline,
@@ -46,7 +50,8 @@ impl FromStr for DialplanType {
 /// - `Enterprise` (`<>`) — applies across all threads (`:_:` separated)
 /// - `Default` (`{}`) — applies to all channels in this originate
 /// - `Channel` (`[]`) — applies only to one specific channel
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum VariablesType {
     /// `<>` scope — applies across all `:_:` separated threads.
     Enterprise,
@@ -144,6 +149,58 @@ impl Variables {
         self.inner
             .iter()
     }
+
+    /// Mutable iterator over key-value pairs in insertion order.
+    pub fn iter_mut(&mut self) -> indexmap::map::IterMut<'_, String, String> {
+        self.inner
+            .iter_mut()
+    }
+
+    /// Mutable iterator over values in insertion order.
+    pub fn values_mut(&mut self) -> indexmap::map::ValuesMut<'_, String, String> {
+        self.inner
+            .values_mut()
+    }
+}
+
+impl Serialize for Variables {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        if self.vars_type == VariablesType::Default {
+            self.inner
+                .serialize(serializer)
+        } else {
+            use serde::ser::SerializeStruct;
+            let mut s = serializer.serialize_struct("Variables", 2)?;
+            s.serialize_field("scope", &self.vars_type)?;
+            s.serialize_field("vars", &self.inner)?;
+            s.end()
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Variables {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum VariablesRepr {
+            Scoped {
+                scope: VariablesType,
+                vars: IndexMap<String, String>,
+            },
+            Flat(IndexMap<String, String>),
+        }
+
+        match VariablesRepr::deserialize(deserializer)? {
+            VariablesRepr::Scoped { scope, vars } => Ok(Self {
+                vars_type: scope,
+                inner: vars,
+            }),
+            VariablesRepr::Flat(map) => Ok(Self {
+                vars_type: VariablesType::Default,
+                inner: map,
+            }),
+        }
+    }
 }
 
 impl fmt::Display for Variables {
@@ -224,7 +281,8 @@ fn split_unescaped_commas(s: &str) -> Vec<&str> {
 ///
 /// Each variant formats to the corresponding FreeSWITCH endpoint syntax.
 /// Per-channel [`Variables`] are prepended as `[key=value]` when present.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Endpoint {
     /// Raw endpoint string (e.g. `sofia/internal/1000@domain`).
     Generic {
@@ -325,11 +383,12 @@ impl FromStr for Endpoint {
 /// Formats differently depending on [`DialplanType`]:
 /// - Inline: `name:args`
 /// - XML: `&name(args)`
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Application {
     /// Application name (e.g. `park`, `conference`, `socket`).
     pub name: String,
     /// Application arguments, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub args: Option<String>,
 }
 
@@ -358,7 +417,7 @@ impl Application {
 /// Ordered list of applications for an originate command.
 ///
 /// Inline dialplan allows multiple comma-separated apps; XML dialplan allows exactly one.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ApplicationList(pub Vec<Application>);
 
 impl ApplicationList {
@@ -394,21 +453,26 @@ impl ApplicationList {
 ///
 /// Application arguments containing spaces are automatically single-quoted.
 /// Implements both `Display` (for wire format) and `FromStr` (for round-trip parsing).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Originate {
     /// Dial target (sofia gateway, loopback, or raw URI).
     pub endpoint: Endpoint,
     /// Application(s) to execute on the originated channel.
     pub applications: ApplicationList,
     /// Dialplan engine. `None` defaults to XML.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dialplan: Option<DialplanType>,
     /// Dialplan context. `None` uses the profile's default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context: Option<String>,
     /// Caller ID name for the originated leg.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cid_name: Option<String>,
     /// Caller ID number for the originated leg.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cid_num: Option<String>,
     /// Timeout in seconds. `None` uses FreeSWITCH default (60s).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timeout: Option<u32>,
 }
 

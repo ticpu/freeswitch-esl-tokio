@@ -23,7 +23,7 @@ quick-xml = { version = "0.31", features = ["serialize"] }
 percent-encoding = "2"
 tracing = "0.1"
 futures-util = "0.3"
-indexmap = "2"
+indexmap = { version = "2", features = ["serde"] }
 
 [dev-dependencies]
 tokio-test = "0.4"
