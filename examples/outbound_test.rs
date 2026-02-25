@@ -6,6 +6,7 @@
 //!
 //! Usage: cargo run --example outbound_test
 
+use freeswitch_esl_tokio::commands::endpoint::LoopbackEndpoint;
 use freeswitch_esl_tokio::commands::originate::{
     Application, ApplicationList, Endpoint, Originate,
 };
@@ -49,11 +50,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Step 3: Originate call to outbound socket via Originate builder
     let originate = Originate {
-        endpoint: Endpoint::Loopback {
-            uri: "9199".into(),
+        endpoint: Endpoint::Loopback(LoopbackEndpoint {
+            extension: "9199".into(),
             context: "test".into(),
             variables: None,
-        },
+        }),
         applications: ApplicationList(vec![Application::new(
             "socket",
             Some(format!("127.0.0.1:{} async full", outbound_port)),

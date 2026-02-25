@@ -277,106 +277,8 @@ fn split_unescaped_commas(s: &str) -> Vec<&str> {
     parts
 }
 
-/// Dial target for an originate command.
-///
-/// Each variant formats to the corresponding FreeSWITCH endpoint syntax.
-/// Per-channel [`Variables`] are prepended as `[key=value]` when present.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Endpoint {
-    /// Raw endpoint string (e.g. `sofia/internal/1000@domain`).
-    Generic {
-        /// Endpoint URI or dial string.
-        uri: String,
-        /// Per-channel variables prepended as `[key=value]`.
-        variables: Option<Variables>,
-    },
-    /// Loopback endpoint: formats as `loopback/<uri>/<context>`.
-    Loopback {
-        /// Loopback destination (extension number or pattern).
-        uri: String,
-        /// Dialplan context for the loopback leg.
-        context: String,
-        /// Per-channel variables prepended as `[key=value]`.
-        variables: Option<Variables>,
-    },
-    /// Sofia gateway shorthand: formats as `sofia/gateway/[profile::]<gateway>/<uri>`.
-    SofiaGateway {
-        /// Destination number or SIP user part.
-        uri: String,
-        /// SIP profile name to qualify the gateway lookup.
-        profile: Option<String>,
-        /// Gateway name as configured in the SIP profile.
-        gateway: String,
-        /// Per-channel variables prepended as `[key=value]`.
-        variables: Option<Variables>,
-    },
-}
-
-impl Endpoint {
-    fn write_variables(f: &mut fmt::Formatter<'_>, vars: &Option<Variables>) -> fmt::Result {
-        if let Some(vars) = vars {
-            if !vars.is_empty() {
-                write!(f, "{}", vars)?;
-            }
-        }
-        Ok(())
-    }
-}
-
-impl fmt::Display for Endpoint {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Generic { uri, variables } => {
-                Self::write_variables(f, variables)?;
-                f.write_str(uri)
-            }
-            Self::Loopback {
-                uri,
-                context,
-                variables,
-            } => {
-                Self::write_variables(f, variables)?;
-                write!(f, "loopback/{}/{}", uri, context)
-            }
-            Self::SofiaGateway {
-                uri,
-                profile,
-                gateway,
-                variables,
-            } => {
-                Self::write_variables(f, variables)?;
-                match profile {
-                    Some(p) => write!(f, "sofia/gateway/{}::{}/{}", p, gateway, uri),
-                    None => write!(f, "sofia/gateway/{}/{}", gateway, uri),
-                }
-            }
-        }
-    }
-}
-
-impl FromStr for Endpoint {
-    type Err = OriginateError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (variables, uri_part) = if s.contains('{') {
-            let close = s
-                .find('}')
-                .ok_or_else(|| OriginateError::ParseError("unclosed { in endpoint".into()))?;
-            let var_str = &s[..=close];
-            let vars: Variables = var_str.parse()?;
-            let vars = if vars.is_empty() { None } else { Some(vars) };
-            (vars, s[close + 1..].trim())
-        } else {
-            (None, s)
-        };
-
-        Ok(Self::Generic {
-            uri: uri_part.to_string(),
-            variables,
-        })
-    }
-}
+// Endpoint is now defined in endpoint.rs — re-exported via pub use below.
+pub use super::endpoint::Endpoint;
 
 /// A single dialplan application with optional arguments.
 ///
@@ -598,6 +500,7 @@ pub enum OriginateError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::endpoint::{LoopbackEndpoint, SofiaEndpoint, SofiaGateway};
 
     // --- Variables ---
 
@@ -686,10 +589,11 @@ mod tests {
 
     #[test]
     fn endpoint_uri_only() {
-        let ep = Endpoint::Generic {
-            uri: "sofia/internal/123@example.com".into(),
+        let ep = Endpoint::Sofia(SofiaEndpoint {
+            profile: "internal".into(),
+            destination: "123@example.com".into(),
             variables: None,
-        };
+        });
         assert_eq!(ep.to_string(), "sofia/internal/123@example.com");
     }
 
@@ -697,10 +601,11 @@ mod tests {
     fn endpoint_uri_with_variable() {
         let mut vars = Variables::new(VariablesType::Default);
         vars.insert("one_variable", "1");
-        let ep = Endpoint::Generic {
-            uri: "sofia/internal/123@example.com".into(),
+        let ep = Endpoint::Sofia(SofiaEndpoint {
+            profile: "internal".into(),
+            destination: "123@example.com".into(),
             variables: Some(vars),
-        };
+        });
         assert_eq!(
             ep.to_string(),
             "{one_variable=1}sofia/internal/123@example.com"
@@ -711,10 +616,11 @@ mod tests {
     fn endpoint_variable_with_quote() {
         let mut vars = Variables::new(VariablesType::Default);
         vars.insert("one_variable", "one'quote");
-        let ep = Endpoint::Generic {
-            uri: "sofia/internal/123@example.com".into(),
+        let ep = Endpoint::Sofia(SofiaEndpoint {
+            profile: "internal".into(),
+            destination: "123@example.com".into(),
             variables: Some(vars),
-        };
+        });
         assert_eq!(
             ep.to_string(),
             "{one_variable=one\\'quote}sofia/internal/123@example.com"
@@ -725,11 +631,11 @@ mod tests {
     fn loopback_endpoint_display() {
         let mut vars = Variables::new(VariablesType::Default);
         vars.insert("one_variable", "1");
-        let ep = Endpoint::Loopback {
-            uri: "aUri".into(),
+        let ep = Endpoint::Loopback(LoopbackEndpoint {
+            extension: "aUri".into(),
             context: "aContext".into(),
             variables: Some(vars),
-        };
+        });
         assert_eq!(ep.to_string(), "{one_variable=1}loopback/aUri/aContext");
     }
 
@@ -737,12 +643,12 @@ mod tests {
     fn sofia_gateway_endpoint_display() {
         let mut vars = Variables::new(VariablesType::Default);
         vars.insert("one_variable", "1");
-        let ep = Endpoint::SofiaGateway {
-            uri: "aUri".into(),
+        let ep = Endpoint::SofiaGateway(SofiaGateway {
+            destination: "aUri".into(),
             profile: None,
             gateway: "internal".into(),
             variables: Some(vars),
-        };
+        });
         assert_eq!(
             ep.to_string(),
             "{one_variable=1}sofia/gateway/internal/aUri"
@@ -837,10 +743,11 @@ mod tests {
 
     #[test]
     fn originate_xml_display() {
-        let ep = Endpoint::Generic {
-            uri: "sofia/internal/123@example.com".into(),
+        let ep = Endpoint::Sofia(SofiaEndpoint {
+            profile: "internal".into(),
+            destination: "123@example.com".into(),
             variables: None,
-        };
+        });
         let apps = ApplicationList(vec![Application::new("conference", Some("1"))]);
         let orig = Originate {
             endpoint: ep,
@@ -859,10 +766,11 @@ mod tests {
 
     #[test]
     fn originate_inline_display() {
-        let ep = Endpoint::Generic {
-            uri: "sofia/internal/123@example.com".into(),
+        let ep = Endpoint::Sofia(SofiaEndpoint {
+            profile: "internal".into(),
+            destination: "123@example.com".into(),
             variables: None,
-        };
+        });
         let apps = ApplicationList(vec![Application::new("conference", Some("1"))]);
         let orig = Originate {
             endpoint: ep,
@@ -881,23 +789,23 @@ mod tests {
 
     #[test]
     fn originate_from_string_round_trip() {
-        let input = "originate {test='variable with quote'}sofia/test 123";
+        let input = "originate {test='variable with quote'}sofia/internal/test@example.com 123";
         let orig: Originate = input
             .parse()
             .unwrap();
         assert!(orig
             .endpoint
             .to_string()
-            .contains("sofia/test"));
+            .contains("sofia/internal/test@example.com"));
     }
 
     #[test]
     fn originate_socket_app_quoted() {
-        let ep = Endpoint::Loopback {
-            uri: "9199".into(),
+        let ep = Endpoint::Loopback(LoopbackEndpoint {
+            extension: "9199".into(),
             context: "test".into(),
             variables: None,
-        };
+        });
         let apps = ApplicationList(vec![Application::new(
             "socket",
             Some("127.0.0.1:8040 async full"),
@@ -936,10 +844,11 @@ mod tests {
 
     #[test]
     fn originate_display_round_trip() {
-        let ep = Endpoint::Generic {
-            uri: "sofia/internal/123@example.com".into(),
+        let ep = Endpoint::Sofia(SofiaEndpoint {
+            profile: "internal".into(),
+            destination: "123@example.com".into(),
             variables: None,
-        };
+        });
         let apps = ApplicationList(vec![Application::new("conference", Some("1"))]);
         let orig = Originate {
             endpoint: ep,
@@ -1085,10 +994,11 @@ mod tests {
 
     #[test]
     fn serde_originate_round_trip() {
-        let ep = Endpoint::Generic {
-            uri: "sofia/internal/123@example.com".into(),
+        let ep = Endpoint::Sofia(SofiaEndpoint {
+            profile: "internal".into(),
+            destination: "123@example.com".into(),
             variables: None,
-        };
+        });
         let orig = Originate {
             endpoint: ep,
             applications: ApplicationList(vec![Application::new("park", None::<&str>)]),
@@ -1105,10 +1015,11 @@ mod tests {
 
     #[test]
     fn serde_originate_skips_none_fields() {
-        let ep = Endpoint::Generic {
-            uri: "sofia/internal/123@example.com".into(),
+        let ep = Endpoint::Sofia(SofiaEndpoint {
+            profile: "internal".into(),
+            destination: "123@example.com".into(),
             variables: None,
-        };
+        });
         let orig = Originate {
             endpoint: ep,
             applications: ApplicationList(vec![Application::new("park", None::<&str>)]),
@@ -1129,7 +1040,7 @@ mod tests {
     #[test]
     fn serde_originate_to_wire_format() {
         let json = r#"{
-            "endpoint": {"generic": {"uri": "sofia/internal/123@example.com"}},
+            "endpoint": {"sofia": {"profile": "internal", "destination": "123@example.com"}},
             "applications": [{"name": "park"}],
             "dialplan": "xml",
             "context": "default"

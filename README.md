@@ -205,12 +205,12 @@ use freeswitch_esl_tokio::commands::*;
 
 // Originate with typed endpoint
 let cmd = Originate {
-    endpoint: Endpoint::SofiaGateway {
+    endpoint: Endpoint::SofiaGateway(SofiaGateway {
         gateway: "my-provider".into(),
-        uri: "18005551212".into(),
+        destination: "18005551212".into(),
         profile: None,
         variables: None,
-    },
+    }),
     applications: ApplicationList(vec![
         Application::new("conference", Some("room1")),
     ]),

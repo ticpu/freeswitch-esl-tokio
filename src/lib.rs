@@ -77,15 +77,15 @@
 //! Typed builders for common API commands — no raw string assembly needed:
 //!
 //! ```rust
-//! use freeswitch_esl_tokio::{Originate, Endpoint, ApplicationList, Application};
+//! use freeswitch_esl_tokio::{Originate, Endpoint, SofiaGateway, ApplicationList, Application};
 //!
 //! let cmd = Originate {
-//!     endpoint: Endpoint::SofiaGateway {
-//!         uri: "18005551234".into(),
+//!     endpoint: Endpoint::SofiaGateway(SofiaGateway {
+//!         destination: "18005551234".into(),
 //!         profile: None,
 //!         gateway: "my_provider".into(),
 //!         variables: None,
-//!     },
+//!     }),
 //!     applications: ApplicationList(vec![
 //!         Application::new("park", None::<&str>),
 //!     ]),
