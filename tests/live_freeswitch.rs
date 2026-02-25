@@ -3,8 +3,10 @@
 //! These tests require FreeSWITCH ESL on 127.0.0.1:8022 with password ClueCon.
 //! Run with: cargo test --test live_freeswitch -- --ignored
 
+use freeswitch_esl_tokio::commands::{LoopbackEndpoint, UuidKill};
 use freeswitch_esl_tokio::{
-    EslClient, EslError, EslEvent, EslEventPriority, EslEventType, EventFormat, ReplyStatus,
+    Application, DialplanType, Endpoint, EslClient, EslError, EslEvent, EslEventPriority,
+    EslEventType, EventFormat, Originate, OriginateTarget, ReplyStatus,
 };
 use std::time::Duration;
 use tokio::time::Instant;
@@ -464,4 +466,149 @@ async fn live_channel_timetable_on_create() {
         "did not receive CHANNEL_CREATE with timetable for {}",
         uuid
     );
+}
+
+/// bgapi originate via the builder, wait for BACKGROUND_JOB, return the UUID.
+async fn bgapi_originate_ok(
+    client: &EslClient,
+    events: &mut freeswitch_esl_tokio::EslEventStream,
+    cmd: &Originate,
+) -> String {
+    let resp = client
+        .bgapi(&cmd.to_string())
+        .await
+        .expect("bgapi originate transport error");
+    let job_uuid = resp
+        .job_uuid()
+        .expect("bgapi should return Job-UUID header")
+        .to_string();
+
+    // Wait for the BACKGROUND_JOB event with our Job-UUID
+    let deadline = Instant::now() + Duration::from_secs(15);
+    while Instant::now() < deadline {
+        match tokio::time::timeout_at(deadline, events.recv()).await {
+            Ok(Some(Ok(evt))) => {
+                if evt.event_type() == Some(EslEventType::BackgroundJob)
+                    && evt.job_uuid() == Some(&job_uuid)
+                {
+                    let body = evt
+                        .body()
+                        .expect("BACKGROUND_JOB should have a body");
+                    assert!(body.starts_with("+OK"), "originate failed: {}", body.trim());
+                    return body
+                        .trim()
+                        .strip_prefix("+OK ")
+                        .expect("expected UUID after +OK")
+                        .to_string();
+                }
+            }
+            Ok(Some(Err(e))) => panic!("event error: {}", e),
+            Ok(None) => panic!("event stream closed"),
+            Err(_) => break,
+        }
+    }
+    panic!("timeout waiting for BACKGROUND_JOB {}", job_uuid);
+}
+
+/// Kill a channel by UUID, ignoring errors (channel may already be gone).
+async fn kill_channel(client: &EslClient, uuid: &str) {
+    let cmd = UuidKill {
+        uuid: uuid.into(),
+        cause: None,
+    };
+    let _ = client
+        .api(&cmd.to_string())
+        .await;
+}
+
+#[tokio::test]
+#[ignore]
+async fn live_originate_application_target() {
+    let (client, mut events) = connect().await;
+
+    client
+        .subscribe_events(EventFormat::Plain, &[EslEventType::BackgroundJob])
+        .await
+        .unwrap();
+
+    // Single application target: &park() holds the channel, bgapi returns immediately
+    let cmd = Originate {
+        endpoint: Endpoint::Loopback(LoopbackEndpoint {
+            extension: "9199".into(),
+            context: "test".into(),
+            variables: None,
+        }),
+        target: Application::simple("park").into(),
+        dialplan: None,
+        context: None,
+        cid_name: None,
+        cid_num: None,
+        timeout: None,
+    };
+
+    let uuid = bgapi_originate_ok(&client, &mut events, &cmd).await;
+    kill_channel(&client, &uuid).await;
+}
+
+#[tokio::test]
+#[ignore]
+async fn live_originate_extension_target() {
+    let (client, mut events) = connect().await;
+
+    client
+        .subscribe_events(EventFormat::Plain, &[EslEventType::BackgroundJob])
+        .await
+        .unwrap();
+
+    // Extension target: route through XML dialplan to 9199 (echo) in test context
+    let cmd = Originate {
+        endpoint: Endpoint::Loopback(LoopbackEndpoint {
+            extension: "9199".into(),
+            context: "test".into(),
+            variables: None,
+        }),
+        target: OriginateTarget::Extension("9199".into()),
+        dialplan: Some(DialplanType::Xml),
+        context: Some("test".into()),
+        cid_name: None,
+        cid_num: None,
+        timeout: None,
+    };
+
+    let uuid = bgapi_originate_ok(&client, &mut events, &cmd).await;
+    kill_channel(&client, &uuid).await;
+}
+
+#[tokio::test]
+#[ignore]
+async fn live_originate_inline_target() {
+    let (client, mut events) = connect().await;
+
+    client
+        .subscribe_events(EventFormat::Plain, &[EslEventType::BackgroundJob])
+        .await
+        .unwrap();
+
+    // Inline dialplan: answer then hangup (instant)
+    let cmd = Originate {
+        endpoint: Endpoint::Loopback(LoopbackEndpoint {
+            extension: "9199".into(),
+            context: "test".into(),
+            variables: None,
+        }),
+        target: OriginateTarget::InlineApplications(vec![
+            Application::simple("answer"),
+            Application::new("hangup", Some("NORMAL_CLEARING")),
+        ]),
+        dialplan: None,
+        context: None,
+        cid_name: None,
+        cid_num: None,
+        timeout: Some(5),
+    };
+
+    // answer+hangup is instant, bgapi returns the result quickly
+    let uuid = bgapi_originate_ok(&client, &mut events, &cmd).await;
+    // Channel already hung up, but kill just in case
+    kill_channel(&client, &uuid).await;
 }

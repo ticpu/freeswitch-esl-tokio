@@ -153,8 +153,7 @@ pub use channel::{
 pub use command::{CommandBuilder, EslResponse, ReplyStatus};
 pub use commands::{
     Application, DialString, DialplanType, Endpoint, Originate, OriginateError, OriginateTarget,
-    UuidAnswer, UuidBridge, UuidDeflect, UuidGetVar, UuidHold, UuidKill, UuidSendDtmf, UuidSetVar,
-    UuidTransfer, Variables, VariablesType,
+    Variables, VariablesType,
 };
 pub use connection::{
     ConnectionMode, ConnectionStatus, DisconnectReason, EslClient, EslConnectOptions,

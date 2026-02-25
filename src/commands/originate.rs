@@ -11,6 +11,13 @@ use serde::{Deserialize, Serialize};
 
 use super::{originate_quote, originate_split, originate_unquote};
 
+/// FreeSWITCH keyword for omitted positional arguments.
+///
+/// `switch_separate_string` converts `"undef"` to NULL, making it the
+/// canonical placeholder when a later positional arg forces earlier ones
+/// to be present on the wire.
+const UNDEF: &str = "undef";
+
 /// FreeSWITCH dialplan type for originate commands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -420,6 +427,9 @@ impl fmt::Display for Originate {
             originate_quote(&target_str)
         )?;
 
+        // Positional args: dialplan, context, cid_name, cid_num, timeout.
+        // FreeSWITCH parses by position, so if a later arg is present,
+        // all preceding ones must be emitted with defaults.
         let dialplan = match &self.target {
             OriginateTarget::InlineApplications(_) => Some(
                 self.dialplan
@@ -427,17 +437,47 @@ impl fmt::Display for Originate {
             ),
             _ => self.dialplan,
         };
-        if let Some(dp) = dialplan {
-            write!(f, " {}", dp)?;
+        let has_ctx = self
+            .context
+            .is_some();
+        let has_name = self
+            .cid_name
+            .is_some();
+        let has_num = self
+            .cid_num
+            .is_some();
+        let has_timeout = self
+            .timeout
+            .is_some();
+
+        if dialplan.is_some() || has_ctx || has_name || has_num || has_timeout {
+            match dialplan.unwrap_or(DialplanType::Xml) {
+                DialplanType::Inline => write!(f, " inline")?,
+                DialplanType::Xml => write!(f, " XML")?,
+            }
         }
-        if let Some(ref ctx) = self.context {
-            write!(f, " {}", ctx)?;
+        if has_ctx || has_name || has_num || has_timeout {
+            write!(
+                f,
+                " {}",
+                self.context
+                    .as_deref()
+                    .unwrap_or("default")
+            )?;
         }
-        if let Some(ref name) = self.cid_name {
-            write!(f, " {}", name)?;
+        if has_name || has_num || has_timeout {
+            let name = self
+                .cid_name
+                .as_deref()
+                .unwrap_or(UNDEF);
+            write!(f, " {}", originate_quote(name))?;
         }
-        if let Some(ref num) = self.cid_num {
-            write!(f, " {}", num)?;
+        if has_num || has_timeout {
+            let num = self
+                .cid_num
+                .as_deref()
+                .unwrap_or(UNDEF);
+            write!(f, " {}", originate_quote(num))?;
         }
         if let Some(timeout) = self.timeout {
             write!(f, " {}", timeout)?;
@@ -489,12 +529,22 @@ impl FromStr for Originate {
             None
         };
         let cid_name = if !args.is_empty() {
-            Some(args.remove(0))
+            let v = args.remove(0);
+            if v.eq_ignore_ascii_case(UNDEF) {
+                None
+            } else {
+                Some(v)
+            }
         } else {
             None
         };
         let cid_num = if !args.is_empty() {
-            Some(args.remove(0))
+            let v = args.remove(0);
+            if v.eq_ignore_ascii_case(UNDEF) {
+                None
+            } else {
+                Some(v)
+            }
         } else {
             None
         };
@@ -1237,7 +1287,7 @@ mod tests {
         // doesn't interpret "30" as the dialplan name
         assert_eq!(
             cmd.to_string(),
-            "originate loopback/9199/test &park() XML default '' '' 30"
+            "originate loopback/9199/test &park() XML default undef undef 30"
         );
     }
 
@@ -1258,7 +1308,7 @@ mod tests {
         };
         assert_eq!(
             cmd.to_string(),
-            "originate loopback/9199/test &park() XML default '' 5551234"
+            "originate loopback/9199/test &park() XML default undef 5551234"
         );
     }
 
