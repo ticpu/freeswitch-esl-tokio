@@ -6,7 +6,7 @@
 use freeswitch_esl_tokio::commands::{LoopbackEndpoint, UuidKill};
 use freeswitch_esl_tokio::{
     Application, DialplanType, Endpoint, EslClient, EslError, EslEvent, EslEventPriority,
-    EslEventType, EventFormat, EventHeader, Originate, OriginateTarget, ReplyStatus,
+    EslEventType, EventFormat, EventHeader, HeaderLookup, Originate, OriginateTarget, ReplyStatus,
 };
 use std::time::Duration;
 use tokio::time::Instant;

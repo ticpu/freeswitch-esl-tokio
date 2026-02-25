@@ -5,7 +5,7 @@
 //! Usage: cargo run --example event_listener
 
 use freeswitch_esl_tokio::{
-    EslClient, EslError, EslEventType, EventFormat, EventHeader, DEFAULT_ESL_PORT,
+    EslClient, EslError, EslEventType, EventFormat, EventHeader, HeaderLookup, DEFAULT_ESL_PORT,
 };
 use std::collections::HashMap;
 use tracing::{debug, error, info};
@@ -91,10 +91,11 @@ fn process_event(
                 let destination = event
                     .header(EventHeader::CallerDestinationNumber)
                     .unwrap_or("Unknown");
-                let direction = event
-                    .call_direction()
-                    .map(|d| d.to_string())
-                    .unwrap_or_else(|| "Unknown".into());
+                let direction = match event.call_direction() {
+                    Ok(Some(d)) => d.to_string(),
+                    Ok(None) => "Unknown".into(),
+                    Err(e) => format!("!ERR({})", e),
+                };
 
                 let call_info = CallInfo {
                     caller_id: caller_id.to_string(),

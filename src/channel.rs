@@ -465,6 +465,7 @@ impl ChannelTimetable {
 mod tests {
     use super::*;
     use crate::event::EslEvent;
+    use crate::lookup::HeaderLookup;
 
     // --- ChannelState tests ---
 

@@ -443,6 +443,7 @@ impl Default for EslParser {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::lookup::HeaderLookup;
 
     #[test]
     fn test_parse_headers() {

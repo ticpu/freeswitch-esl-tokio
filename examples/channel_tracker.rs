@@ -33,10 +33,14 @@ fn short_uuid(uuid: &str) -> &str {
     &uuid[..8.min(uuid.len())]
 }
 
-fn display_or<T: Display>(opt: Option<T>) -> String {
-    match opt {
-        Some(v) => v.to_string(),
-        None => "-".into(),
+fn display_or<T: Display, E: Display>(result: Result<Option<T>, E>) -> String {
+    match result {
+        Ok(Some(v)) => v.to_string(),
+        Ok(None) => "-".into(),
+        Err(e) => {
+            warn!("parse error: {}", e);
+            "!ERR".into()
+        }
     }
 }
 
@@ -347,7 +351,7 @@ impl ChannelTracker {
                 .header(EventHeader::CallerDestinationNumber)
                 .unwrap_or("-");
             let mut flags = String::new();
-            if ch.call_state() == Some(CallState::Held) {
+            if ch.call_state() == Ok(Some(CallState::Held)) {
                 flags.push_str("[HELD]");
             }
             if ch

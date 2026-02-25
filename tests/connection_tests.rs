@@ -4,7 +4,7 @@ mod mock_server;
 
 use freeswitch_esl_tokio::{
     ConnectionStatus, DisconnectReason, EslClient, EslError, EslEvent, EslEventStream,
-    EslEventType, EventFormat, EventHeader,
+    EslEventType, EventFormat, EventHeader, HeaderLookup,
 };
 use mock_server::{setup_connected_pair, MockClient, MockEslServer};
 use std::collections::HashMap;

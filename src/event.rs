@@ -1,6 +1,5 @@
 //! ESL event types and structures
 
-use crate::channel::{AnswerState, CallDirection, CallState, ChannelState};
 use crate::headers::EventHeader;
 use crate::lookup::HeaderLookup;
 use crate::variables::EslArray;
@@ -397,13 +396,6 @@ impl EslEvent {
         self.set_header(EventHeader::Priority.as_str(), priority.to_string());
     }
 
-    /// Parse the `priority` header value.
-    pub fn priority(&self) -> Option<EslEventPriority> {
-        self.header(EventHeader::Priority)?
-            .parse()
-            .ok()
-    }
-
     /// Append a value to a multi-value header (PUSH semantics).
     ///
     /// If the header doesn't exist, sets it as a plain value.
@@ -453,115 +445,6 @@ impl EslEvent {
                 self.set_header(name, arr.to_string());
             }
         }
-    }
-
-    /// `Unique-ID` header, falling back to `Caller-Unique-ID`.
-    pub fn unique_id(&self) -> Option<&str> {
-        self.header(EventHeader::UniqueId)
-            .or_else(|| self.header(EventHeader::CallerUniqueId))
-    }
-
-    /// `Job-UUID` header from `bgapi` `BACKGROUND_JOB` events.
-    pub fn job_uuid(&self) -> Option<&str> {
-        self.header(EventHeader::JobUuid)
-    }
-
-    /// `Channel-Name` header (e.g. `sofia/internal/1000@domain`).
-    pub fn channel_name(&self) -> Option<&str> {
-        self.header(EventHeader::ChannelName)
-    }
-
-    /// `Caller-Caller-ID-Number` header.
-    pub fn caller_id_number(&self) -> Option<&str> {
-        self.header(EventHeader::CallerCallerIdNumber)
-    }
-
-    /// `Caller-Caller-ID-Name` header.
-    pub fn caller_id_name(&self) -> Option<&str> {
-        self.header(EventHeader::CallerCallerIdName)
-    }
-
-    /// `Hangup-Cause` header (e.g. `NORMAL_CLEARING`, `USER_BUSY`).
-    pub fn hangup_cause(&self) -> Option<&str> {
-        self.header(EventHeader::HangupCause)
-    }
-
-    /// Parse the `Channel-State` header into a [`ChannelState`].
-    pub fn channel_state(&self) -> Option<ChannelState> {
-        self.header(EventHeader::ChannelState)?
-            .parse()
-            .ok()
-    }
-
-    /// Parse the `Channel-State-Number` header into a [`ChannelState`].
-    pub fn channel_state_number(&self) -> Option<ChannelState> {
-        let n: u8 = self
-            .header(EventHeader::ChannelStateNumber)?
-            .parse()
-            .ok()?;
-        ChannelState::from_number(n)
-    }
-
-    /// Parse the `Channel-Call-State` header into a [`CallState`].
-    pub fn call_state(&self) -> Option<CallState> {
-        self.header(EventHeader::ChannelCallState)?
-            .parse()
-            .ok()
-    }
-
-    /// Parse the `Answer-State` header into an [`AnswerState`].
-    pub fn answer_state(&self) -> Option<AnswerState> {
-        self.header(EventHeader::AnswerState)?
-            .parse()
-            .ok()
-    }
-
-    /// Parse the `Call-Direction` header into a [`CallDirection`].
-    pub fn call_direction(&self) -> Option<CallDirection> {
-        self.header(EventHeader::CallDirection)?
-            .parse()
-            .ok()
-    }
-
-    /// Extract timetable from timestamp headers with the given prefix.
-    ///
-    /// Returns `Ok(None)` if no timestamp headers with this prefix are present.
-    /// Returns `Err` if a header is present but contains an invalid value.
-    /// Common prefixes: `"Caller"`, `"Other-Leg"`, `"Channel"`.
-    pub fn timetable(
-        &self,
-        prefix: &str,
-    ) -> Result<Option<crate::channel::ChannelTimetable>, crate::channel::ParseTimetableError> {
-        crate::channel::ChannelTimetable::from_lookup(prefix, |key| self.header_str(key))
-    }
-
-    /// Caller-leg channel timetable (`Caller-*-Time` headers).
-    pub fn caller_timetable(
-        &self,
-    ) -> Result<Option<crate::channel::ChannelTimetable>, crate::channel::ParseTimetableError> {
-        self.timetable("Caller")
-    }
-
-    /// Other-leg channel timetable (`Other-Leg-*-Time` headers).
-    pub fn other_leg_timetable(
-        &self,
-    ) -> Result<Option<crate::channel::ChannelTimetable>, crate::channel::ParseTimetableError> {
-        self.timetable("Other-Leg")
-    }
-
-    /// `Event-Subclass` header for `CUSTOM` events (e.g. `sofia::register`).
-    pub fn event_subclass(&self) -> Option<&str> {
-        self.header(EventHeader::EventSubclass)
-    }
-
-    /// Look up a channel variable by its typed enum variant.
-    ///
-    /// Checks the `variable_{name}` header, which is how FreeSWITCH exposes
-    /// channel variables in events. For variables not covered by a typed enum,
-    /// use [`variable_str()`](Self::variable_str).
-    pub fn variable(&self, name: impl crate::variables::VariableName) -> Option<&str> {
-        let key = format!("variable_{}", name.as_str());
-        self.header_str(&key)
     }
 
     /// Check whether this event matches the given type.
@@ -861,7 +744,12 @@ mod tests {
     fn test_set_priority_normal() {
         let mut event = EslEvent::new();
         event.set_priority(EslEventPriority::Normal);
-        assert_eq!(event.priority(), Some(EslEventPriority::Normal));
+        assert_eq!(
+            event
+                .priority()
+                .unwrap(),
+            Some(EslEventPriority::Normal)
+        );
         assert_eq!(event.header(EventHeader::Priority), Some("NORMAL"));
     }
 
@@ -869,7 +757,12 @@ mod tests {
     fn test_set_priority_high() {
         let mut event = EslEvent::new();
         event.set_priority(EslEventPriority::High);
-        assert_eq!(event.priority(), Some(EslEventPriority::High));
+        assert_eq!(
+            event
+                .priority()
+                .unwrap(),
+            Some(EslEventPriority::High)
+        );
         assert_eq!(event.header(EventHeader::Priority), Some("HIGH"));
     }
 
@@ -1010,51 +903,106 @@ mod tests {
         );
     }
 
-    // --- EslEvent accessor tests ---
+    // --- EslEvent accessor tests (via HeaderLookup trait) ---
 
     #[test]
     fn test_event_channel_state_accessor() {
+        use crate::channel::ChannelState;
         let mut event = EslEvent::new();
         event.set_header("Channel-State", "CS_EXECUTE");
-        assert_eq!(event.channel_state(), Some(ChannelState::CsExecute));
+        assert_eq!(
+            event
+                .channel_state()
+                .unwrap(),
+            Some(ChannelState::CsExecute)
+        );
     }
 
     #[test]
     fn test_event_channel_state_number_accessor() {
+        use crate::channel::ChannelState;
         let mut event = EslEvent::new();
         event.set_header("Channel-State-Number", "4");
-        assert_eq!(event.channel_state_number(), Some(ChannelState::CsExecute));
+        assert_eq!(
+            event
+                .channel_state_number()
+                .unwrap(),
+            Some(ChannelState::CsExecute)
+        );
     }
 
     #[test]
     fn test_event_call_state_accessor() {
+        use crate::channel::CallState;
         let mut event = EslEvent::new();
         event.set_header("Channel-Call-State", "ACTIVE");
-        assert_eq!(event.call_state(), Some(CallState::Active));
+        assert_eq!(
+            event
+                .call_state()
+                .unwrap(),
+            Some(CallState::Active)
+        );
     }
 
     #[test]
     fn test_event_answer_state_accessor() {
+        use crate::channel::AnswerState;
         let mut event = EslEvent::new();
         event.set_header("Answer-State", "answered");
-        assert_eq!(event.answer_state(), Some(AnswerState::Answered));
+        assert_eq!(
+            event
+                .answer_state()
+                .unwrap(),
+            Some(AnswerState::Answered)
+        );
     }
 
     #[test]
     fn test_event_call_direction_accessor() {
+        use crate::channel::CallDirection;
         let mut event = EslEvent::new();
         event.set_header("Call-Direction", "inbound");
-        assert_eq!(event.call_direction(), Some(CallDirection::Inbound));
+        assert_eq!(
+            event
+                .call_direction()
+                .unwrap(),
+            Some(CallDirection::Inbound)
+        );
     }
 
     #[test]
     fn test_event_typed_accessors_missing_headers() {
         let event = EslEvent::new();
-        assert_eq!(event.channel_state(), None);
-        assert_eq!(event.channel_state_number(), None);
-        assert_eq!(event.call_state(), None);
-        assert_eq!(event.answer_state(), None);
-        assert_eq!(event.call_direction(), None);
+        assert_eq!(
+            event
+                .channel_state()
+                .unwrap(),
+            None
+        );
+        assert_eq!(
+            event
+                .channel_state_number()
+                .unwrap(),
+            None
+        );
+        assert_eq!(
+            event
+                .call_state()
+                .unwrap(),
+            None
+        );
+        assert_eq!(
+            event
+                .answer_state()
+                .unwrap(),
+            None
+        );
+        assert_eq!(
+            event
+                .call_direction()
+                .unwrap(),
+            None
+        );
     }
 
     #[test]
@@ -1065,10 +1013,20 @@ mod tests {
         event.set_header("Channel-Call-State", "BOGUS");
         event.set_header("Answer-State", "bogus");
         event.set_header("Call-Direction", "bogus");
-        assert_eq!(event.channel_state(), None);
-        assert_eq!(event.channel_state_number(), None);
-        assert_eq!(event.call_state(), None);
-        assert_eq!(event.answer_state(), None);
-        assert_eq!(event.call_direction(), None);
+        assert!(event
+            .channel_state()
+            .is_err());
+        assert!(event
+            .channel_state_number()
+            .is_err());
+        assert!(event
+            .call_state()
+            .is_err());
+        assert!(event
+            .answer_state()
+            .is_err());
+        assert!(event
+            .call_direction()
+            .is_err());
     }
 }

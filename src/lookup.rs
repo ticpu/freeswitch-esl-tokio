@@ -6,9 +6,10 @@
 //! everything else for free.
 
 use crate::channel::{
-    AnswerState, CallDirection, CallState, ChannelState, ChannelTimetable, ParseTimetableError,
+    AnswerState, CallDirection, CallState, ChannelState, ChannelTimetable, ParseAnswerStateError,
+    ParseCallDirectionError, ParseCallStateError, ParseChannelStateError, ParseTimetableError,
 };
-use crate::event::EslEventPriority;
+use crate::event::{EslEventPriority, ParsePriorityError};
 use crate::headers::EventHeader;
 use crate::variables::VariableName;
 
@@ -40,8 +41,8 @@ use crate::variables::VariableName;
 /// map.insert("variable_read_codec".into(), "PCMU".into());
 /// let store = MyStore(map);
 ///
-/// // Typed accessor from the trait:
-/// assert!(store.channel_state().is_some());
+/// // Typed accessor from the trait (returns Result<Option<T>, E>):
+/// assert!(store.channel_state().unwrap().is_some());
 ///
 /// // Enum-based lookups:
 /// assert_eq!(store.header(EventHeader::ChannelState), Some("CS_EXECUTE"));
@@ -103,47 +104,70 @@ pub trait HeaderLookup {
     }
 
     /// Parse the `Channel-State` header into a [`ChannelState`].
-    fn channel_state(&self) -> Option<ChannelState> {
-        self.header(EventHeader::ChannelState)?
-            .parse()
-            .ok()
+    ///
+    /// Returns `Ok(None)` if the header is absent, `Err` if present but unparseable.
+    fn channel_state(&self) -> Result<Option<ChannelState>, ParseChannelStateError> {
+        match self.header(EventHeader::ChannelState) {
+            Some(s) => Ok(Some(s.parse()?)),
+            None => Ok(None),
+        }
     }
 
     /// Parse the `Channel-State-Number` header into a [`ChannelState`].
-    fn channel_state_number(&self) -> Option<ChannelState> {
-        let n: u8 = self
-            .header(EventHeader::ChannelStateNumber)?
-            .parse()
-            .ok()?;
-        ChannelState::from_number(n)
+    ///
+    /// Returns `Ok(None)` if the header is absent, `Err` if present but unparseable.
+    fn channel_state_number(&self) -> Result<Option<ChannelState>, ParseChannelStateError> {
+        match self.header(EventHeader::ChannelStateNumber) {
+            Some(s) => {
+                let n: u8 = s
+                    .parse()
+                    .map_err(|_| ParseChannelStateError(s.to_string()))?;
+                ChannelState::from_number(n)
+                    .ok_or_else(|| ParseChannelStateError(s.to_string()))
+                    .map(Some)
+            }
+            None => Ok(None),
+        }
     }
 
     /// Parse the `Channel-Call-State` header into a [`CallState`].
-    fn call_state(&self) -> Option<CallState> {
-        self.header(EventHeader::ChannelCallState)?
-            .parse()
-            .ok()
+    ///
+    /// Returns `Ok(None)` if the header is absent, `Err` if present but unparseable.
+    fn call_state(&self) -> Result<Option<CallState>, ParseCallStateError> {
+        match self.header(EventHeader::ChannelCallState) {
+            Some(s) => Ok(Some(s.parse()?)),
+            None => Ok(None),
+        }
     }
 
     /// Parse the `Answer-State` header into an [`AnswerState`].
-    fn answer_state(&self) -> Option<AnswerState> {
-        self.header(EventHeader::AnswerState)?
-            .parse()
-            .ok()
+    ///
+    /// Returns `Ok(None)` if the header is absent, `Err` if present but unparseable.
+    fn answer_state(&self) -> Result<Option<AnswerState>, ParseAnswerStateError> {
+        match self.header(EventHeader::AnswerState) {
+            Some(s) => Ok(Some(s.parse()?)),
+            None => Ok(None),
+        }
     }
 
     /// Parse the `Call-Direction` header into a [`CallDirection`].
-    fn call_direction(&self) -> Option<CallDirection> {
-        self.header(EventHeader::CallDirection)?
-            .parse()
-            .ok()
+    ///
+    /// Returns `Ok(None)` if the header is absent, `Err` if present but unparseable.
+    fn call_direction(&self) -> Result<Option<CallDirection>, ParseCallDirectionError> {
+        match self.header(EventHeader::CallDirection) {
+            Some(s) => Ok(Some(s.parse()?)),
+            None => Ok(None),
+        }
     }
 
     /// Parse the `priority` header value.
-    fn priority(&self) -> Option<EslEventPriority> {
-        self.header(EventHeader::Priority)?
-            .parse()
-            .ok()
+    ///
+    /// Returns `Ok(None)` if the header is absent, `Err` if present but unparseable.
+    fn priority(&self) -> Result<Option<EslEventPriority>, ParsePriorityError> {
+        match self.header(EventHeader::Priority) {
+            Some(s) => Ok(Some(s.parse()?)),
+            None => Ok(None),
+        }
     }
 
     /// Extract timetable from timestamp headers with the given prefix.
@@ -275,37 +299,61 @@ mod tests {
     #[test]
     fn channel_state_typed() {
         let s = store_with(&[("Channel-State", "CS_EXECUTE")]);
-        assert_eq!(s.channel_state(), Some(ChannelState::CsExecute));
+        assert_eq!(
+            s.channel_state()
+                .unwrap(),
+            Some(ChannelState::CsExecute)
+        );
     }
 
     #[test]
     fn channel_state_number_typed() {
         let s = store_with(&[("Channel-State-Number", "4")]);
-        assert_eq!(s.channel_state_number(), Some(ChannelState::CsExecute));
+        assert_eq!(
+            s.channel_state_number()
+                .unwrap(),
+            Some(ChannelState::CsExecute)
+        );
     }
 
     #[test]
     fn call_state_typed() {
         let s = store_with(&[("Channel-Call-State", "ACTIVE")]);
-        assert_eq!(s.call_state(), Some(CallState::Active));
+        assert_eq!(
+            s.call_state()
+                .unwrap(),
+            Some(CallState::Active)
+        );
     }
 
     #[test]
     fn answer_state_typed() {
         let s = store_with(&[("Answer-State", "answered")]);
-        assert_eq!(s.answer_state(), Some(AnswerState::Answered));
+        assert_eq!(
+            s.answer_state()
+                .unwrap(),
+            Some(AnswerState::Answered)
+        );
     }
 
     #[test]
     fn call_direction_typed() {
         let s = store_with(&[("Call-Direction", "inbound")]);
-        assert_eq!(s.call_direction(), Some(CallDirection::Inbound));
+        assert_eq!(
+            s.call_direction()
+                .unwrap(),
+            Some(CallDirection::Inbound)
+        );
     }
 
     #[test]
     fn priority_typed() {
         let s = store_with(&[("priority", "HIGH")]);
-        assert_eq!(s.priority(), Some(EslEventPriority::High));
+        assert_eq!(
+            s.priority()
+                .unwrap(),
+            Some(EslEventPriority::High)
+        );
     }
 
     #[test]
@@ -355,12 +403,36 @@ mod tests {
     #[test]
     fn missing_headers_return_none() {
         let s = store_with(&[]);
-        assert_eq!(s.channel_state(), None);
-        assert_eq!(s.channel_state_number(), None);
-        assert_eq!(s.call_state(), None);
-        assert_eq!(s.answer_state(), None);
-        assert_eq!(s.call_direction(), None);
-        assert_eq!(s.priority(), None);
+        assert_eq!(
+            s.channel_state()
+                .unwrap(),
+            None
+        );
+        assert_eq!(
+            s.channel_state_number()
+                .unwrap(),
+            None
+        );
+        assert_eq!(
+            s.call_state()
+                .unwrap(),
+            None
+        );
+        assert_eq!(
+            s.answer_state()
+                .unwrap(),
+            None
+        );
+        assert_eq!(
+            s.call_direction()
+                .unwrap(),
+            None
+        );
+        assert_eq!(
+            s.priority()
+                .unwrap(),
+            None
+        );
         assert_eq!(s.hangup_cause(), None);
         assert_eq!(s.channel_name(), None);
         assert_eq!(s.caller_id_number(), None);
@@ -370,7 +442,7 @@ mod tests {
     }
 
     #[test]
-    fn invalid_values_return_none() {
+    fn invalid_values_return_err() {
         let s = store_with(&[
             ("Channel-State", "BOGUS"),
             ("Channel-State-Number", "999"),
@@ -379,11 +451,23 @@ mod tests {
             ("Call-Direction", "bogus"),
             ("priority", "BOGUS"),
         ]);
-        assert_eq!(s.channel_state(), None);
-        assert_eq!(s.channel_state_number(), None);
-        assert_eq!(s.call_state(), None);
-        assert_eq!(s.answer_state(), None);
-        assert_eq!(s.call_direction(), None);
-        assert_eq!(s.priority(), None);
+        assert!(s
+            .channel_state()
+            .is_err());
+        assert!(s
+            .channel_state_number()
+            .is_err());
+        assert!(s
+            .call_state()
+            .is_err());
+        assert!(s
+            .answer_state()
+            .is_err());
+        assert!(s
+            .call_direction()
+            .is_err());
+        assert!(s
+            .priority()
+            .is_err());
     }
 }

@@ -105,7 +105,7 @@
 //! ## Event Subscription
 //!
 //! ```rust,no_run
-//! use freeswitch_esl_tokio::{EslClient, EslEventType, EventFormat};
+//! use freeswitch_esl_tokio::{EslClient, EslEventType, EventFormat, HeaderLookup};
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -118,7 +118,7 @@
 //!
 //!     while let Some(Ok(event)) = events.recv().await {
 //!         // Typed accessors parse headers into enums automatically
-//!         if let Some(state) = event.channel_state() {
+//!         if let Ok(Some(state)) = event.channel_state() {
 //!             println!("{:?}: {}", event.event_type(), state);
 //!         }
 //!     }
@@ -147,7 +147,8 @@ pub(crate) mod protocol;
 
 pub use app::dptools::AppCommand;
 pub use channel::{
-    AnswerState, CallDirection, CallState, ChannelState, ChannelTimetable, ParseTimetableError,
+    AnswerState, CallDirection, CallState, ChannelState, ChannelTimetable, ParseAnswerStateError,
+    ParseCallDirectionError, ParseCallStateError, ParseChannelStateError, ParseTimetableError,
     TimetablePrefix,
 };
 pub use command::{CommandBuilder, EslResponse, ReplyStatus};
@@ -161,7 +162,7 @@ pub use connection::{
 };
 pub use constants::DEFAULT_ESL_PORT;
 pub use error::{EslError, EslResult};
-pub use event::{EslEvent, EslEventPriority, EslEventType, EventFormat};
+pub use event::{EslEvent, EslEventPriority, EslEventType, EventFormat, ParsePriorityError};
 pub use headers::{EventHeader, ParseEventHeaderError};
 pub use lookup::HeaderLookup;
 pub use variables::{
