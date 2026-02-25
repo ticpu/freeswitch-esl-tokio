@@ -328,6 +328,12 @@ impl ApplicationList {
         &self,
         dialplan: &DialplanType,
     ) -> Result<String, OriginateError> {
+        if self
+            .0
+            .is_empty()
+        {
+            return Err(OriginateError::NoApplications);
+        }
         match dialplan {
             DialplanType::Inline => {
                 let parts: Vec<String> = self
@@ -489,6 +495,9 @@ pub enum OriginateError {
     /// A single-quoted token was never closed.
     #[error("unclosed quote at: {0}")]
     UnclosedQuote(String),
+    /// At least one application is required.
+    #[error("no applications specified")]
+    NoApplications,
     /// XML dialplan only allows one application; multiple were given.
     #[error("too many applications for non-inline dialplan")]
     TooManyApplications,
@@ -706,13 +715,11 @@ mod tests {
     }
 
     #[test]
-    fn application_list_empty_inline() {
+    fn application_list_empty_inline_errors() {
         let list = ApplicationList(vec![]);
-        assert_eq!(
-            list.to_string_with_dialplan(&DialplanType::Inline)
-                .unwrap(),
-            ""
-        );
+        assert!(list
+            .to_string_with_dialplan(&DialplanType::Inline)
+            .is_err());
     }
 
     #[test]
