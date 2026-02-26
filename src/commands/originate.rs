@@ -19,7 +19,7 @@ use super::{originate_quote, originate_split, originate_unquote};
 const UNDEF: &str = "undef";
 
 /// FreeSWITCH dialplan type for originate commands.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 #[non_exhaustive]
 pub enum DialplanType {
@@ -38,8 +38,20 @@ impl fmt::Display for DialplanType {
     }
 }
 
+/// Error returned when parsing an invalid dialplan type string.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParseDialplanTypeError(pub String);
+
+impl fmt::Display for ParseDialplanTypeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "unknown dialplan type: {}", self.0)
+    }
+}
+
+impl std::error::Error for ParseDialplanTypeError {}
+
 impl FromStr for DialplanType {
-    type Err = OriginateError;
+    type Err = ParseDialplanTypeError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.eq_ignore_ascii_case("inline") {
@@ -47,10 +59,7 @@ impl FromStr for DialplanType {
         } else if s.eq_ignore_ascii_case("xml") {
             Ok(Self::Xml)
         } else {
-            Err(OriginateError::ParseError(format!(
-                "unknown dialplan type: {}",
-                s
-            )))
+            Err(ParseDialplanTypeError(s.to_string()))
         }
     }
 }
@@ -348,7 +357,8 @@ impl Application {
                     .name
                     .clone(),
             },
-            DialplanType::Xml => {
+            // XML and custom dialplans use the &app(args) syntax.
+            _ => {
                 let args = self
                     .args
                     .as_deref()
@@ -591,8 +601,9 @@ impl Originate {
     }
 
     /// The dialplan type, if explicitly set.
-    pub fn dialplan_type(&self) -> Option<DialplanType> {
+    pub fn dialplan_type(&self) -> Option<&DialplanType> {
         self.dialplan
+            .as_ref()
     }
 
     /// The dialplan context, if set.
@@ -665,10 +676,11 @@ impl fmt::Display for Originate {
             .is_some();
 
         if dialplan.is_some() || has_ctx || has_name || has_num || has_timeout {
-            match dialplan.unwrap_or(DialplanType::Xml) {
-                DialplanType::Inline => write!(f, " inline")?,
-                DialplanType::Xml => write!(f, " XML")?,
-            }
+            let dp = dialplan
+                .as_ref()
+                .cloned()
+                .unwrap_or(DialplanType::Xml);
+            write!(f, " {}", dp)?;
         }
         if has_ctx || has_name || has_num || has_timeout {
             write!(
@@ -1597,7 +1609,7 @@ mod tests {
             .timeout(30);
 
         assert!(matches!(cmd.target(), OriginateTarget::Extension(ref e) if e == "1000"));
-        assert_eq!(cmd.dialplan_type(), Some(DialplanType::Xml));
+        assert_eq!(cmd.dialplan_type(), Some(&DialplanType::Xml));
         assert_eq!(cmd.context_str(), Some("default"));
         assert_eq!(cmd.caller_id_name(), Some("Alice"));
         assert_eq!(cmd.caller_id_number(), Some("5551234"));

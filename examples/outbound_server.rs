@@ -184,7 +184,9 @@ async fn handle_dtmf_input(
                 .send_command(AppCommand::playback("voicemail/vm-goodbye.wav"))
                 .await?;
             client
-                .send_command(AppCommand::hangup(Some("NORMAL_CLEARING")))
+                .send_command(AppCommand::hangup(Some(
+                    freeswitch_esl_tokio::HangupCause::NormalClearing,
+                )))
                 .await?;
         }
         "" => {

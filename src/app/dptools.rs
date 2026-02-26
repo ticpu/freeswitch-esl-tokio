@@ -2,7 +2,9 @@
 
 use std::fmt;
 
+use crate::channel::HangupCause;
 use crate::command::EslCommand;
+use crate::commands::originate::DialplanType;
 
 /// Constructors for common dptools application commands.
 ///
@@ -21,8 +23,8 @@ impl AppCommand {
         }
     }
 
-    /// `cause`: hangup cause string (e.g. `NORMAL_CLEARING`). `None` uses default.
-    pub fn hangup(cause: Option<&str>) -> EslCommand {
+    /// Hang up the channel with an optional cause code.
+    pub fn hangup(cause: Option<HangupCause>) -> EslCommand {
         EslCommand::Execute {
             app: "hangup".to_string(),
             args: cause.map(|c| c.to_string()),
@@ -70,14 +72,18 @@ impl AppCommand {
     /// Transfer the channel to another dialplan extension.
     ///
     /// FreeSWITCH transfer args are positional: `extension [dialplan [context]]`.
-    /// When `context` is set but `dialplan` is `None`, the default `"XML"` is
+    /// When `context` is set but `dialplan` is `None`, the default `XML` is
     /// emitted to fill the positional gap.
-    pub fn transfer(extension: &str, dialplan: Option<&str>, context: Option<&str>) -> EslCommand {
+    pub fn transfer(
+        extension: &str,
+        dialplan: Option<DialplanType>,
+        context: Option<&str>,
+    ) -> EslCommand {
         let mut args = extension.to_string();
         let has_ctx = context.is_some();
         if let Some(dp) = dialplan {
             args.push(' ');
-            args.push_str(dp);
+            args.push_str(&dp.to_string());
         } else if has_ctx {
             args.push_str(" XML");
         }
@@ -113,13 +119,13 @@ mod tests {
 
     #[test]
     fn transfer_with_dialplan() {
-        let cmd = AppCommand::transfer("1000", Some("XML"), None);
+        let cmd = AppCommand::transfer("1000", Some(DialplanType::Xml), None);
         assert_eq!(extract_args(&cmd), Some("1000 XML"));
     }
 
     #[test]
     fn transfer_with_dialplan_and_context() {
-        let cmd = AppCommand::transfer("1000", Some("XML"), Some("myctx"));
+        let cmd = AppCommand::transfer("1000", Some(DialplanType::Xml), Some("myctx"));
         assert_eq!(extract_args(&cmd), Some("1000 XML myctx"));
     }
 

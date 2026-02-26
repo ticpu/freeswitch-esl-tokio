@@ -14,7 +14,7 @@ mod user;
 
 pub use audio::AudioEndpoint;
 pub use error::ErrorEndpoint;
-pub use group_call::GroupCall;
+pub use group_call::{GroupCall, GroupCallOrder, ParseGroupCallOrderError};
 pub use loopback::LoopbackEndpoint;
 pub use sofia::{SofiaContact, SofiaEndpoint, SofiaGateway};
 pub use user::UserEndpoint;
@@ -103,8 +103,10 @@ pub enum Endpoint {
     /// `error/{cause}`
     Error(ErrorEndpoint),
     /// `portaudio[/{destination}]`
+    #[serde(rename = "portaudio")]
     PortAudio(AudioEndpoint),
     /// `pulseaudio[/{destination}]`
+    #[serde(rename = "pulseaudio")]
     PulseAudio(AudioEndpoint),
     /// `alsa[/{destination}]`
     Alsa(AudioEndpoint),
@@ -480,9 +482,7 @@ mod tests {
 
     #[test]
     fn dial_string_error_endpoint_no_variables() {
-        let ep = ErrorEndpoint {
-            cause: "user_busy".into(),
-        };
+        let ep = ErrorEndpoint::new(crate::channel::HangupCause::UserBusy);
         assert!(ep
             .variables()
             .is_none());
@@ -576,7 +576,7 @@ mod tests {
         let ep = Endpoint::GroupCall(GroupCall {
             group: "support".into(),
             domain: "domain.com".into(),
-            order: Some("A".into()),
+            order: Some(GroupCallOrder::All),
             variables: None,
         });
         let json = serde_json::to_string(&ep).unwrap();
@@ -587,9 +587,7 @@ mod tests {
 
     #[test]
     fn serde_endpoint_enum_error() {
-        let ep = Endpoint::Error(ErrorEndpoint {
-            cause: "user_busy".into(),
-        });
+        let ep = Endpoint::Error(ErrorEndpoint::new(crate::channel::HangupCause::UserBusy));
         let json = serde_json::to_string(&ep).unwrap();
         assert!(json.contains("\"error\""));
         let parsed: Endpoint = serde_json::from_str(&json).unwrap();
@@ -765,7 +763,7 @@ mod tests {
             variables: None,
         });
         let json = serde_json::to_string(&ep).unwrap();
-        assert!(json.contains("\"port_audio\""));
+        assert!(json.contains("\"portaudio\""));
         let parsed: Endpoint = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, ep);
     }
@@ -777,7 +775,7 @@ mod tests {
             variables: None,
         });
         let json = serde_json::to_string(&ep).unwrap();
-        assert!(json.contains("\"pulse_audio\""));
+        assert!(json.contains("\"pulseaudio\""));
         let parsed: Endpoint = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, ep);
     }
@@ -865,12 +863,7 @@ mod tests {
 
     #[test]
     fn from_group_call() {
-        let inner = GroupCall {
-            group: "support".into(),
-            domain: "domain.com".into(),
-            order: Some("A".into()),
-            variables: None,
-        };
+        let inner = GroupCall::new("support", "domain.com").with_order(GroupCallOrder::All);
         let ep: Endpoint = inner
             .clone()
             .into();
@@ -879,12 +872,8 @@ mod tests {
 
     #[test]
     fn from_error_endpoint() {
-        let inner = ErrorEndpoint {
-            cause: "user_busy".into(),
-        };
-        let ep: Endpoint = inner
-            .clone()
-            .into();
+        let inner = ErrorEndpoint::new(crate::channel::HangupCause::UserBusy);
+        let ep: Endpoint = inner.into();
         assert_eq!(ep, Endpoint::Error(inner));
     }
 }

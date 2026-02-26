@@ -2,6 +2,9 @@
 
 use std::fmt;
 
+use crate::channel::HangupCause;
+use crate::commands::originate::DialplanType;
+
 /// Answer a channel: `uuid_answer <uuid>`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
@@ -121,8 +124,8 @@ impl fmt::Display for UuidHold {
 pub struct UuidKill {
     /// Channel UUID.
     pub uuid: String,
-    /// Hangup cause string (e.g. `NORMAL_CLEARING`). If `None`, uses FreeSWITCH default.
-    pub cause: Option<String>,
+    /// Hangup cause. If `None`, uses FreeSWITCH default.
+    pub cause: Option<HangupCause>,
 }
 
 impl UuidKill {
@@ -135,10 +138,10 @@ impl UuidKill {
     }
 
     /// Kill a channel with a specific hangup cause.
-    pub fn with_cause(uuid: impl Into<String>, cause: impl Into<String>) -> Self {
+    pub fn with_cause(uuid: impl Into<String>, cause: HangupCause) -> Self {
         Self {
             uuid: uuid.into(),
-            cause: Some(cause.into()),
+            cause: Some(cause),
         }
     }
 }
@@ -220,8 +223,8 @@ pub struct UuidTransfer {
     pub uuid: String,
     /// Destination extension or dial string.
     pub destination: String,
-    /// Dialplan to use (e.g. `"XML"`). If `None`, uses the channel's current dialplan.
-    pub dialplan: Option<String>,
+    /// Dialplan to use. If `None`, uses the channel's current dialplan.
+    pub dialplan: Option<DialplanType>,
 }
 
 impl UuidTransfer {
@@ -235,8 +238,8 @@ impl UuidTransfer {
     }
 
     /// Set the dialplan to use for the transfer.
-    pub fn with_dialplan(mut self, dialplan: impl Into<String>) -> Self {
-        self.dialplan = Some(dialplan.into());
+    pub fn with_dialplan(mut self, dialplan: DialplanType) -> Self {
+        self.dialplan = Some(dialplan);
         self
     }
 }
@@ -331,19 +334,13 @@ mod tests {
 
     #[test]
     fn uuid_kill_no_cause() {
-        let cmd = UuidKill {
-            uuid: UUID.into(),
-            cause: None,
-        };
+        let cmd = UuidKill::new(UUID);
         assert_eq!(cmd.to_string(), format!("uuid_kill {}", UUID));
     }
 
     #[test]
     fn uuid_kill_with_cause() {
-        let cmd = UuidKill {
-            uuid: UUID.into(),
-            cause: Some("NORMAL_CLEARING".into()),
-        };
+        let cmd = UuidKill::with_cause(UUID, HangupCause::NormalClearing);
         assert_eq!(
             cmd.to_string(),
             format!("uuid_kill {} NORMAL_CLEARING", UUID)
@@ -384,11 +381,7 @@ mod tests {
 
     #[test]
     fn uuid_transfer_with_dialplan() {
-        let cmd = UuidTransfer {
-            uuid: UUID.into(),
-            destination: "1000".into(),
-            dialplan: Some("XML".into()),
-        };
+        let cmd = UuidTransfer::new(UUID, "1000").with_dialplan(DialplanType::Xml);
         assert_eq!(cmd.to_string(), format!("uuid_transfer {} 1000 XML", UUID));
     }
 

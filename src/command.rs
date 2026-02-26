@@ -704,7 +704,7 @@ mod tests {
             .unwrap();
         assert!(answer.contains("execute-app-name: answer"));
 
-        let hangup = AppCommand::hangup(Some("NORMAL_CLEARING"))
+        let hangup = AppCommand::hangup(Some(crate::channel::HangupCause::NormalClearing))
             .to_wire_format()
             .unwrap();
         assert!(hangup.contains("execute-app-name: hangup"));

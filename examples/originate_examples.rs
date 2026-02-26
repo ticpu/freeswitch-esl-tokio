@@ -11,6 +11,7 @@
 //! Usage: RUST_LOG=info cargo run --example originate_examples [-- [host[:port]] [password]]
 //!   Defaults: localhost:8021, ClueCon
 
+use freeswitch_esl_tokio::commands::endpoint::GroupCallOrder;
 use freeswitch_esl_tokio::commands::{
     AudioEndpoint, ErrorEndpoint, GroupCall, LoopbackEndpoint, SofiaContact, SofiaEndpoint,
     SofiaGateway, UserEndpoint,
@@ -102,7 +103,9 @@ fn print_endpoint_examples() {
 
     let cmd = Originate::application(
         // A=all members simultaneously, F=first registered, E=enterprise
-        Endpoint::GroupCall(GroupCall::new("support", "pbx.example.com").with_order("A")),
+        Endpoint::GroupCall(
+            GroupCall::new("support", "pbx.example.com").with_order(GroupCallOrder::All),
+        ),
         Application::simple("park"),
     );
     // originate ${group_call(support@pbx.example.com+A)} &park()
@@ -129,7 +132,9 @@ fn print_endpoint_examples() {
     println!("\n-- ErrorEndpoint: error/cause --");
 
     let cmd = Originate::application(
-        Endpoint::Error(ErrorEndpoint::new("USER_BUSY")),
+        Endpoint::Error(ErrorEndpoint::new(
+            freeswitch_esl_tokio::HangupCause::UserBusy,
+        )),
         Application::simple("park"),
     );
     // originate error/USER_BUSY &park()

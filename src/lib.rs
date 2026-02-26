@@ -140,9 +140,9 @@ pub(crate) mod protocol;
 
 pub use app::dptools::AppCommand;
 pub use channel::{
-    AnswerState, CallDirection, CallState, ChannelState, ChannelTimetable, ParseAnswerStateError,
-    ParseCallDirectionError, ParseCallStateError, ParseChannelStateError, ParseTimetableError,
-    TimetablePrefix,
+    AnswerState, CallDirection, CallState, ChannelState, ChannelTimetable, HangupCause,
+    ParseAnswerStateError, ParseCallDirectionError, ParseCallStateError, ParseChannelStateError,
+    ParseHangupCauseError, ParseTimetableError, TimetablePrefix,
 };
 pub use command::{CommandBuilder, EslCommand, EslResponse, ReplyStatus};
 pub use commands::{

@@ -320,14 +320,14 @@ mod tests {
                     profile: None,
                     variables: None,
                 })],
-                vec![Endpoint::Error(ErrorEndpoint {
-                    cause: "user_busy".into(),
-                })],
+                vec![Endpoint::Error(ErrorEndpoint::new(
+                    crate::channel::HangupCause::UserBusy,
+                ))],
             ],
         };
         assert_eq!(
             bridge.to_string(),
-            "sofia/gateway/primary/1234|error/user_busy"
+            "sofia/gateway/primary/1234|error/USER_BUSY"
         );
     }
 
@@ -523,9 +523,9 @@ mod tests {
                         variables: None,
                     }),
                 ],
-                vec![Endpoint::Error(ErrorEndpoint {
-                    cause: "user_busy".into(),
-                })],
+                vec![Endpoint::Error(ErrorEndpoint::new(
+                    crate::channel::HangupCause::UserBusy,
+                ))],
             ],
         };
         let json = serde_json::to_string(&bridge).unwrap();

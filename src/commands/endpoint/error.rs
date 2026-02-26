@@ -3,22 +3,21 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
+use crate::channel::HangupCause;
 use crate::commands::originate::OriginateError;
 
 /// Bridge to a specific hangup cause: `error/{cause}`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct ErrorEndpoint {
-    /// Hangup cause string (e.g. `user_busy`, `no_answer`).
-    pub cause: String,
+    /// Hangup cause code.
+    pub cause: HangupCause,
 }
 
 impl ErrorEndpoint {
     /// Create a new error endpoint with the given hangup cause.
-    pub fn new(cause: impl Into<String>) -> Self {
-        Self {
-            cause: cause.into(),
-        }
+    pub fn new(cause: HangupCause) -> Self {
+        Self { cause }
     }
 }
 
@@ -32,12 +31,15 @@ impl FromStr for ErrorEndpoint {
     type Err = OriginateError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let cause = s
+        let cause_str = s
             .strip_prefix("error/")
             .ok_or_else(|| OriginateError::ParseError("not an error endpoint".into()))?;
-        Ok(Self {
-            cause: cause.into(),
-        })
+        let cause: HangupCause = cause_str
+            .parse()
+            .map_err(|_| {
+                OriginateError::ParseError(format!("unknown hangup cause: {}", cause_str))
+            })?;
+        Ok(Self { cause })
     }
 }
 
@@ -47,25 +49,29 @@ mod tests {
 
     #[test]
     fn error_endpoint_display() {
-        let ep = ErrorEndpoint {
-            cause: "user_busy".into(),
-        };
-        assert_eq!(ep.to_string(), "error/user_busy");
+        let ep = ErrorEndpoint::new(HangupCause::UserBusy);
+        assert_eq!(ep.to_string(), "error/USER_BUSY");
     }
 
     #[test]
     fn error_endpoint_from_str() {
+        let ep: ErrorEndpoint = "error/USER_BUSY"
+            .parse()
+            .unwrap();
+        assert_eq!(ep.cause, HangupCause::UserBusy);
+    }
+
+    #[test]
+    fn error_endpoint_from_str_case_insensitive() {
         let ep: ErrorEndpoint = "error/user_busy"
             .parse()
             .unwrap();
-        assert_eq!(ep.cause, "user_busy");
+        assert_eq!(ep.cause, HangupCause::UserBusy);
     }
 
     #[test]
     fn error_endpoint_round_trip() {
-        let ep = ErrorEndpoint {
-            cause: "no_answer".into(),
-        };
+        let ep = ErrorEndpoint::new(HangupCause::NoAnswer);
         let s = ep.to_string();
         let parsed: ErrorEndpoint = s
             .parse()
@@ -75,9 +81,7 @@ mod tests {
 
     #[test]
     fn serde_error_endpoint() {
-        let ep = ErrorEndpoint {
-            cause: "user_busy".into(),
-        };
+        let ep = ErrorEndpoint::new(HangupCause::UserBusy);
         let json = serde_json::to_string(&ep).unwrap();
         let parsed: ErrorEndpoint = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, ep);
