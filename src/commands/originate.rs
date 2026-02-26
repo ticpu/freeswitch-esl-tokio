@@ -42,13 +42,15 @@ impl FromStr for DialplanType {
     type Err = OriginateError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "inline" => Ok(Self::Inline),
-            "XML" => Ok(Self::Xml),
-            _ => Err(OriginateError::ParseError(format!(
+        if s.eq_ignore_ascii_case("inline") {
+            Ok(Self::Inline)
+        } else if s.eq_ignore_ascii_case("xml") {
+            Ok(Self::Xml)
+        } else {
+            Err(OriginateError::ParseError(format!(
                 "unknown dialplan type: {}",
                 s
-            ))),
+            )))
         }
     }
 }
@@ -1225,6 +1227,34 @@ mod tests {
                 .parse::<DialplanType>()
                 .unwrap(),
             DialplanType::Xml
+        );
+    }
+
+    #[test]
+    fn dialplan_type_from_str_case_insensitive() {
+        assert_eq!(
+            "xml"
+                .parse::<DialplanType>()
+                .unwrap(),
+            DialplanType::Xml
+        );
+        assert_eq!(
+            "Xml"
+                .parse::<DialplanType>()
+                .unwrap(),
+            DialplanType::Xml
+        );
+        assert_eq!(
+            "INLINE"
+                .parse::<DialplanType>()
+                .unwrap(),
+            DialplanType::Inline
+        );
+        assert_eq!(
+            "Inline"
+                .parse::<DialplanType>()
+                .unwrap(),
+            DialplanType::Inline
         );
     }
 

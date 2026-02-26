@@ -111,6 +111,52 @@ pub enum Endpoint {
 }
 
 // ---------------------------------------------------------------------------
+// From impls
+// ---------------------------------------------------------------------------
+
+impl From<SofiaEndpoint> for Endpoint {
+    fn from(ep: SofiaEndpoint) -> Self {
+        Self::Sofia(ep)
+    }
+}
+
+impl From<SofiaGateway> for Endpoint {
+    fn from(ep: SofiaGateway) -> Self {
+        Self::SofiaGateway(ep)
+    }
+}
+
+impl From<LoopbackEndpoint> for Endpoint {
+    fn from(ep: LoopbackEndpoint) -> Self {
+        Self::Loopback(ep)
+    }
+}
+
+impl From<UserEndpoint> for Endpoint {
+    fn from(ep: UserEndpoint) -> Self {
+        Self::User(ep)
+    }
+}
+
+impl From<SofiaContact> for Endpoint {
+    fn from(ep: SofiaContact) -> Self {
+        Self::SofiaContact(ep)
+    }
+}
+
+impl From<GroupCall> for Endpoint {
+    fn from(ep: GroupCall) -> Self {
+        Self::GroupCall(ep)
+    }
+}
+
+impl From<ErrorEndpoint> for Endpoint {
+    fn from(ep: ErrorEndpoint) -> Self {
+        Self::Error(ep)
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Display
 // ---------------------------------------------------------------------------
 
@@ -746,5 +792,99 @@ mod tests {
         assert!(json.contains("\"alsa\""));
         let parsed: Endpoint = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, ep);
+    }
+
+    // --- From impls ---
+
+    #[test]
+    fn from_sofia_endpoint() {
+        let inner = SofiaEndpoint {
+            profile: "internal".into(),
+            destination: "1000@domain.com".into(),
+            variables: None,
+        };
+        let ep: Endpoint = inner
+            .clone()
+            .into();
+        assert_eq!(ep, Endpoint::Sofia(inner));
+    }
+
+    #[test]
+    fn from_sofia_gateway() {
+        let inner = SofiaGateway {
+            gateway: "gw1".into(),
+            destination: "1234".into(),
+            profile: None,
+            variables: None,
+        };
+        let ep: Endpoint = inner
+            .clone()
+            .into();
+        assert_eq!(ep, Endpoint::SofiaGateway(inner));
+    }
+
+    #[test]
+    fn from_loopback_endpoint() {
+        let inner = LoopbackEndpoint {
+            extension: "9199".into(),
+            context: "default".into(),
+            variables: None,
+        };
+        let ep: Endpoint = inner
+            .clone()
+            .into();
+        assert_eq!(ep, Endpoint::Loopback(inner));
+    }
+
+    #[test]
+    fn from_user_endpoint() {
+        let inner = UserEndpoint {
+            name: "bob".into(),
+            domain: Some("example.com".into()),
+            variables: None,
+        };
+        let ep: Endpoint = inner
+            .clone()
+            .into();
+        assert_eq!(ep, Endpoint::User(inner));
+    }
+
+    #[test]
+    fn from_sofia_contact() {
+        let inner = SofiaContact {
+            user: "1000".into(),
+            domain: "domain.com".into(),
+            profile: None,
+            variables: None,
+        };
+        let ep: Endpoint = inner
+            .clone()
+            .into();
+        assert_eq!(ep, Endpoint::SofiaContact(inner));
+    }
+
+    #[test]
+    fn from_group_call() {
+        let inner = GroupCall {
+            group: "support".into(),
+            domain: "domain.com".into(),
+            order: Some("A".into()),
+            variables: None,
+        };
+        let ep: Endpoint = inner
+            .clone()
+            .into();
+        assert_eq!(ep, Endpoint::GroupCall(inner));
+    }
+
+    #[test]
+    fn from_error_endpoint() {
+        let inner = ErrorEndpoint {
+            cause: "user_busy".into(),
+        };
+        let ep: Endpoint = inner
+            .clone()
+            .into();
+        assert_eq!(ep, Endpoint::Error(inner));
     }
 }

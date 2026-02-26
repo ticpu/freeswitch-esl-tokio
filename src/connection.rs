@@ -1,5 +1,6 @@
 //! Connection management for ESL
 
+use std::borrow::Borrow;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
@@ -23,10 +24,13 @@ use crate::{
     protocol::{EslMessage, EslParser, MessageType},
 };
 
-fn event_types_to_string(events: &[EslEventType]) -> String {
+fn event_types_to_string<T: Borrow<EslEventType>>(events: impl IntoIterator<Item = T>) -> String {
     events
-        .iter()
-        .map(|e| e.to_string())
+        .into_iter()
+        .map(|e| {
+            e.borrow()
+                .to_string()
+        })
         .collect::<Vec<_>>()
         .join(" ")
 }
@@ -813,11 +817,15 @@ impl EslClient {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn subscribe_events(
+    pub async fn subscribe_events<T: Borrow<EslEventType>>(
         &self,
         format: EventFormat,
-        events: &[EslEventType],
+        events: impl IntoIterator<Item = T>,
     ) -> EslResult<()> {
+        let events: Vec<EslEventType> = events
+            .into_iter()
+            .map(|e| *e.borrow())
+            .collect();
         let events_str = if events.contains(&EslEventType::All) {
             "ALL".to_string()
         } else {
@@ -943,8 +951,8 @@ impl EslClient {
     /// FreeSWITCH sends a `text/disconnect-notice` with `Content-Disposition: linger`
     /// and keeps the socket open so the client can drain remaining events.
     ///
-    /// Pass `None` for indefinite linger, or `Some(seconds)` for a timeout.
-    pub async fn linger(&self, timeout: Option<u32>) -> EslResult<()> {
+    /// Pass `None` for indefinite linger, or `Some(Duration)` for a timeout.
+    pub async fn linger(&self, timeout: Option<Duration>) -> EslResult<()> {
         self.send_command_ok(EslCommand::Linger { timeout })
             .await
     }
@@ -985,7 +993,10 @@ impl EslClient {
     ///
     /// The inverse of [`subscribe_events`](Self::subscribe_events). Accepts
     /// multiple event types to unsubscribe from at once.
-    pub async fn nixevent(&self, events: &[EslEventType]) -> EslResult<()> {
+    pub async fn nixevent<T: Borrow<EslEventType>>(
+        &self,
+        events: impl IntoIterator<Item = T>,
+    ) -> EslResult<()> {
         self.nixevent_raw(&event_types_to_string(events))
             .await
     }

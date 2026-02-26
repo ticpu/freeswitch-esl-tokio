@@ -146,8 +146,10 @@ pub use channel::{
 };
 pub use command::{CommandBuilder, EslCommand, EslResponse, ReplyStatus};
 pub use commands::{
-    Application, DialString, DialplanType, Endpoint, Originate, OriginateError, OriginateTarget,
-    Variables, VariablesType,
+    Application, BridgeDialString, ConferenceDtmf, ConferenceHold, ConferenceMute, DialString,
+    DialplanType, Endpoint, HoldAction, MuteAction, Originate, OriginateError, OriginateTarget,
+    UuidAnswer, UuidBridge, UuidDeflect, UuidGetVar, UuidHold, UuidKill, UuidSendDtmf, UuidSetVar,
+    UuidTransfer, Variables, VariablesType,
 };
 pub use connection::{
     ConnectionMode, ConnectionStatus, DisconnectReason, EslClient, EslConnectOptions,
@@ -155,7 +157,10 @@ pub use connection::{
 };
 pub use constants::DEFAULT_ESL_PORT;
 pub use error::{EslError, EslResult};
-pub use event::{EslEvent, EslEventPriority, EslEventType, EventFormat, ParsePriorityError};
+pub use event::{
+    EslEvent, EslEventPriority, EslEventType, EventFormat, ParseEventFormatError,
+    ParseEventTypeError, ParsePriorityError,
+};
 pub use headers::{EventHeader, ParseEventHeaderError};
 pub use lookup::HeaderLookup;
 pub use variables::{

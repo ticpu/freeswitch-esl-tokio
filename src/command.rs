@@ -5,10 +5,12 @@ use crate::{
     error::{EslError, EslResult},
     event::EslEvent,
     headers::EventHeader,
+    lookup::HeaderLookup,
 };
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt;
+use std::time::Duration;
 
 /// Validate that a user-provided string contains no newline characters.
 ///
@@ -148,6 +150,19 @@ impl EslResponse {
                 Err(EslError::UnexpectedReply { reply_text })
             }
         }
+    }
+}
+
+impl HeaderLookup for EslResponse {
+    fn header_str(&self, name: &str) -> Option<&str> {
+        self.headers
+            .get(name)
+            .map(|s| s.as_str())
+    }
+
+    fn variable_str(&self, name: &str) -> Option<&str> {
+        let key = format!("variable_{}", name);
+        self.header_str(&key)
     }
 }
 
@@ -309,8 +324,8 @@ pub enum EslCommand {
     },
     /// Keep socket open after channel hangup.
     Linger {
-        /// Linger timeout in seconds, or `None` for indefinite.
-        timeout: Option<u32>,
+        /// Linger timeout, or `None` for indefinite.
+        timeout: Option<Duration>,
     },
     /// Cancel linger mode.
     NoLinger,
@@ -403,7 +418,7 @@ impl fmt::Debug for EslCommand {
                 .finish(),
             EslCommand::Linger { timeout } => f
                 .debug_struct("Linger")
-                .field("timeout", timeout)
+                .field("timeout", &timeout.map(|d| d.as_secs()))
                 .finish(),
             EslCommand::NoLinger => write!(f, "NoLinger"),
             EslCommand::Resume => write!(f, "Resume"),
@@ -561,7 +576,11 @@ impl EslCommand {
                 })
             }
             EslCommand::Linger { timeout } => Ok(match timeout {
-                Some(n) => Self::format_simple_command("linger", &[&n.to_string()]),
+                Some(d) => Self::format_simple_command(
+                    "linger",
+                    &[&d.as_secs()
+                        .to_string()],
+                ),
                 None => Self::format_simple_command("linger", &[]),
             }),
             EslCommand::NoLinger => Ok(Self::format_simple_command("nolinger", &[])),
@@ -730,7 +749,9 @@ mod tests {
 
     #[test]
     fn test_linger_timeout_wire_format() {
-        let cmd = EslCommand::Linger { timeout: Some(600) };
+        let cmd = EslCommand::Linger {
+            timeout: Some(Duration::from_secs(600)),
+        };
         assert_eq!(
             cmd.to_wire_format()
                 .unwrap(),
@@ -1045,5 +1066,32 @@ mod tests {
 
         let result = CommandBuilder::new("test").header("X-Key", "bad\nvalue");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_response_header_lookup_trait() {
+        use crate::headers::EventHeader;
+        use crate::lookup::HeaderLookup;
+
+        let headers: HashMap<String, String> = [
+            ("Reply-Text".into(), "+OK".into()),
+            ("Channel-Name".into(), "sofia/internal/1000@test".into()),
+            ("Channel-State".into(), "CS_EXECUTE".into()),
+            ("variable_sip_call_id".into(), "abc-123".into()),
+        ]
+        .into();
+        let resp = EslResponse::new(headers, None);
+
+        assert_eq!(
+            resp.header(EventHeader::ChannelName),
+            Some("sofia/internal/1000@test")
+        );
+        assert_eq!(
+            resp.channel_state()
+                .unwrap(),
+            Some(crate::channel::ChannelState::CsExecute)
+        );
+        assert_eq!(resp.variable_str("sip_call_id"), Some("abc-123"));
+        assert_eq!(resp.variable_str("nonexistent"), None);
     }
 }

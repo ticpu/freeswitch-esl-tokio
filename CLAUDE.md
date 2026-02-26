@@ -28,6 +28,28 @@ modifying public structs to verify external construction still works.
 - **`constants` module is `pub(crate)`.** Only `DEFAULT_ESL_PORT` is re-exported.
   Internal protocol constants are implementation details.
 
+## Method Signature Conventions
+
+- **`impl Into<String>` for string setters.** Functions that store a string
+  should accept `impl Into<String>` so callers can pass `&str` or `String`.
+- **`Duration` for timeouts.** Never use raw `u32` seconds. Consistent with
+  `set_liveness_timeout()` / `set_command_timeout()`.
+- **`impl IntoIterator` with `Borrow` for Copy types.** When a method accepts
+  a collection of `Copy` types (e.g. `EslEventType`), use
+  `impl IntoIterator<Item = impl Borrow<T>>` so callers can pass `&[T]`,
+  `Vec<T>`, arrays, `HashSet<T>`, or `&const_slice`.
+- **Case-insensitive `FromStr`.** All `FromStr` impls for wire format types
+  (`DialplanType`, `EventFormat`, `EslEventType`, etc.) use
+  `eq_ignore_ascii_case`. `Display` emits the canonical form.
+- **`HeaderLookup` on response types.** Any type with ESL headers should
+  implement `HeaderLookup` for typed accessor access. `EslResponse` and
+  `EslEvent` both implement it.
+- **`From<Concrete> for Enum`.** Endpoint variant enums should have `From`
+  impls for each concrete type (e.g. `From<SofiaEndpoint> for Endpoint`).
+- **Re-export all public types from `lib.rs`.** Every public type reachable
+  via `commands::`, `channel::`, `event::` etc. should also be importable
+  from the crate root.
+
 ## Build & Test Workflow
 
 **Always run `cargo fmt` before every commit.** The pre-commit hook enforces

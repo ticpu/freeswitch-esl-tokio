@@ -509,8 +509,8 @@ impl EslEvent {
     }
 
     /// Set the event body.
-    pub fn set_body(&mut self, body: String) {
-        self.body = Some(body);
+    pub fn set_body(&mut self, body: impl Into<String>) {
+        self.body = Some(body.into());
     }
 
     /// Sets the `priority` header carried on the event.

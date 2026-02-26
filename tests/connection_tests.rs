@@ -562,7 +562,7 @@ async fn test_linger_timeout_command() {
         let client = client.clone();
         async move {
             client
-                .linger(Some(300))
+                .linger(Some(std::time::Duration::from_secs(300)))
                 .await
         }
     });
