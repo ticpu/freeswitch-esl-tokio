@@ -119,7 +119,7 @@ fn print_endpoint_examples() {
 
     // 9196 = delay_echo in the default FreeSWITCH configuration
     let cmd = Originate::application(
-        Endpoint::Loopback(LoopbackEndpoint::new("9196", "default")),
+        Endpoint::Loopback(LoopbackEndpoint::new("9196").with_context("default")),
         Application::simple("park"),
     );
     // originate loopback/9196/default &park()
@@ -349,7 +349,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // loopback/9196/default routes to the built-in delay_echo test in the
     // default FreeSWITCH configuration -- no registered phones required.
     let cmd = Originate::application(
-        Endpoint::Loopback(LoopbackEndpoint::new("9196", "default")),
+        Endpoint::Loopback(LoopbackEndpoint::new("9196").with_context("default")),
         Application::simple("park"),
     )
     .cid_name("ESL Test")
@@ -409,9 +409,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             Some(EslEventType::ChannelHangup) => {
                 let uuid = event.header(EventHeader::UniqueId);
-                let cause = event
-                    .hangup_cause()
-                    .unwrap_or("unknown");
+                // hangup_cause() returns Result<Option<HangupCause>, _>
+                let cause = match event.hangup_cause() {
+                    Ok(Some(c)) => c.to_string(),
+                    _ => "unknown".into(),
+                };
                 info!("channel hangup: {} cause={}", uuid.unwrap_or("?"), cause);
             }
             Some(EslEventType::ChannelDestroy) => {

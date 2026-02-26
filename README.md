@@ -47,9 +47,12 @@ async fn main() -> Result<(), EslError> {
                 println!("channel created: {}", event.channel_name().unwrap_or("?"));
             }
             Some(EslEventType::ChannelDestroy) => {
+                let cause = match event.hangup_cause() {
+                    Ok(Some(c)) => c.to_string(),
+                    _ => "unknown".into(),
+                };
                 println!("channel destroyed: {} ({})",
-                    event.channel_name().unwrap_or("?"),
-                    event.hangup_cause().unwrap_or("unknown"));
+                    event.channel_name().unwrap_or("?"), cause);
                 break;
             }
             Some(EslEventType::BackgroundJob) => {
@@ -423,10 +426,11 @@ if let Some(state) = event.channel_state() {
     }
 }
 
-// All accessors return Option: None if the header is absent from this event
+// String accessors return Option<&str>: None if the header is absent
 let cid = event.caller_id_number();     // Option<&str>
-let direction = event.call_direction(); // Option<CallDirection>
-let cause = event.hangup_cause();       // Option<&str>
+// Typed accessors return Result<Option<T>, ParseErr>
+let direction = event.call_direction(); // Result<Option<CallDirection>, _>
+let cause = event.hangup_cause();       // Result<Option<HangupCause>, _>
 ```
 
 ### Channel timetable

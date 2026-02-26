@@ -534,7 +534,7 @@ async fn live_originate_application_target() {
 
     // Single application target: &park() holds the channel, bgapi returns immediately
     let cmd = Originate::application(
-        Endpoint::Loopback(LoopbackEndpoint::new("9199", "test")),
+        Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("test")),
         Application::simple("park"),
     );
 
@@ -554,7 +554,7 @@ async fn live_originate_extension_target() {
 
     // Extension target: route through XML dialplan to 9199 (echo) in test context
     let cmd = Originate::extension(
-        Endpoint::Loopback(LoopbackEndpoint::new("9199", "test")),
+        Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("test")),
         "9199",
     )
     .dialplan(DialplanType::Xml)
@@ -577,7 +577,7 @@ async fn live_originate_inline_target() {
 
     // Inline dialplan: answer then hangup (instant)
     let cmd = Originate::inline(
-        Endpoint::Loopback(LoopbackEndpoint::new("9199", "test")),
+        Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("test")),
         vec![
             Application::simple("answer"),
             Application::new("hangup", Some("NORMAL_CLEARING")),
@@ -604,7 +604,7 @@ async fn live_originate_timeout_fills_positional_gaps() {
     // Timeout without cid_name/cid_num forces `undef` placeholders on the wire.
     // Verifies FreeSWITCH accepts `undef` as a NULL positional arg.
     let cmd = Originate::application(
-        Endpoint::Loopback(LoopbackEndpoint::new("9199", "test")),
+        Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("test")),
         Application::simple("park"),
     )
     .timeout(5);

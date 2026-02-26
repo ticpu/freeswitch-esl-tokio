@@ -29,17 +29,17 @@ pub struct ConferenceMute {
     pub name: String,
     /// Mute or unmute.
     pub action: MuteAction,
-    /// Conference member ID.
-    pub member_id: String,
+    /// Member ID, or `"all"` for all members.
+    pub member: String,
 }
 
 impl ConferenceMute {
     /// Create a new conference mute/unmute command.
-    pub fn new(name: impl Into<String>, action: MuteAction, member_id: impl Into<String>) -> Self {
+    pub fn new(name: impl Into<String>, action: MuteAction, member: impl Into<String>) -> Self {
         Self {
             name: name.into(),
             action,
-            member_id: member_id.into(),
+            member: member.into(),
         }
     }
 }
@@ -49,7 +49,7 @@ impl fmt::Display for ConferenceMute {
         write!(
             f,
             "conference {} {} {}",
-            self.name, self.action, self.member_id
+            self.name, self.action, self.member
         )
     }
 }
@@ -167,7 +167,7 @@ mod tests {
         let cmd = ConferenceMute {
             name: "conf1".into(),
             action: MuteAction::Mute,
-            member_id: "5".into(),
+            member: "5".into(),
         };
         assert_eq!(cmd.to_string(), "conference conf1 mute 5");
     }
@@ -177,7 +177,7 @@ mod tests {
         let cmd = ConferenceMute {
             name: "conf1".into(),
             action: MuteAction::Unmute,
-            member_id: "5".into(),
+            member: "5".into(),
         };
         assert_eq!(cmd.to_string(), "conference conf1 unmute 5");
     }

@@ -6,8 +6,9 @@
 //! everything else for free.
 
 use crate::channel::{
-    AnswerState, CallDirection, CallState, ChannelState, ChannelTimetable, ParseAnswerStateError,
-    ParseCallDirectionError, ParseCallStateError, ParseChannelStateError, ParseTimetableError,
+    AnswerState, CallDirection, CallState, ChannelState, ChannelTimetable, HangupCause,
+    ParseAnswerStateError, ParseCallDirectionError, ParseCallStateError, ParseChannelStateError,
+    ParseHangupCauseError, ParseTimetableError,
 };
 use crate::event::{EslEventPriority, ParsePriorityError};
 use crate::headers::EventHeader;
@@ -97,9 +98,29 @@ pub trait HeaderLookup {
         self.header(EventHeader::CallerCallerIdName)
     }
 
-    /// `Hangup-Cause` header (e.g. `NORMAL_CLEARING`, `USER_BUSY`).
-    fn hangup_cause(&self) -> Option<&str> {
-        self.header(EventHeader::HangupCause)
+    /// `Caller-Destination-Number` header.
+    fn destination_number(&self) -> Option<&str> {
+        self.header(EventHeader::CallerDestinationNumber)
+    }
+
+    /// `Caller-Callee-ID-Number` header.
+    fn callee_id_number(&self) -> Option<&str> {
+        self.header(EventHeader::CallerCalleeIdNumber)
+    }
+
+    /// `Caller-Callee-ID-Name` header.
+    fn callee_id_name(&self) -> Option<&str> {
+        self.header(EventHeader::CallerCalleeIdName)
+    }
+
+    /// Parse the `Hangup-Cause` header into a [`HangupCause`].
+    ///
+    /// Returns `Ok(None)` if the header is absent, `Err` if present but unparseable.
+    fn hangup_cause(&self) -> Result<Option<HangupCause>, ParseHangupCauseError> {
+        match self.header(EventHeader::HangupCause) {
+            Some(s) => Ok(Some(s.parse()?)),
+            None => Ok(None),
+        }
     }
 
     /// `Event-Subclass` header for `CUSTOM` events (e.g. `sofia::register`).
@@ -289,9 +310,37 @@ mod tests {
     }
 
     #[test]
-    fn hangup_cause() {
+    fn hangup_cause_typed() {
         let s = store_with(&[("Hangup-Cause", "NORMAL_CLEARING")]);
-        assert_eq!(s.hangup_cause(), Some("NORMAL_CLEARING"));
+        assert_eq!(
+            s.hangup_cause()
+                .unwrap(),
+            Some(crate::channel::HangupCause::NormalClearing)
+        );
+    }
+
+    #[test]
+    fn hangup_cause_invalid_is_error() {
+        let s = store_with(&[("Hangup-Cause", "BOGUS_CAUSE")]);
+        assert!(s
+            .hangup_cause()
+            .is_err());
+    }
+
+    #[test]
+    fn destination_number() {
+        let s = store_with(&[("Caller-Destination-Number", "1000")]);
+        assert_eq!(s.destination_number(), Some("1000"));
+    }
+
+    #[test]
+    fn callee_id() {
+        let s = store_with(&[
+            ("Caller-Callee-ID-Number", "2000"),
+            ("Caller-Callee-ID-Name", "Bob"),
+        ]);
+        assert_eq!(s.callee_id_number(), Some("2000"));
+        assert_eq!(s.callee_id_name(), Some("Bob"));
     }
 
     #[test]
@@ -437,10 +486,17 @@ mod tests {
                 .unwrap(),
             None
         );
-        assert_eq!(s.hangup_cause(), None);
+        assert_eq!(
+            s.hangup_cause()
+                .unwrap(),
+            None
+        );
         assert_eq!(s.channel_name(), None);
         assert_eq!(s.caller_id_number(), None);
         assert_eq!(s.caller_id_name(), None);
+        assert_eq!(s.destination_number(), None);
+        assert_eq!(s.callee_id_number(), None);
+        assert_eq!(s.callee_id_name(), None);
         assert_eq!(s.event_subclass(), None);
         assert_eq!(s.job_uuid(), None);
     }
@@ -454,6 +510,7 @@ mod tests {
             ("Answer-State", "bogus"),
             ("Call-Direction", "bogus"),
             ("priority", "BOGUS"),
+            ("Hangup-Cause", "BOGUS"),
         ]);
         assert!(s
             .channel_state()
@@ -472,6 +529,9 @@ mod tests {
             .is_err());
         assert!(s
             .priority()
+            .is_err());
+        assert!(s
+            .hangup_cause()
             .is_err());
     }
 }

@@ -53,6 +53,26 @@ impl EslArray {
     }
 }
 
+impl<'a> IntoIterator for &'a EslArray {
+    type Item = &'a String;
+    type IntoIter = std::slice::Iter<'a, String>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0
+            .iter()
+    }
+}
+
+impl IntoIterator for EslArray {
+    type Item = String;
+    type IntoIter = std::vec::IntoIter<String>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0
+            .into_iter()
+    }
+}
+
 impl fmt::Display for EslArray {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(ARRAY_HEADER)?;

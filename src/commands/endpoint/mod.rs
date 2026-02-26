@@ -533,11 +533,7 @@ mod tests {
 
     #[test]
     fn serde_endpoint_enum_loopback() {
-        let ep = Endpoint::Loopback(LoopbackEndpoint {
-            extension: "9199".into(),
-            context: "default".into(),
-            variables: None,
-        });
+        let ep = Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("default"));
         let json = serde_json::to_string(&ep).unwrap();
         assert!(json.contains("\"loopback\""));
         let parsed: Endpoint = serde_json::from_str(&json).unwrap();
@@ -823,11 +819,7 @@ mod tests {
 
     #[test]
     fn from_loopback_endpoint() {
-        let inner = LoopbackEndpoint {
-            extension: "9199".into(),
-            context: "default".into(),
-            variables: None,
-        };
+        let inner = LoopbackEndpoint::new("9199").with_context("default");
         let ep: Endpoint = inner
             .clone()
             .into();

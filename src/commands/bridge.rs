@@ -335,11 +335,9 @@ mod tests {
     fn display_with_loopback() {
         let bridge = BridgeDialString {
             variables: None,
-            groups: vec![vec![Endpoint::Loopback(LoopbackEndpoint {
-                extension: "9199".into(),
-                context: "default".into(),
-                variables: None,
-            })]],
+            groups: vec![vec![Endpoint::Loopback(
+                LoopbackEndpoint::new("9199").with_context("default"),
+            )]],
         };
         assert_eq!(bridge.to_string(), "loopback/9199/default");
     }

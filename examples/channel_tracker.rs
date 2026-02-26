@@ -253,8 +253,7 @@ impl ChannelTracker {
                         "{} {} cause={} name={}",
                         event_type,
                         short_uuid(&uuid),
-                        ch.hangup_cause()
-                            .unwrap_or("UNKNOWN"),
+                        display_or(ch.hangup_cause()),
                         ch.channel_name()
                             .unwrap_or("-"),
                     );
@@ -270,8 +269,8 @@ impl ChannelTracker {
                 let cause = self
                     .channels
                     .get(&uuid)
-                    .and_then(|ch| ch.hangup_cause())
-                    .unwrap_or("-");
+                    .map(|ch| display_or(ch.hangup_cause()))
+                    .unwrap_or_else(|| "-".into());
                 info!("{} {} cause={}", event_type, short_uuid(&uuid), cause);
                 return;
             }

@@ -43,7 +43,7 @@ pub enum ReplyStatus {
 }
 
 /// Response from ESL command execution
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EslResponse {
     headers: HashMap<String, String>,
     body: Option<String>,

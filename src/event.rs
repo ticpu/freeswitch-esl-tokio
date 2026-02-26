@@ -419,7 +419,7 @@ impl FromStr for EslEventPriority {
 }
 
 /// ESL Event structure containing headers and optional body
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EslEvent {
     event_type: Option<EslEventType>,
     headers: HashMap<String, String>,
@@ -992,7 +992,12 @@ mod tests {
         );
         assert_eq!(event.caller_id_number(), Some("1000"));
         assert_eq!(event.caller_id_name(), Some("Alice"));
-        assert_eq!(event.hangup_cause(), Some("NORMAL_CLEARING"));
+        assert_eq!(
+            event
+                .hangup_cause()
+                .unwrap(),
+            Some(crate::channel::HangupCause::NormalClearing)
+        );
         assert_eq!(event.event_subclass(), Some("sofia::register"));
         assert_eq!(event.variable_str("sip_from_display"), Some("Bob"));
         assert_eq!(event.variable_str("nonexistent"), None);

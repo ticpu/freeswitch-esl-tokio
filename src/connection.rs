@@ -640,11 +640,24 @@ impl EslClient {
             .map_err(EslError::Io)?;
         info!("Accepted outbound connection from {}", addr);
 
-        Ok(Self::split_and_spawn_with_options(
-            stream,
-            EslParser::new(),
-            options,
-        ))
+        Ok(Self::accept_outbound_stream_with_options(stream, options))
+    }
+
+    /// Create an outbound-mode client from an already-accepted `TcpStream`.
+    ///
+    /// Use this when you need control over the accept step (e.g. for
+    /// timeouts, TLS wrapping, or custom accept logic).
+    pub fn accept_outbound_stream(stream: TcpStream) -> (Self, EslEventStream) {
+        Self::accept_outbound_stream_with_options(stream, EslConnectOptions::default())
+    }
+
+    /// Create an outbound-mode client from an already-accepted `TcpStream`
+    /// with custom options.
+    pub fn accept_outbound_stream_with_options(
+        stream: TcpStream,
+        options: EslConnectOptions,
+    ) -> (Self, EslEventStream) {
+        Self::split_and_spawn_with_options(stream, EslParser::new(), options)
     }
 
     fn split_and_spawn_with_options(

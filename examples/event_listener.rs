@@ -125,9 +125,10 @@ fn process_event(
         Some(EslEventType::ChannelHangup) => {
             if let Some(uuid) = event.unique_id() {
                 if let Some(call_info) = active_calls.get(uuid) {
-                    let cause = event
-                        .hangup_cause()
-                        .unwrap_or("UNKNOWN");
+                    let cause = match event.hangup_cause() {
+                        Ok(Some(c)) => c.to_string(),
+                        _ => "UNKNOWN".into(),
+                    };
                     let talk_time = call_info
                         .answered_time
                         .map(|t| t.elapsed());

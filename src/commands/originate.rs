@@ -410,7 +410,7 @@ impl From<Vec<Application>> for OriginateTarget {
 /// ```
 /// # use freeswitch_esl_tokio::commands::*;
 /// let cmd = Originate::application(
-///     Endpoint::Loopback(LoopbackEndpoint::new("9196", "default")),
+///     Endpoint::Loopback(LoopbackEndpoint::new("9196").with_context("default")),
 ///     Application::simple("park"),
 /// )
 /// .cid_name("Alice")
@@ -973,11 +973,11 @@ mod tests {
     fn loopback_endpoint_display() {
         let mut vars = Variables::new(VariablesType::Default);
         vars.insert("one_variable", "1");
-        let ep = Endpoint::Loopback(LoopbackEndpoint {
-            extension: "aUri".into(),
-            context: "aContext".into(),
-            variables: Some(vars),
-        });
+        let ep = Endpoint::Loopback(
+            LoopbackEndpoint::new("aUri")
+                .with_context("aContext")
+                .with_variables(vars),
+        );
         assert_eq!(ep.to_string(), "{one_variable=1}loopback/aUri/aContext");
     }
 
@@ -1129,11 +1129,7 @@ mod tests {
 
     #[test]
     fn originate_socket_app_quoted() {
-        let ep = Endpoint::Loopback(LoopbackEndpoint {
-            extension: "9199".into(),
-            context: "test".into(),
-            variables: None,
-        });
+        let ep = Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("test"));
         let orig = Originate::application(
             ep,
             Application::new("socket", Some("127.0.0.1:8040 async full")),
@@ -1525,11 +1521,7 @@ mod tests {
 
     #[test]
     fn originate_timeout_only_fills_positional_gaps() {
-        let ep = Endpoint::Loopback(LoopbackEndpoint {
-            extension: "9199".into(),
-            context: "test".into(),
-            variables: None,
-        });
+        let ep = Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("test"));
         let cmd = Originate::application(ep, Application::simple("park")).timeout(30);
         // timeout is arg 7; dialplan/context/cid must be filled so FS
         // doesn't interpret "30" as the dialplan name
@@ -1541,11 +1533,7 @@ mod tests {
 
     #[test]
     fn originate_cid_num_only_fills_preceding_gaps() {
-        let ep = Endpoint::Loopback(LoopbackEndpoint {
-            extension: "9199".into(),
-            context: "test".into(),
-            variables: None,
-        });
+        let ep = Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("test"));
         let cmd = Originate::application(ep, Application::simple("park")).cid_num("5551234");
         assert_eq!(
             cmd.to_string(),
@@ -1555,11 +1543,7 @@ mod tests {
 
     #[test]
     fn originate_context_only_fills_dialplan() {
-        let ep = Endpoint::Loopback(LoopbackEndpoint {
-            extension: "9199".into(),
-            context: "test".into(),
-            variables: None,
-        });
+        let ep = Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("test"));
         let cmd = Originate::extension(ep, "1000").context("myctx");
         assert_eq!(
             cmd.to_string(),
@@ -1574,11 +1558,7 @@ mod tests {
     /// representation differs. This is an accepted asymmetry.
     #[test]
     fn originate_context_gap_filler_round_trip_asymmetry() {
-        let ep = Endpoint::Loopback(LoopbackEndpoint {
-            extension: "9199".into(),
-            context: "test".into(),
-            variables: None,
-        });
+        let ep = Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("test"));
         let cmd = Originate::application(ep, Application::simple("park")).cid_name("Alice");
         let wire = cmd.to_string();
         assert!(wire.contains("default"), "gap-filler should emit 'default'");
@@ -1595,11 +1575,7 @@ mod tests {
 
     #[test]
     fn originate_accessors() {
-        let ep = Endpoint::Loopback(LoopbackEndpoint {
-            extension: "9199".into(),
-            context: "default".into(),
-            variables: None,
-        });
+        let ep = Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("default"));
         let cmd = Originate::extension(ep, "1000")
             .dialplan(DialplanType::Xml)
             .unwrap()

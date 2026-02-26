@@ -12,21 +12,29 @@ use crate::commands::originate::{OriginateError, Variables};
 pub struct LoopbackEndpoint {
     /// Extension number or pattern.
     pub extension: String,
-    /// Dialplan context (defaults to `"default"`).
-    pub context: String,
+    /// Dialplan context. `None` omits the context segment, letting
+    /// FreeSWITCH use its default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<String>,
     /// Per-channel variables prepended as `{key=value}`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub variables: Option<Variables>,
 }
 
 impl LoopbackEndpoint {
-    /// Create a new loopback endpoint.
-    pub fn new(extension: impl Into<String>, context: impl Into<String>) -> Self {
+    /// Create a new loopback endpoint with no explicit context.
+    pub fn new(extension: impl Into<String>) -> Self {
         Self {
             extension: extension.into(),
-            context: context.into(),
+            context: None,
             variables: None,
         }
+    }
+
+    /// Set the dialplan context.
+    pub fn with_context(mut self, context: impl Into<String>) -> Self {
+        self.context = Some(context.into());
+        self
     }
 
     /// Set per-channel variables.
@@ -39,7 +47,10 @@ impl LoopbackEndpoint {
 impl fmt::Display for LoopbackEndpoint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write_variables(f, &self.variables)?;
-        write!(f, "loopback/{}/{}", self.extension, self.context)
+        match &self.context {
+            Some(ctx) => write!(f, "loopback/{}/{}", self.extension, ctx),
+            None => write!(f, "loopback/{}", self.extension),
+        }
     }
 }
 
@@ -51,12 +62,13 @@ impl FromStr for LoopbackEndpoint {
         let rest = uri
             .strip_prefix("loopback/")
             .ok_or_else(|| OriginateError::ParseError("not a loopback endpoint".into()))?;
-        let (extension, context) = rest
-            .split_once('/')
-            .unwrap_or((rest, "default"));
+        let (extension, context) = match rest.split_once('/') {
+            Some((ext, ctx)) => (ext, Some(ctx.to_string())),
+            None => (rest, None),
+        };
         Ok(Self {
             extension: extension.into(),
-            context: context.into(),
+            context,
             variables,
         })
     }
@@ -68,12 +80,14 @@ mod tests {
     use crate::commands::originate::VariablesType;
 
     #[test]
-    fn loopback_display() {
-        let ep = LoopbackEndpoint {
-            extension: "9199".into(),
-            context: "default".into(),
-            variables: None,
-        };
+    fn loopback_display_no_context() {
+        let ep = LoopbackEndpoint::new("9199");
+        assert_eq!(ep.to_string(), "loopback/9199");
+    }
+
+    #[test]
+    fn loopback_display_with_context() {
+        let ep = LoopbackEndpoint::new("9199").with_context("default");
         assert_eq!(ep.to_string(), "loopback/9199/default");
     }
 
@@ -81,11 +95,9 @@ mod tests {
     fn loopback_display_with_variables() {
         let mut vars = Variables::new(VariablesType::Default);
         vars.insert("loopback_initial_codec", "L16@48000h");
-        let ep = LoopbackEndpoint {
-            extension: "100".into(),
-            context: "test".into(),
-            variables: Some(vars),
-        };
+        let ep = LoopbackEndpoint::new("100")
+            .with_context("test")
+            .with_variables(vars);
         assert_eq!(
             ep.to_string(),
             "{loopback_initial_codec=L16@48000h}loopback/100/test"
@@ -93,30 +105,42 @@ mod tests {
     }
 
     #[test]
-    fn loopback_from_str() {
+    fn loopback_from_str_with_context() {
         let ep: LoopbackEndpoint = "loopback/9199/test"
             .parse()
             .unwrap();
         assert_eq!(ep.extension, "9199");
-        assert_eq!(ep.context, "test");
+        assert_eq!(
+            ep.context
+                .as_deref(),
+            Some("test")
+        );
     }
 
     #[test]
-    fn loopback_from_str_no_context_defaults() {
+    fn loopback_from_str_no_context() {
         let ep: LoopbackEndpoint = "loopback/9199"
             .parse()
             .unwrap();
         assert_eq!(ep.extension, "9199");
-        assert_eq!(ep.context, "default");
+        assert!(ep
+            .context
+            .is_none());
     }
 
     #[test]
-    fn loopback_round_trip() {
-        let ep = LoopbackEndpoint {
-            extension: "100".into(),
-            context: "myctx".into(),
-            variables: None,
-        };
+    fn loopback_round_trip_with_context() {
+        let ep = LoopbackEndpoint::new("100").with_context("myctx");
+        let s = ep.to_string();
+        let parsed: LoopbackEndpoint = s
+            .parse()
+            .unwrap();
+        assert_eq!(parsed, ep);
+    }
+
+    #[test]
+    fn loopback_round_trip_no_context() {
+        let ep = LoopbackEndpoint::new("9199");
         let s = ep.to_string();
         let parsed: LoopbackEndpoint = s
             .parse()
@@ -126,11 +150,7 @@ mod tests {
 
     #[test]
     fn serde_loopback_endpoint() {
-        let ep = LoopbackEndpoint {
-            extension: "9199".into(),
-            context: "default".into(),
-            variables: None,
-        };
+        let ep = LoopbackEndpoint::new("9199").with_context("default");
         let json = serde_json::to_string(&ep).unwrap();
         let parsed: LoopbackEndpoint = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, ep);
