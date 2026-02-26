@@ -29,6 +29,8 @@ pub enum MessageType {
     Event,
     /// Disconnect notice
     Disconnect,
+    /// Connection rejected by ACL (text/rude-rejection)
+    RudeRejection,
     /// Unknown message type
     Unknown(String),
 }
@@ -45,6 +47,7 @@ impl MessageType {
             | CONTENT_TYPE_TEXT_EVENT_XML
             | CONTENT_TYPE_LOG_DATA => MessageType::Event,
             "text/disconnect-notice" => MessageType::Disconnect,
+            "text/rude-rejection" => MessageType::RudeRejection,
             _ => MessageType::Unknown(content_type.to_string()),
         }
     }
@@ -381,6 +384,15 @@ impl EslParser {
 
         if let Some(obj) = json_value.as_object() {
             for (key, value) in obj {
+                // FreeSWITCH puts the event body under a "_body" key in JSON events
+                if key == "_body" {
+                    let body_str = match value {
+                        serde_json::Value::String(s) => s.clone(),
+                        _ => value.to_string(),
+                    };
+                    event.set_body(body_str);
+                    continue;
+                }
                 let value_str = match value {
                     serde_json::Value::String(s) => s.clone(),
                     _ => value.to_string(),
@@ -1101,5 +1113,37 @@ mod tests {
         let response = message.into_response();
         assert!(response.is_success());
         assert_eq!(response.reply_text(), Some("+OK"));
+    }
+
+    #[test]
+    fn test_parse_json_event_body_key() {
+        let parser = EslParser::new();
+        let json = r#"{"Event-Name":"BACKGROUND_JOB","Job-UUID":"abc-123","_body":"+OK result"}"#;
+        let msg = EslMessage::new(
+            MessageType::Event,
+            {
+                let mut h = HashMap::new();
+                h.insert("Content-Type".to_string(), "text/event-json".to_string());
+                h
+            },
+            Some(json.to_string()),
+        );
+        let event = parser
+            .parse_event(msg, EventFormat::Json)
+            .unwrap();
+        assert_eq!(event.event_type(), Some(EslEventType::BackgroundJob));
+        assert_eq!(event.body(), Some("+OK result"));
+        assert!(
+            event
+                .header_str("_body")
+                .is_none(),
+            "_body must be mapped to event body, not stored as a header"
+        );
+    }
+
+    #[test]
+    fn test_rude_rejection_message_type() {
+        let mt = MessageType::from_content_type("text/rude-rejection");
+        assert_eq!(mt, MessageType::RudeRejection);
     }
 }

@@ -68,6 +68,13 @@ Logged wire data must be accurate. Never use `.trim()` on wire content for
 cosmetic reasons — it can eat meaningful whitespace. Strip only known protocol
 suffixes by name (e.g. `strip_suffix(HEADER_TERMINATOR)`).
 
+## Library Code Rules
+
+**No `assert!`/`panic!`/`unwrap()` in library code** outside of tests. This is
+a library crate — panics crash the caller's application. Return `Result` or
+`Option` instead. The only exception is logic errors that truly cannot happen
+(document why with a comment), and even then prefer `debug_assert!`.
+
 ## Correctness Over Recovery
 
 Correctness is the highest priority. Never silently absorb protocol violations

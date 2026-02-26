@@ -268,16 +268,28 @@ impl FromStr for Variables {
     }
 }
 
-/// Split on commas that are not preceded by a backslash.
+/// Split on commas that are not escaped by a backslash.
+///
+/// A comma preceded by an odd number of backslashes is escaped (e.g. `\,`).
+/// A comma preceded by an even number of backslashes is a real split point
+/// (e.g. `\\,` means escaped backslash followed by comma delimiter).
 fn split_unescaped_commas(s: &str) -> Vec<&str> {
     let mut parts = Vec::new();
     let mut start = 0;
     let bytes = s.as_bytes();
 
     for i in 0..bytes.len() {
-        if bytes[i] == b',' && !(i > 0 && bytes[i - 1] == b'\\') {
-            parts.push(&s[start..i]);
-            start = i + 1;
+        if bytes[i] == b',' {
+            let mut backslashes = 0;
+            let mut j = i;
+            while j > 0 && bytes[j - 1] == b'\\' {
+                backslashes += 1;
+                j -= 1;
+            }
+            if backslashes % 2 == 0 {
+                parts.push(&s[start..i]);
+                start = i + 1;
+            }
         }
     }
     parts.push(&s[start..]);
@@ -667,6 +679,28 @@ mod tests {
             Some("9005551212")
         );
         assert_eq!(parsed.get("sip_h_Call-Info"), Some("<url>;meta=123,<uri>"));
+    }
+
+    #[test]
+    fn split_unescaped_commas_basic() {
+        assert_eq!(split_unescaped_commas("a,b,c"), vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn split_unescaped_commas_escaped() {
+        assert_eq!(split_unescaped_commas(r"a\,b,c"), vec![r"a\,b", "c"]);
+    }
+
+    #[test]
+    fn split_unescaped_commas_double_backslash() {
+        // \\, = escaped backslash + comma delimiter
+        assert_eq!(split_unescaped_commas(r"a\\,b"), vec![r"a\\", "b"]);
+    }
+
+    #[test]
+    fn split_unescaped_commas_triple_backslash() {
+        // \\\, = escaped backslash + escaped comma (no split)
+        assert_eq!(split_unescaped_commas(r"a\\\,b"), vec![r"a\\\,b"]);
     }
 
     // --- Endpoint ---

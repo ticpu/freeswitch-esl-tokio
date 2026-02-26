@@ -23,11 +23,15 @@ pub enum EventFormat {
 
 impl EventFormat {
     /// Determine event format from a Content-Type header value.
-    pub fn from_content_type(ct: &str) -> Self {
+    ///
+    /// Returns `Err` for unrecognized content types to avoid silently
+    /// misparsing events if FreeSWITCH adds a new format.
+    pub fn from_content_type(ct: &str) -> Result<Self, ParseEventFormatError> {
         match ct {
-            "text/event-json" => Self::Json,
-            "text/event-xml" => Self::Xml,
-            _ => Self::Plain,
+            "text/event-json" => Ok(Self::Json),
+            "text/event-xml" => Ok(Self::Xml),
+            "text/event-plain" => Ok(Self::Plain),
+            _ => Err(ParseEventFormatError(ct.to_string())),
         }
     }
 }
@@ -1016,20 +1020,17 @@ mod tests {
     fn test_event_format_from_content_type() {
         assert_eq!(
             EventFormat::from_content_type("text/event-json"),
-            EventFormat::Json
+            Ok(EventFormat::Json)
         );
         assert_eq!(
             EventFormat::from_content_type("text/event-xml"),
-            EventFormat::Xml
+            Ok(EventFormat::Xml)
         );
         assert_eq!(
             EventFormat::from_content_type("text/event-plain"),
-            EventFormat::Plain
+            Ok(EventFormat::Plain)
         );
-        assert_eq!(
-            EventFormat::from_content_type("unknown"),
-            EventFormat::Plain
-        );
+        assert!(EventFormat::from_content_type("unknown").is_err());
     }
 
     // --- EslEvent accessor tests (via HeaderLookup trait) ---

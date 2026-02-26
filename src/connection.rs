@@ -240,6 +240,13 @@ async fn authenticate(
     debug!("[AUTH] Waiting for auth request from FreeSWITCH");
     let message = recv_message(stream, parser, read_buffer).await?;
 
+    if message.message_type == MessageType::RudeRejection {
+        let reason = message
+            .body
+            .unwrap_or_else(|| "connection rejected by ACL".to_string());
+        return Err(EslError::AccessDenied { reason });
+    }
+
     if message.message_type != MessageType::AuthRequest {
         return Err(EslError::protocol_error("Expected auth request"));
     }
@@ -355,11 +362,29 @@ async fn reader_loop_inner(
             Ok(Some(message)) => {
                 match message.message_type {
                     MessageType::Event => {
-                        let format = message
+                        let format = match message
                             .headers
                             .get(HEADER_CONTENT_TYPE)
                             .map(|ct| EventFormat::from_content_type(ct))
-                            .unwrap_or(EventFormat::Plain);
+                        {
+                            Some(Ok(f)) => f,
+                            Some(Err(e)) => {
+                                warn!("Unknown event content type: {}", e);
+                                if !dispatch_event(
+                                    &event_tx,
+                                    &shared,
+                                    Err(EslError::InvalidEventFormat {
+                                        format: e
+                                            .0
+                                            .clone(),
+                                    }),
+                                ) {
+                                    return;
+                                }
+                                continue;
+                            }
+                            None => EventFormat::Plain,
+                        };
 
                         let event_result = parser.parse_event(message, format);
                         if !dispatch_event(&event_tx, &shared, event_result) {
@@ -396,6 +421,25 @@ async fn reader_loop_inner(
                             .send(ConnectionStatus::Disconnected(
                                 DisconnectReason::ServerNotice,
                             ));
+                        return;
+                    }
+                    MessageType::RudeRejection => {
+                        let reason = message
+                            .body
+                            .unwrap_or_else(|| "connection rejected by ACL".to_string());
+                        warn!("Rude rejection from server: {}", reason);
+                        let _ = dispatch_event(
+                            &event_tx,
+                            &shared,
+                            Err(EslError::AccessDenied {
+                                reason: reason.clone(),
+                            }),
+                        );
+                        let _ = shared
+                            .status_tx
+                            .send(ConnectionStatus::Disconnected(DisconnectReason::IoError(
+                                reason,
+                            )));
                         return;
                     }
                     MessageType::AuthRequest | MessageType::Unknown(_) => {

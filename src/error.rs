@@ -107,6 +107,13 @@ pub enum EslError {
         header: String,
     },
 
+    /// Connection rejected by FreeSWITCH ACL (text/rude-rejection)
+    #[error("Access denied: {reason}")]
+    AccessDenied {
+        /// Message from the rejection notice.
+        reason: String,
+    },
+
     /// Connection closed by remote
     #[error("Connection closed by FreeSWITCH")]
     ConnectionClosed,
@@ -193,6 +200,7 @@ impl EslError {
             EslError::Io(_)
                 | EslError::NotConnected
                 | EslError::ConnectionClosed
+                | EslError::AccessDenied { .. }
                 | EslError::HeartbeatExpired { .. }
                 | EslError::ProtocolError { .. }
         )
