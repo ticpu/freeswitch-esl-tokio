@@ -3,11 +3,54 @@
 This is a **library-first** crate. There is an examples/ folder buildable binaries
 `Cargo.lock` is gitignored per Cargo convention for libraries.
 
+## `#[non_exhaustive]` Policy
+
+All public enums and public structs with public fields have `#[non_exhaustive]`.
+When adding a new public struct or enum, **always** add `#[non_exhaustive]`.
+
+Because `#[non_exhaustive]` prevents struct literal construction from external
+crates (including `examples/`), every public struct must have a constructor
+(`new()` or named constructors). Optional fields use builder methods
+(`with_foo()`). **Always run `cargo build --examples`** after adding or
+modifying public structs to verify external construction still works.
+
+## API Boundary Rules
+
+- **Never expose dependency types in public signatures.** Return `impl Iterator`
+  (not `indexmap::map::Iter`), wrap dependency errors (not `#[from] serde_json::Error`).
+  A dependency major-version bump becomes a semver break if its types leak.
+- **`pub(crate)` modules can still leak types.** If a public function returns a
+  type from a `pub(crate)` module, that type is visible but unnameable by callers.
+  Either re-export the type or don't return it.
+- **Struct fields that control behavior should be private.** Expose via accessor
+  methods (e.g. `scope()` not `pub vars_type`). This prevents callers from
+  mutating invariants after construction.
+- **`constants` module is `pub(crate)`.** Only `DEFAULT_ESL_PORT` is re-exported.
+  Internal protocol constants are implementation details.
+
+## Method Signature Conventions
+
+- **`impl Into<String>` for string setters.** Functions that store a string
+  should accept `impl Into<String>` so callers can pass `&str` or `String`.
+- **`Duration` for timeouts.** Never use raw `u32` seconds. Consistent with
+  `set_liveness_timeout()` / `set_command_timeout()`.
+- **Case-insensitive `FromStr`.** All `FromStr` impls for wire format types
+  (`DialplanType`, `EventFormat`, `EslEventType`, etc.) use
+  `eq_ignore_ascii_case`. `Display` emits the canonical form.
+- **`HeaderLookup` on response types.** Any type with ESL headers should
+  implement `HeaderLookup` for typed accessor access. `EslResponse` and
+  `EslEvent` both implement it.
+
 ## Build & Test Workflow
 
 **Always run `cargo fmt` before every commit.** The pre-commit hook enforces
 formatting, clippy warnings, all tests (including doctests), `-D missing_docs`
 doc coverage, and EslEventType sync with C ESL.
+
+**When adding new `EslEventType` variants**, check whether they belong in any
+of the event group constants (`CHANNEL_EVENTS`, `MEDIA_EVENTS`,
+`PRESENCE_EVENTS`, `SYSTEM_EVENTS`, `CONFERENCE_EVENTS`) in `src/event.rs`
+and update them accordingly.
 
 ```sh
 cargo fmt
@@ -21,6 +64,7 @@ cargo test --lib
 Before tagging a release:
 
 ```sh
+cargo semver-checks check-release
 cargo clippy --release -- -D warnings
 cargo test --release
 cargo build --release
@@ -56,6 +100,19 @@ whole story, a brief one-liner suffices.
 **No hardcoded counts in prose.** Don't write "26 variants" or "54 variables" in
 markdown files or comments — these go stale when variants are added. Use dynamic
 badges (CI-generated) in README or just omit the count.
+
+## Logging Accuracy
+
+Logged wire data must be accurate. Never use `.trim()` on wire content for
+cosmetic reasons — it can eat meaningful whitespace. Strip only known protocol
+suffixes by name (e.g. `strip_suffix(HEADER_TERMINATOR)`).
+
+## Library Code Rules
+
+**No `assert!`/`panic!`/`unwrap()` in library code** outside of tests. This is
+a library crate — panics crash the caller's application. Return `Result` or
+`Option` instead. The only exception is logic errors that truly cannot happen
+(document why with a comment), and even then prefer `debug_assert!`.
 
 ## Correctness Over Recovery
 
@@ -257,3 +314,11 @@ This project follows test-driven development:
 4. Implement the fix/feature
 5. Confirm all tests pass
 6. Commit the implementation (hooks run normally)
+
+### Test failures reveal bugs, not inconveniences
+
+When a test fails against real FreeSWITCH, **assume the library has a bug**
+until proven otherwise. Never work around a test failure by removing the
+triggering input (e.g. dropping a timeout value, switching to a simpler
+endpoint). If the library produces a command that FreeSWITCH rejects, the
+serialization is wrong — fix the serializer, not the test.

@@ -16,9 +16,9 @@ if ! cargo clippy --all-targets --message-format=short -- -D warnings; then
 fi
 
 echo "Checking documentation coverage..."
-if ! doc_output=$(RUSTDOCFLAGS="-D missing_docs" cargo doc --no-deps 2>&1); then
+if ! doc_output=$(RUSTDOCFLAGS="-D missing_docs -D rustdoc::broken_intra_doc_links" cargo doc --no-deps 2>&1); then
     echo "$doc_output" | grep '^error' | head -20
-    echo "❌ Missing public documentation. Run: RUSTDOCFLAGS='-D missing_docs' cargo doc --no-deps"
+    echo "❌ Documentation errors. Run: RUSTDOCFLAGS='-D missing_docs -D rustdoc::broken_intra_doc_links' cargo doc --no-deps"
     exit 1
 fi
 

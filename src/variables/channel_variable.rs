@@ -16,9 +16,11 @@ define_header_enum! {
     error_type: ParseChannelVariableError,
     /// Core FreeSWITCH channel variable names (the part after the `variable_` prefix).
     ///
-    /// Use with [`EslEvent::variable()`] for type-safe lookups. Only includes
+    /// Use with [`HeaderLookup::variable()`] for type-safe lookups. Only includes
     /// variables set by the FreeSWITCH core — module-specific variables (SIP,
     /// conference, etc.) belong in separate enums.
+    ///
+    /// [`HeaderLookup::variable()`]: crate::HeaderLookup::variable
     pub enum ChannelVariable {
         Uuid => "uuid",
         Direction => "direction",
