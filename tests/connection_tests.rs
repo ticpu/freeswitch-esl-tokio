@@ -955,3 +955,241 @@ async fn test_event_queue_size_zero_clamped() {
     let event = recv_event(&mut events).await;
     assert_eq!(event.event_type(), Some(EslEventType::ChannelCreate));
 }
+
+// ── Re-exec tests ───────────────────────────────────────────────────────
+
+#[cfg(unix)]
+mod reexec {
+    use super::*;
+
+    #[tokio::test]
+    async fn teardown_returns_valid_fd_and_residual() {
+        let (_mock, client, _events) = setup_connected_pair("ClueCon").await;
+
+        let result = client
+            .teardown_for_reexec()
+            .await;
+        assert!(result.is_ok(), "teardown failed: {:?}", result.err());
+
+        let (fd, residual) = result.unwrap();
+        assert!(fd >= 0, "fd should be non-negative");
+        // No data was in-flight, so residual should be empty
+        assert!(
+            residual.is_empty(),
+            "expected empty residual, got {} bytes",
+            residual.len()
+        );
+
+        // Connection should be marked as disconnected
+        assert!(!client.is_connected());
+        assert_eq!(
+            client.status(),
+            ConnectionStatus::Disconnected(DisconnectReason::ReexecTeardown)
+        );
+    }
+
+    #[tokio::test]
+    async fn teardown_with_buffered_event_delivers_then_stops() {
+        let (mut mock, client, mut events) = setup_connected_pair("ClueCon").await;
+
+        // Send an event then immediately teardown.
+        // The event should be delivered before teardown completes.
+        let mut headers = HashMap::new();
+        headers.insert("Unique-ID".to_string(), "reexec-test-uuid".to_string());
+        mock.send_event_plain("HEARTBEAT", &headers)
+            .await;
+
+        // Give the reader a moment to buffer the event
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let (fd, _residual) = client
+            .teardown_for_reexec()
+            .await
+            .unwrap();
+        assert!(fd >= 0);
+
+        // The event should have been dispatched before the drain completed
+        let event = tokio::time::timeout(Duration::from_secs(1), events.recv()).await;
+        assert!(
+            event.is_ok(),
+            "event should have been dispatched before drain"
+        );
+    }
+
+    #[tokio::test]
+    async fn teardown_twice_fails() {
+        let (_mock, client, _events) = setup_connected_pair("ClueCon").await;
+
+        let first = client
+            .teardown_for_reexec()
+            .await;
+        assert!(first.is_ok());
+
+        let second = client
+            .teardown_for_reexec()
+            .await;
+        assert!(second.is_err());
+        match second.unwrap_err() {
+            EslError::ReexecFailed { reason } => {
+                assert!(
+                    reason.contains("already called"),
+                    "unexpected reason: {}",
+                    reason
+                );
+            }
+            e => panic!("expected ReexecFailed, got: {}", e),
+        }
+    }
+
+    #[tokio::test]
+    async fn teardown_with_pending_command_fails() {
+        let (mut mock, client, _events) = setup_connected_pair("ClueCon").await;
+
+        // Start a command but don't reply from mock
+        let client2 = client.clone();
+        let cmd_handle = tokio::spawn(async move {
+            client2
+                .api("status")
+                .await
+        });
+
+        // Wait for the command to be in-flight
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let result = client
+            .teardown_for_reexec()
+            .await;
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            EslError::ReexecFailed { reason } => {
+                assert!(
+                    reason.contains("in-flight"),
+                    "unexpected reason: {}",
+                    reason
+                );
+            }
+            e => panic!("expected ReexecFailed, got: {}", e),
+        }
+
+        // Clean up: reply to the pending command so the task completes
+        let _cmd = mock
+            .read_command()
+            .await;
+        mock.reply_api("OK")
+            .await;
+        let _ = cmd_handle.await;
+    }
+
+    #[tokio::test]
+    async fn adopt_stream_with_empty_residual() {
+        // Set up a mock that acts as an already-authenticated server
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .unwrap();
+        let port = listener
+            .local_addr()
+            .unwrap()
+            .port();
+
+        let server_handle = tokio::spawn(async move {
+            let (stream, _) = listener
+                .accept()
+                .await
+                .unwrap();
+            MockClient::from_stream(stream)
+        });
+
+        let stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
+            .await
+            .unwrap();
+
+        let mut mock = server_handle
+            .await
+            .unwrap();
+
+        // adopt_stream bypasses auth
+        let (client, mut events) = EslClient::adopt_stream(stream, &[]).unwrap();
+        assert!(client.is_connected());
+
+        // Send an event from mock, verify it arrives
+        let mut headers = HashMap::new();
+        headers.insert("Unique-ID".to_string(), "adopted-uuid".to_string());
+        mock.send_event_plain("CHANNEL_CREATE", &headers)
+            .await;
+
+        let event = recv_event(&mut events).await;
+        assert_eq!(event.event_type(), Some(EslEventType::ChannelCreate));
+    }
+
+    #[tokio::test]
+    async fn adopt_stream_with_residual_bytes() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .unwrap();
+        let port = listener
+            .local_addr()
+            .unwrap()
+            .port();
+
+        let server_handle = tokio::spawn(async move {
+            let (stream, _) = listener
+                .accept()
+                .await
+                .unwrap();
+            MockClient::from_stream(stream)
+        });
+
+        let stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
+            .await
+            .unwrap();
+
+        let _mock = server_handle
+            .await
+            .unwrap();
+
+        // Pre-seed with a complete event in the residual buffer
+        let event_body = "Event-Name: HEARTBEAT\nCore-UUID: test-core\n\n";
+        let envelope = format!(
+            "Content-Length: {}\nContent-Type: text/event-plain\n\n{}",
+            event_body.len(),
+            event_body
+        );
+
+        let (_client, mut events) = EslClient::adopt_stream(stream, envelope.as_bytes()).unwrap();
+
+        // The pre-seeded event should be delivered from the residual buffer
+        let event = recv_event(&mut events).await;
+        assert_eq!(event.event_type(), Some(EslEventType::Heartbeat));
+    }
+
+    #[tokio::test]
+    async fn adopt_stream_with_options() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .unwrap();
+        let port = listener
+            .local_addr()
+            .unwrap()
+            .port();
+
+        let server_handle = tokio::spawn(async move {
+            let (stream, _) = listener
+                .accept()
+                .await
+                .unwrap();
+            MockClient::from_stream(stream)
+        });
+
+        let stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
+            .await
+            .unwrap();
+
+        let _mock = server_handle
+            .await
+            .unwrap();
+
+        let options = EslConnectOptions::new().with_event_queue_size(10);
+        let (client, _events) = EslClient::adopt_stream_with_options(stream, &[], options).unwrap();
+        assert!(client.is_connected());
+    }
+}

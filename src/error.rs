@@ -146,6 +146,13 @@ pub enum EslError {
     /// Originate command builder error
     #[error("Originate error: {0}")]
     Originate(#[from] OriginateError),
+
+    /// Re-exec teardown failed
+    #[error("Re-exec teardown failed: {reason}")]
+    ReexecFailed {
+        /// What went wrong during teardown.
+        reason: String,
+    },
 }
 
 impl EslError {
@@ -203,6 +210,7 @@ impl EslError {
                 | EslError::AccessDenied { .. }
                 | EslError::HeartbeatExpired { .. }
                 | EslError::ProtocolError { .. }
+                | EslError::ReexecFailed { .. }
         )
     }
 }

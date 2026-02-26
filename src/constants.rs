@@ -50,3 +50,6 @@ pub const DEFAULT_TIMEOUT_MS: u64 = 2000;
 
 /// Maximum number of queued events before dropping
 pub const MAX_EVENT_QUEUE_SIZE: usize = 1000;
+
+/// Maximum time (ms) to drain an in-progress message body during re-exec teardown
+pub const REEXEC_DRAIN_TIMEOUT_MS: u64 = 5000;

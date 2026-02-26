@@ -89,6 +89,9 @@ tokio = { version = "1.0", features = ["full"] }
   `is_connection_error()` / `is_recoverable()` error classification.
 - **Correct wire format** -- two-part framing, percent-decoded headers,
   Content-Type detection. Matches `mod_event_socket.c`.
+- **Re-exec support** (Unix) -- `teardown_for_reexec()` extracts the socket fd
+  and residual parser bytes; `adopt_stream()` reconstructs the client in the
+  new binary. Zero-downtime upgrades without dropping the ESL connection.
 
 ## Architecture
 

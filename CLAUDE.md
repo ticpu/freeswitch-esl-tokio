@@ -183,6 +183,10 @@ primary API.
   decide handling without matching every variant.
 - **Correct wire format**: Events use two-part framing (outer envelope + body).
   Header values are percent-decoded. Event format determined from Content-Type.
+- **Re-exec support** (`#[cfg(unix)]`): `teardown_for_reexec()` gracefully stops
+  the reader loop at a message boundary, returns the raw fd and residual parser
+  bytes. `adopt_stream()` constructs an EslClient from an already-authenticated
+  stream. See [docs/reexec.md](docs/reexec.md).
 
 ### Command builders (commands/, app/, variables/)
 
@@ -218,7 +222,7 @@ Keep the boundary clean — `EslClient` sends strings and returns `EslResponse`.
 ```
 src/
 ├── lib.rs                 # Public API re-exports
-├── connection.rs          # EslClient, EslEventStream, connect()/accept_outbound()
+├── connection.rs          # EslClient, EslEventStream, connect()/accept_outbound()/adopt_stream()
 ├── protocol.rs            # Wire format parser (framing, percent-decoding)
 ├── buffer.rs              # Streaming read buffer with Content-Length framing
 ├── command.rs             # EslCommand, CommandBuilder, EslResponse
