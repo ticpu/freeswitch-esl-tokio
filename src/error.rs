@@ -148,6 +148,7 @@ pub enum EslError {
     Originate(#[from] OriginateError),
 
     /// Re-exec teardown failed
+    #[cfg(unix)]
     #[error("Re-exec teardown failed: {reason}")]
     ReexecFailed {
         /// What went wrong during teardown.
@@ -202,15 +203,16 @@ impl EslError {
     /// Matches: `Io`, `NotConnected`, `ConnectionClosed`, `HeartbeatExpired`,
     /// `ProtocolError`.
     pub fn is_connection_error(&self) -> bool {
-        matches!(
-            self,
+        match self {
             EslError::Io(_)
-                | EslError::NotConnected
-                | EslError::ConnectionClosed
-                | EslError::AccessDenied { .. }
-                | EslError::HeartbeatExpired { .. }
-                | EslError::ProtocolError { .. }
-                | EslError::ReexecFailed { .. }
-        )
+            | EslError::NotConnected
+            | EslError::ConnectionClosed
+            | EslError::AccessDenied { .. }
+            | EslError::HeartbeatExpired { .. }
+            | EslError::ProtocolError { .. } => true,
+            #[cfg(unix)]
+            EslError::ReexecFailed { .. } => true,
+            _ => false,
+        }
     }
 }

@@ -52,4 +52,5 @@ pub const DEFAULT_TIMEOUT_MS: u64 = 2000;
 pub const MAX_EVENT_QUEUE_SIZE: usize = 1000;
 
 /// Maximum time (ms) to drain an in-progress message body during re-exec teardown
+#[cfg(unix)]
 pub const REEXEC_DRAIN_TIMEOUT_MS: u64 = 5000;

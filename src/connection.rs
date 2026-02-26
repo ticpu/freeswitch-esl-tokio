@@ -13,11 +13,13 @@ use tokio::sync::{mpsc, oneshot, watch, Mutex};
 use tokio::time::{timeout, Instant};
 use tracing::{debug, info, trace, warn};
 
+#[cfg(unix)]
+use crate::constants::REEXEC_DRAIN_TIMEOUT_MS;
 use crate::{
     command::{EslCommand, EslResponse, ExecuteOptions},
     constants::{
         CONTENT_TYPE_LOG_DATA, DEFAULT_TIMEOUT_MS, HEADER_CONTENT_TYPE, MAX_EVENT_QUEUE_SIZE,
-        REEXEC_DRAIN_TIMEOUT_MS, SOCKET_BUF_SIZE,
+        SOCKET_BUF_SIZE,
     },
     error::{EslError, EslResult},
     event::{EslEvent, EslEventType, EventFormat},
@@ -26,12 +28,14 @@ use crate::{
 };
 
 /// Result type for the reexec drain operation (residual bytes or error).
+#[cfg(unix)]
 type ReexecResult = Result<Vec<u8>, EslError>;
 
 /// Caller-side half of the re-exec channel (stored in `SharedState`).
 ///
 /// Taken by [`EslClient::teardown_for_reexec()`] to signal the reader and
 /// receive residual bytes.
+#[cfg(unix)]
 struct ReexecCaller {
     stop_tx: oneshot::Sender<()>,
     result_rx: oneshot::Receiver<ReexecResult>,
@@ -41,8 +45,11 @@ struct ReexecCaller {
 ///
 /// Owned by the reader loop task. The stop receiver fires when teardown is
 /// requested; the result sender delivers residual bytes back to the caller.
+/// On non-unix platforms this is a zero-size struct (re-exec is unix-only).
 struct ReexecReader {
+    #[cfg(unix)]
     stop_rx: oneshot::Receiver<()>,
+    #[cfg(unix)]
     result_tx: Option<oneshot::Sender<ReexecResult>>,
 }
 
@@ -90,6 +97,7 @@ pub enum DisconnectReason {
     /// Client called disconnect()
     ClientRequested,
     /// Client initiated re-exec teardown
+    #[cfg(unix)]
     ReexecTeardown,
 }
 
@@ -110,6 +118,7 @@ impl std::fmt::Display for DisconnectReason {
             DisconnectReason::IoError(msg) => write!(f, "I/O error: {}", msg),
             DisconnectReason::ConnectionClosed => write!(f, "connection closed"),
             DisconnectReason::ClientRequested => write!(f, "client requested disconnect"),
+            #[cfg(unix)]
             DisconnectReason::ReexecTeardown => write!(f, "re-exec teardown"),
         }
     }
@@ -169,6 +178,7 @@ struct SharedState {
     /// Auth response from inbound connect (None for outbound)
     auth_response: Option<EslResponse>,
     /// Re-exec channel caller half (taken by teardown_for_reexec)
+    #[cfg(unix)]
     reexec: Mutex<Option<ReexecCaller>>,
 }
 
@@ -429,10 +439,11 @@ async fn reader_loop_inner(
     mut parser: EslParser,
     shared: Arc<SharedState>,
     event_tx: mpsc::Sender<Result<EslEvent, EslError>>,
-    mut reexec: ReexecReader,
+    #[cfg_attr(not(unix), allow(unused_variables, unused_mut))] mut reexec: ReexecReader,
 ) {
     let mut read_buffer = [0u8; SOCKET_BUF_SIZE];
     let mut last_recv = Instant::now();
+    #[cfg(unix)]
     let mut draining = false;
 
     loop {
@@ -555,7 +566,8 @@ async fn reader_loop_inner(
             }
         }
 
-        // Drain completion: parser needs more data and is between messages
+        // Re-exec drain completion: parser needs more data and is between messages
+        #[cfg(unix)]
         if draining && parser.is_waiting_for_headers() {
             let residual = parser
                 .remaining_bytes()
@@ -570,9 +582,10 @@ async fn reader_loop_inner(
             return;
         }
 
+        // Re-exec drain: WaitingForBody, need more socket data to finish the
+        // current message before we can stop cleanly.
+        #[cfg(unix)]
         if draining {
-            // WaitingForBody: need more socket data to complete the current
-            // message. Read with the drain timeout (no liveness, no select).
             let drain_timeout = Duration::from_millis(REEXEC_DRAIN_TIMEOUT_MS);
             match timeout(drain_timeout, reader.read(&mut read_buffer)).await {
                 Ok(Ok(0)) => {
@@ -621,42 +634,38 @@ async fn reader_loop_inner(
                     return;
                 }
             }
-        } else {
-            // Normal read path with optional reexec stop signal
-            let read_result = tokio::select! {
-                biased;
-                _ = &mut reexec.stop_rx, if !draining => {
-                    debug!("Re-exec stop signal received, draining parser");
-                    draining = true;
-                    continue;
-                }
-                result = timeout(Duration::from_secs(2), reader.read(&mut read_buffer)) => result,
-            };
+            continue;
+        }
 
-            match read_result {
-                Ok(Ok(0)) => {
-                    info!("Connection closed (EOF)");
-                    let _ = shared
-                        .status_tx
-                        .send(ConnectionStatus::Disconnected(
-                            DisconnectReason::ConnectionClosed,
-                        ));
-                    return;
-                }
-                Ok(Ok(n)) => {
-                    last_recv = Instant::now();
-                    if let Err(e) = parser.add_data(&read_buffer[..n]) {
-                        warn!("Buffer error: {}", e);
-                        let _ = shared
-                            .status_tx
-                            .send(ConnectionStatus::Disconnected(DisconnectReason::IoError(
-                                e.to_string(),
-                            )));
-                        return;
-                    }
-                }
-                Ok(Err(e)) => {
-                    warn!("Read error: {}", e);
+        // Normal read path with optional reexec stop signal
+        #[cfg(unix)]
+        let read_result = tokio::select! {
+            biased;
+            _ = &mut reexec.stop_rx, if !draining => {
+                debug!("Re-exec stop signal received, draining parser");
+                draining = true;
+                continue;
+            }
+            result = timeout(Duration::from_secs(2), reader.read(&mut read_buffer)) => result,
+        };
+
+        #[cfg(not(unix))]
+        let read_result = timeout(Duration::from_secs(2), reader.read(&mut read_buffer)).await;
+
+        match read_result {
+            Ok(Ok(0)) => {
+                info!("Connection closed (EOF)");
+                let _ = shared
+                    .status_tx
+                    .send(ConnectionStatus::Disconnected(
+                        DisconnectReason::ConnectionClosed,
+                    ));
+                return;
+            }
+            Ok(Ok(n)) => {
+                last_recv = Instant::now();
+                if let Err(e) = parser.add_data(&read_buffer[..n]) {
+                    warn!("Buffer error: {}", e);
                     let _ = shared
                         .status_tx
                         .send(ConnectionStatus::Disconnected(DisconnectReason::IoError(
@@ -664,26 +673,35 @@ async fn reader_loop_inner(
                         )));
                     return;
                 }
-                Err(_) => {
-                    // Timeout — check liveness
-                    let threshold_ms = shared
-                        .liveness_timeout_ms
-                        .load(Ordering::Relaxed);
-                    if threshold_ms > 0 {
-                        let elapsed = last_recv.elapsed();
-                        if elapsed > Duration::from_millis(threshold_ms) {
-                            warn!(
-                                "Liveness timeout: {}ms without traffic (threshold {}ms)",
-                                elapsed.as_millis(),
-                                threshold_ms
-                            );
-                            let _ = shared
-                                .status_tx
-                                .send(ConnectionStatus::Disconnected(
-                                    DisconnectReason::HeartbeatExpired,
-                                ));
-                            return;
-                        }
+            }
+            Ok(Err(e)) => {
+                warn!("Read error: {}", e);
+                let _ = shared
+                    .status_tx
+                    .send(ConnectionStatus::Disconnected(DisconnectReason::IoError(
+                        e.to_string(),
+                    )));
+                return;
+            }
+            Err(_) => {
+                // Timeout — check liveness
+                let threshold_ms = shared
+                    .liveness_timeout_ms
+                    .load(Ordering::Relaxed);
+                if threshold_ms > 0 {
+                    let elapsed = last_recv.elapsed();
+                    if elapsed > Duration::from_millis(threshold_ms) {
+                        warn!(
+                            "Liveness timeout: {}ms without traffic (threshold {}ms)",
+                            elapsed.as_millis(),
+                            threshold_ms
+                        );
+                        let _ = shared
+                            .status_tx
+                            .send(ConnectionStatus::Disconnected(
+                                DisconnectReason::HeartbeatExpired,
+                            ));
+                        return;
                     }
                 }
             }
@@ -876,7 +894,9 @@ impl EslClient {
         let (status_tx, status_rx) = watch::channel(ConnectionStatus::Connected);
         let status_rx2 = status_tx.subscribe();
 
+        #[cfg(unix)]
         let (stop_tx, stop_rx) = oneshot::channel();
+        #[cfg(unix)]
         let (result_tx, result_rx) = oneshot::channel();
 
         let shared = Arc::new(SharedState {
@@ -887,19 +907,25 @@ impl EslClient {
             event_overflow: AtomicBool::new(false),
             dropped_event_count: AtomicU64::new(0),
             auth_response,
+            #[cfg(unix)]
             reexec: Mutex::new(Some(ReexecCaller { stop_tx, result_rx })),
         });
         let (event_tx, event_rx) = mpsc::channel(queue_size);
+
+        #[cfg(unix)]
+        let reexec_reader = ReexecReader {
+            stop_rx,
+            result_tx: Some(result_tx),
+        };
+        #[cfg(not(unix))]
+        let reexec_reader = ReexecReader {};
 
         tokio::spawn(reader_loop(
             read_half,
             parser,
             shared.clone(),
             event_tx,
-            ReexecReader {
-                stop_rx,
-                result_tx: Some(result_tx),
-            },
+            reexec_reader,
         ));
 
         let client = EslClient {
