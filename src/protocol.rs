@@ -1141,6 +1141,148 @@ mod tests {
         );
     }
 
+    // --- T2: JSON event format end-to-end through parser pipeline ---
+
+    #[test]
+    fn test_json_event_end_to_end() {
+        let mut parser = EslParser::new();
+        let json_body = r#"{"Event-Name":"CHANNEL_CREATE","Unique-ID":"test-uuid-123","Channel-Name":"sofia/internal/1000@example.com","variable_sip_call_id":"call-456"}"#;
+        let envelope = format!(
+            "Content-Length: {}\nContent-Type: text/event-json\n\n",
+            json_body.len()
+        );
+        let data = format!("{}{}", envelope, json_body);
+
+        parser
+            .add_data(data.as_bytes())
+            .unwrap();
+        let message = parser
+            .parse_message()
+            .unwrap()
+            .unwrap();
+        assert_eq!(message.message_type, MessageType::Event);
+
+        let event = parser
+            .parse_event(message, EventFormat::Json)
+            .unwrap();
+        assert_eq!(event.event_type(), Some(EslEventType::ChannelCreate));
+        assert_eq!(event.unique_id(), Some("test-uuid-123"));
+        assert_eq!(
+            event.header_str("Channel-Name"),
+            Some("sofia/internal/1000@example.com")
+        );
+        assert_eq!(event.variable_str("sip_call_id"), Some("call-456"));
+    }
+
+    #[test]
+    fn test_json_event_with_body_end_to_end() {
+        let mut parser = EslParser::new();
+        let json_body = r#"{"Event-Name":"BACKGROUND_JOB","Job-UUID":"job-789","_body":"+OK result data\nline 2"}"#;
+        let envelope = format!(
+            "Content-Length: {}\nContent-Type: text/event-json\n\n",
+            json_body.len()
+        );
+        let data = format!("{}{}", envelope, json_body);
+
+        parser
+            .add_data(data.as_bytes())
+            .unwrap();
+        let message = parser
+            .parse_message()
+            .unwrap()
+            .unwrap();
+        let event = parser
+            .parse_event(message, EventFormat::Json)
+            .unwrap();
+        assert_eq!(event.event_type(), Some(EslEventType::BackgroundJob));
+        assert!(event
+            .body()
+            .is_some());
+        assert!(event
+            .header_str("_body")
+            .is_none());
+    }
+
+    // --- T5: XML event parsing with &amp; escaped characters ---
+
+    #[test]
+    fn test_parse_event_xml_ampersand_escaped() {
+        let mut parser = EslParser::new();
+        let xml_body = "\
+<event>\n\
+  <headers>\n\
+    <Event-Name>CHANNEL_CREATE</Event-Name>\n\
+    <Caller-Caller-ID-Name>Smith &amp; Jones</Caller-Caller-ID-Name>\n\
+    <variable_sip_h_Subject>Test &lt;1&gt; &amp; Test &lt;2&gt;</variable_sip_h_Subject>\n\
+  </headers>\n\
+</event>";
+        let envelope = format!(
+            "Content-Length: {}\nContent-Type: text/event-xml\n\n",
+            xml_body.len()
+        );
+        let data = format!("{}{}", envelope, xml_body);
+
+        parser
+            .add_data(data.as_bytes())
+            .unwrap();
+        let message = parser
+            .parse_message()
+            .unwrap()
+            .unwrap();
+        let event = parser
+            .parse_event(message, EventFormat::Xml)
+            .unwrap();
+
+        assert_eq!(event.event_type(), Some(EslEventType::ChannelCreate));
+        assert_eq!(
+            event.header_str("Caller-Caller-ID-Name"),
+            Some("Smith & Jones")
+        );
+        assert_eq!(
+            event.variable_str("sip_h_Subject"),
+            Some("Test <1> & Test <2>")
+        );
+    }
+
+    // --- T6: ParseState::WaitingForBody multi-chunk completion ---
+
+    #[test]
+    fn test_waiting_for_body_multi_chunk() {
+        let mut parser = EslParser::new();
+
+        // Send headers first (with body length)
+        let headers = b"Content-Type: api/response\nContent-Length: 20\n\n";
+        parser
+            .add_data(headers)
+            .unwrap();
+
+        // Parser transitions to WaitingForBody, returns None
+        let result = parser
+            .parse_message()
+            .unwrap();
+        assert!(result.is_none(), "should be waiting for body data");
+
+        // Send first chunk (10 of 20 bytes)
+        parser
+            .add_data(b"0123456789")
+            .unwrap();
+        let result = parser
+            .parse_message()
+            .unwrap();
+        assert!(result.is_none(), "still waiting for remaining body data");
+
+        // Send remaining 10 bytes
+        parser
+            .add_data(b"abcdefghij")
+            .unwrap();
+        let message = parser
+            .parse_message()
+            .unwrap()
+            .unwrap();
+        assert_eq!(message.message_type, MessageType::ApiResponse);
+        assert_eq!(message.body, Some("0123456789abcdefghij".to_string()));
+    }
+
     #[test]
     fn test_rude_rejection_message_type() {
         let mt = MessageType::from_content_type("text/rude-rejection");

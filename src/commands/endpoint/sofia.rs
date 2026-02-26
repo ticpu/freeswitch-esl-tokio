@@ -536,6 +536,28 @@ mod tests {
         assert_eq!(parsed, ep);
     }
 
+    // --- T5: SofiaContact with profile containing @ ---
+
+    #[test]
+    fn sofia_contact_profile_with_at_sign() {
+        let ep = SofiaContact::new("1000", "domain.com").with_profile("user@realm");
+        let s = ep.to_string();
+        assert_eq!(s, "${sofia_contact(user@realm/1000@domain.com)}");
+        // Round-trip: the first @ is in profile, the parser splits on / first
+        // then finds @ in the user_at_domain part
+        let parsed: SofiaContact = s
+            .parse()
+            .unwrap();
+        assert_eq!(
+            parsed
+                .profile
+                .as_deref(),
+            Some("user@realm")
+        );
+        assert_eq!(parsed.user, "1000");
+        assert_eq!(parsed.domain, "domain.com");
+    }
+
     #[test]
     fn serde_sofia_contact() {
         let ep = SofiaContact {

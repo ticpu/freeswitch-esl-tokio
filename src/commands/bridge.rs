@@ -531,6 +531,56 @@ mod tests {
         assert_eq!(bridge, parsed);
     }
 
+    // --- T5: BridgeDialString edge cases ---
+
+    #[test]
+    fn from_str_empty_string_rejected() {
+        let result = "".parse::<BridgeDialString>();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn from_str_whitespace_only_rejected() {
+        let result = "   ".parse::<BridgeDialString>();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn from_str_empty_groups_from_trailing_pipe() {
+        // "ep1|" should parse as one group (empty trailing group is skipped)
+        let bridge: BridgeDialString = "sofia/gateway/gw1/1234|"
+            .parse()
+            .unwrap();
+        assert_eq!(
+            bridge
+                .groups
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn from_str_empty_variable_block() {
+        let bridge: BridgeDialString = "{}sofia/gateway/gw1/1234"
+            .parse()
+            .unwrap();
+        assert!(bridge
+            .variables
+            .is_none());
+        assert_eq!(
+            bridge
+                .groups
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn from_str_mismatched_bracket_rejected() {
+        let result = "{unclosed=true sofia/gateway/gw1/1234".parse::<BridgeDialString>();
+        assert!(result.is_err());
+    }
+
     #[test]
     fn serde_to_display_wire_format() {
         let json = r#"{

@@ -1193,6 +1193,106 @@ mod tests {
         assert!(!resp.is_success());
     }
 
+    // --- T6: user_auth wire format ---
+
+    #[test]
+    fn test_user_auth_wire_format() {
+        let cmd = EslCommand::UserAuth {
+            user: "admin@default".to_string(),
+            password: "secret123".to_string(),
+        };
+        assert_eq!(
+            cmd.to_wire_format()
+                .unwrap(),
+            "userauth admin@default:secret123\n\n"
+        );
+    }
+
+    #[test]
+    fn test_user_auth_newline_in_user_rejected() {
+        let cmd = EslCommand::UserAuth {
+            user: "admin\n@default".to_string(),
+            password: "pass".to_string(),
+        };
+        assert!(cmd
+            .to_wire_format()
+            .is_err());
+    }
+
+    #[test]
+    fn test_user_auth_newline_in_password_rejected() {
+        let cmd = EslCommand::UserAuth {
+            user: "admin@default".to_string(),
+            password: "pass\nword".to_string(),
+        };
+        assert!(cmd
+            .to_wire_format()
+            .is_err());
+    }
+
+    // --- T6: redact_wire for SendMsg/SendEvent ---
+
+    #[test]
+    fn test_redact_wire_sendmsg() {
+        let mut event = EslEvent::new();
+        event.set_header("call-command", "execute");
+        event.set_header("execute-app-name", "answer");
+        let cmd = EslCommand::SendMsg {
+            uuid: Some("abc-123".to_string()),
+            event,
+        };
+        let wire = cmd
+            .to_wire_format()
+            .unwrap();
+        let redacted = cmd.redact_wire(&wire);
+        // SendMsg is not sensitive, wire content is preserved (minus terminator)
+        assert!(redacted.contains("sendmsg"));
+        assert!(redacted.contains("execute-app-name: answer"));
+        assert!(!redacted.ends_with("\n\n"));
+    }
+
+    #[test]
+    fn test_redact_wire_sendevent() {
+        let mut event = EslEvent::with_type(EslEventType::Custom);
+        event.set_header("Event-Name", "CUSTOM");
+        event.set_header("Event-Subclass", "test::redact");
+        let cmd = EslCommand::SendEvent { event };
+        let wire = cmd
+            .to_wire_format()
+            .unwrap();
+        let redacted = cmd.redact_wire(&wire);
+        assert!(redacted.contains("sendevent"));
+        assert!(!redacted.ends_with("\n\n"));
+    }
+
+    #[test]
+    fn test_redact_wire_auth() {
+        let cmd = EslCommand::Auth {
+            password: "secret".to_string(),
+        };
+        let wire = cmd
+            .to_wire_format()
+            .unwrap();
+        let redacted = cmd.redact_wire(&wire);
+        assert!(!redacted.contains("secret"));
+        assert!(redacted.contains("REDACTED"));
+    }
+
+    #[test]
+    fn test_redact_wire_user_auth() {
+        let cmd = EslCommand::UserAuth {
+            user: "admin@default".to_string(),
+            password: "secret".to_string(),
+        };
+        let wire = cmd
+            .to_wire_format()
+            .unwrap();
+        let redacted = cmd.redact_wire(&wire);
+        assert!(!redacted.contains("secret"));
+        assert!(redacted.contains("admin@default"));
+        assert!(redacted.contains("REDACTED"));
+    }
+
     #[test]
     fn test_header_newline_rejected() {
         let result = CommandBuilder::new("test").header("X-Bad\n", "value");

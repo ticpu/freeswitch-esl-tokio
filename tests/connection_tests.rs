@@ -3,10 +3,12 @@
 mod mock_server;
 
 use freeswitch_esl_tokio::{
-    ConnectionStatus, DisconnectReason, EslClient, EslError, EslEvent, EslEventStream,
-    EslEventType, EventFormat, EventHeader, HeaderLookup,
+    ConnectionStatus, DisconnectReason, EslClient, EslConnectOptions, EslError, EslEvent,
+    EslEventStream, EslEventType, EventFormat, EventHeader, HeaderLookup,
 };
-use mock_server::{setup_connected_pair, MockClient, MockEslServer};
+use mock_server::{
+    setup_connected_pair, setup_connected_pair_with_options, MockClient, MockEslServer,
+};
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -820,4 +822,136 @@ async fn test_outbound_connect_session() {
     assert_eq!(response.header("Caller-Caller-ID-Number"), Some("1000"));
     assert_eq!(response.header("Socket-Mode"), Some("async"));
     assert_eq!(response.header("Control"), Some("full"));
+}
+
+// --- T3: Concurrent command test ---
+
+#[tokio::test]
+async fn test_concurrent_api_commands() {
+    let (mut mock, client, _events) = setup_connected_pair("ClueCon").await;
+
+    // Launch two api() calls concurrently from different tasks
+    let client1 = client.clone();
+    let client2 = client.clone();
+    let task1 = tokio::spawn(async move {
+        client1
+            .api("status")
+            .await
+    });
+    let task2 = tokio::spawn(async move {
+        client2
+            .api("version")
+            .await
+    });
+
+    // The writer mutex serializes them: read cmd1, reply, read cmd2, reply
+    let cmd1 = mock
+        .read_command()
+        .await;
+    assert!(cmd1.starts_with("api "), "first command: {}", cmd1);
+    mock.reply_api("response-1")
+        .await;
+
+    let cmd2 = mock
+        .read_command()
+        .await;
+    assert!(cmd2.starts_with("api "), "second command: {}", cmd2);
+    mock.reply_api("response-2")
+        .await;
+
+    let result1 = task1
+        .await
+        .unwrap()
+        .unwrap();
+    let result2 = task2
+        .await
+        .unwrap()
+        .unwrap();
+
+    // Both should succeed with their respective responses
+    let bodies: Vec<&str> = vec![
+        result1
+            .body()
+            .unwrap(),
+        result2
+            .body()
+            .unwrap(),
+    ];
+    assert!(bodies.contains(&"response-1"));
+    assert!(bodies.contains(&"response-2"));
+}
+
+// --- T4: Event overflow/QueueFull notification test ---
+
+#[tokio::test]
+async fn test_event_overflow_queue_full() {
+    let options = EslConnectOptions::new().with_event_queue_size(2);
+    let (mut mock, client, mut events) =
+        setup_connected_pair_with_options("ClueCon", options).await;
+
+    // Fill the queue (capacity 2) then overflow it.
+    for i in 0..5 {
+        let mut headers = HashMap::new();
+        headers.insert("Unique-ID".to_string(), format!("uuid-{}", i));
+        mock.send_event_plain("CHANNEL_CREATE", &headers)
+            .await;
+    }
+
+    // Let the reader loop process all events (queue fills, rest overflow).
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    // Drain the 2 buffered events to make room in the channel.
+    for _ in 0..2 {
+        let result = tokio::time::timeout(Duration::from_millis(500), events.recv()).await;
+        assert!(matches!(result, Ok(Some(Ok(_)))));
+    }
+
+    // QueueFull is delivered piggy-backed on the next dispatch_event call.
+    // Send one more event to trigger it.
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    let mut headers = HashMap::new();
+    headers.insert("Unique-ID".to_string(), "uuid-trigger".to_string());
+    mock.send_event_plain("CHANNEL_CREATE", &headers)
+        .await;
+
+    // Should get QueueFull followed by the trigger event.
+    let mut got_queue_full = false;
+    let mut event_count = 0;
+    loop {
+        match tokio::time::timeout(Duration::from_millis(500), events.recv()).await {
+            Ok(Some(Ok(_event))) => event_count += 1,
+            Ok(Some(Err(EslError::QueueFull))) => got_queue_full = true,
+            Ok(Some(Err(e))) => panic!("unexpected error: {}", e),
+            Ok(None) => break,
+            Err(_) => break,
+        }
+    }
+
+    assert!(
+        got_queue_full,
+        "expected QueueFull notification (got {} events)",
+        event_count
+    );
+    assert!(
+        client.dropped_event_count() > 0,
+        "dropped_event_count should be > 0"
+    );
+}
+
+// --- T6: Event queue size 0 clamped to 1 ---
+
+#[tokio::test]
+async fn test_event_queue_size_zero_clamped() {
+    let options = EslConnectOptions::new().with_event_queue_size(0);
+    let (mut mock, _client, mut events) =
+        setup_connected_pair_with_options("ClueCon", options).await;
+
+    // Should still work: size 0 is clamped to 1
+    let mut headers = HashMap::new();
+    headers.insert("Unique-ID".to_string(), "test-uuid".to_string());
+    mock.send_event_plain("CHANNEL_CREATE", &headers)
+        .await;
+
+    let event = recv_event(&mut events).await;
+    assert_eq!(event.event_type(), Some(EslEventType::ChannelCreate));
 }

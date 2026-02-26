@@ -148,6 +148,30 @@ mod tests {
         assert_eq!(parsed, ep);
     }
 
+    // --- T5: LoopbackEndpoint parse -> display asymmetry ---
+    // Display omits context when None, but FromStr always produces
+    // context=None for bare "loopback/ext". Round-trip is symmetric.
+
+    #[test]
+    fn loopback_display_parse_display_stable() {
+        let inputs = [
+            "loopback/9199",
+            "loopback/100/default",
+            "loopback/ext123/custom_ctx",
+        ];
+        for input in inputs {
+            let parsed: LoopbackEndpoint = input
+                .parse()
+                .unwrap();
+            let displayed = parsed.to_string();
+            assert_eq!(displayed, input, "round-trip failed for: {}", input);
+            let reparsed: LoopbackEndpoint = displayed
+                .parse()
+                .unwrap();
+            assert_eq!(reparsed, parsed);
+        }
+    }
+
     #[test]
     fn serde_loopback_endpoint() {
         let ep = LoopbackEndpoint::new("9199").with_context("default");

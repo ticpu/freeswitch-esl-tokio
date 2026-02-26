@@ -250,3 +250,24 @@ pub async fn setup_connected_pair(
     let (esl_client, esl_events) = esl_result.unwrap();
     (mock_client, esl_client, esl_events)
 }
+
+/// Create a connected mock pair with custom options
+pub async fn setup_connected_pair_with_options(
+    password: &str,
+    options: freeswitch_esl_tokio::EslConnectOptions,
+) -> (
+    MockClient,
+    freeswitch_esl_tokio::EslClient,
+    freeswitch_esl_tokio::EslEventStream,
+) {
+    let server = MockEslServer::start(password).await;
+    let port = server.port();
+
+    let (mock_client, esl_result) = tokio::join!(
+        server.accept(),
+        freeswitch_esl_tokio::EslClient::connect_with_options("127.0.0.1", port, password, options)
+    );
+
+    let (esl_client, esl_events) = esl_result.unwrap();
+    (mock_client, esl_client, esl_events)
+}

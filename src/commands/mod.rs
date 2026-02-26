@@ -289,6 +289,24 @@ mod tests {
         assert_eq!(originate_unquote(&originate_quote(original)), original);
     }
 
+    // --- T5: originate_split with multiple consecutive spaces ---
+
+    #[test]
+    fn split_multiple_consecutive_spaces() {
+        let result = originate_split("originate  sofia/test  123", ' ').unwrap();
+        // Multiple consecutive spaces produce empty tokens that are trimmed/skipped
+        assert_eq!(result[0], "originate");
+        assert_eq!(result[1], "sofia/test");
+        assert_eq!(result[2], "123");
+    }
+
+    #[test]
+    fn split_leading_trailing_spaces() {
+        let result = originate_split("  originate sofia/test  ", ' ').unwrap();
+        assert_eq!(result[0], "originate");
+        assert_eq!(result[1], "sofia/test");
+    }
+
     #[test]
     fn parse_target_bare_extension() {
         let target = parse_originate_target("123", None).unwrap();

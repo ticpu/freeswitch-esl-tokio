@@ -271,14 +271,16 @@ impl FromStr for Variables {
         };
 
         let mut inner = IndexMap::new();
-        // Split on commas not preceded by backslash
-        for part in split_unescaped_commas(inner_str) {
-            let (key, value) = part
-                .split_once('=')
-                .ok_or_else(|| {
-                    OriginateError::ParseError(format!("missing = in variable: {}", part))
-                })?;
-            inner.insert(key.to_string(), unescape_value(value));
+        if !inner_str.is_empty() {
+            // Split on commas not preceded by backslash
+            for part in split_unescaped_commas(inner_str) {
+                let (key, value) = part
+                    .split_once('=')
+                    .ok_or_else(|| {
+                        OriginateError::ParseError(format!("missing = in variable: {}", part))
+                    })?;
+                inner.insert(key.to_string(), unescape_value(value));
+            }
         }
 
         Ok(Self { vars_type, inner })
@@ -1570,6 +1572,132 @@ mod tests {
         assert_eq!(parsed.context_str(), Some("default"));
 
         // Wire format is identical (the important invariant)
+        assert_eq!(parsed.to_string(), wire);
+    }
+
+    // --- T1: Full Originate serde round-trip ---
+
+    #[test]
+    fn serde_originate_full_round_trip_with_variables() {
+        let mut ep_vars = Variables::new(VariablesType::Default);
+        ep_vars.insert("originate_timeout", "30");
+        ep_vars.insert("sip_h_X-Custom", "value with spaces");
+        let ep = Endpoint::SofiaGateway(SofiaGateway {
+            gateway: "my_provider".into(),
+            destination: "18005551234".into(),
+            profile: Some("external".into()),
+            variables: Some(ep_vars),
+        });
+        let orig = Originate::application(ep, Application::new("park", None::<&str>))
+            .dialplan(DialplanType::Xml)
+            .unwrap()
+            .context("public")
+            .cid_name("Test Caller")
+            .cid_num("5551234")
+            .timeout(60);
+        let json = serde_json::to_string(&orig).unwrap();
+        let parsed: Originate = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, orig);
+        assert_eq!(parsed.to_string(), orig.to_string());
+    }
+
+    #[test]
+    fn serde_originate_inline_round_trip_with_all_fields() {
+        let ep = Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("default"));
+        let orig = Originate::inline(
+            ep,
+            vec![
+                Application::new("playback", Some("/tmp/test.wav")),
+                Application::new("hangup", Some("NORMAL_CLEARING")),
+            ],
+        )
+        .unwrap()
+        .dialplan(DialplanType::Inline)
+        .unwrap()
+        .context("default")
+        .cid_name("IVR")
+        .cid_num("0000")
+        .timeout(45);
+        let json = serde_json::to_string(&orig).unwrap();
+        let parsed: Originate = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, orig);
+        assert_eq!(parsed.to_string(), orig.to_string());
+    }
+
+    // --- T5: Variables::from_str with empty block ---
+
+    #[test]
+    fn variables_from_str_empty_block() {
+        let result = "{}".parse::<Variables>();
+        assert!(
+            result.is_ok(),
+            "empty variable block should parse successfully"
+        );
+        let vars = result.unwrap();
+        assert!(
+            vars.is_empty(),
+            "parsed empty block should have no variables"
+        );
+    }
+
+    #[test]
+    fn variables_from_str_empty_channel_block() {
+        let result = "[]".parse::<Variables>();
+        assert!(result.is_ok());
+        let vars = result.unwrap();
+        assert!(vars.is_empty());
+        assert_eq!(vars.scope(), VariablesType::Channel);
+    }
+
+    #[test]
+    fn variables_from_str_empty_enterprise_block() {
+        let result = "<>".parse::<Variables>();
+        assert!(result.is_ok());
+        let vars = result.unwrap();
+        assert!(vars.is_empty());
+        assert_eq!(vars.scope(), VariablesType::Enterprise);
+    }
+
+    // --- T5: Originate::from_str with context named "inline" or "XML" ---
+
+    #[test]
+    fn originate_context_named_inline() {
+        let ep = Endpoint::Sofia(SofiaEndpoint {
+            profile: "internal".into(),
+            destination: "123@example.com".into(),
+            variables: None,
+        });
+        let orig = Originate::extension(ep, "1000")
+            .dialplan(DialplanType::Xml)
+            .unwrap()
+            .context("inline");
+        let wire = orig.to_string();
+        assert!(wire.contains("XML inline"), "wire: {}", wire);
+        let parsed: Originate = wire
+            .parse()
+            .unwrap();
+        // "inline" is consumed as the dialplan type, not the context
+        // This is an accepted limitation of positional parsing
+        assert_eq!(parsed.to_string(), wire);
+    }
+
+    #[test]
+    fn originate_context_named_xml() {
+        let ep = Endpoint::Sofia(SofiaEndpoint {
+            profile: "internal".into(),
+            destination: "123@example.com".into(),
+            variables: None,
+        });
+        let orig = Originate::extension(ep, "1000")
+            .dialplan(DialplanType::Xml)
+            .unwrap()
+            .context("XML");
+        let wire = orig.to_string();
+        // "XML XML" - first is dialplan, second is context
+        assert!(wire.contains("XML XML"), "wire: {}", wire);
+        let parsed: Originate = wire
+            .parse()
+            .unwrap();
         assert_eq!(parsed.to_string(), wire);
     }
 

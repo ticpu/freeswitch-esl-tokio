@@ -161,6 +161,19 @@ pub struct EslConnectOptions {
     pub event_queue_size: usize,
 }
 
+impl EslConnectOptions {
+    /// Create default options.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the event queue capacity.
+    pub fn with_event_queue_size(mut self, size: usize) -> Self {
+        self.event_queue_size = size;
+        self
+    }
+}
+
 impl Default for EslConnectOptions {
     fn default() -> Self {
         Self {
