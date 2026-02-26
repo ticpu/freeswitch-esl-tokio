@@ -12,30 +12,49 @@ Typed events, typed commands, split reader/writer, liveness detection.
 
 ```rust
 use freeswitch_esl_tokio::*;
+use freeswitch_esl_tokio::commands::*;
 
 #[tokio::main]
 async fn main() -> Result<(), EslError> {
     let (client, mut events) = EslClient::connect("localhost", 8021, "ClueCon").await?;
 
     client.subscribe_events(EventFormat::Plain, &[
+        EslEventType::BackgroundJob,
         EslEventType::ChannelCreate,
-        EslEventType::ChannelHangup,
+        EslEventType::ChannelDestroy,
     ]).await?;
 
-    // api() sends a command and waits for the response
-    let response = client.api("status").await?;
-    println!("{}", response.body_string());
+    let cmd = Originate {
+        endpoint: Endpoint::SofiaGateway {
+            gateway: "my_provider".into(),
+            uri: "18005551234".into(),
+            profile: None,
+            variables: None,
+        },
+        applications: ApplicationList(vec![
+            Application::new("playback", Some("ivr/ivr-welcome.wav")),
+        ]),
+        dialplan: None,
+        context: None, cid_name: None, cid_num: None, timeout: Some(30),
+    };
+
+    let response = client.bgapi(&cmd.to_string()).await?;
+    response.into_result()?;
 
     while let Some(Ok(event)) = events.recv().await {
         match event.event_type() {
             Some(EslEventType::ChannelCreate) => {
-                // Typed accessors return Option<&str> for string headers
-                println!("channel: {}", event.channel_name().unwrap_or("?"));
+                println!("channel created: {}", event.channel_name().unwrap_or("?"));
             }
-            Some(EslEventType::ChannelHangup) => {
-                println!("hangup: {} ({})",
+            Some(EslEventType::ChannelDestroy) => {
+                println!("channel destroyed: {} ({})",
                     event.channel_name().unwrap_or("?"),
-                    event.hangup_cause().unwrap_or("?"));
+                    event.hangup_cause().unwrap_or("unknown"));
+                break;
+            }
+            Some(EslEventType::BackgroundJob) => {
+                // BACKGROUND_JOB always has a body
+                println!("bgapi result: {}", event.body().unwrap());
             }
             _ => {}
         }
