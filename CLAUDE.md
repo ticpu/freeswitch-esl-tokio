@@ -51,6 +51,8 @@ modifying public structs to verify external construction still works.
   originate, endpoints, `Uuid*` commands, `BridgeDialString`). Module-specific
   types like conference commands (`ConferenceMute`, `MuteAction`) stay in their
   submodule (`commands::conference`) and are not re-exported from the crate root.
+  Similarly, Sofia-specific types (`SofiaVariable`, `SofiaEndpoint`, etc.) stay
+  in `variables::sofia` / `commands::endpoint::sofia`.
 
 ## Build & Test Workflow
 
