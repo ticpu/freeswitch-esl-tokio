@@ -4,9 +4,17 @@ use std::fmt;
 
 /// Answer a channel: `uuid_answer <uuid>`.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct UuidAnswer {
     /// Channel UUID.
     pub uuid: String,
+}
+
+impl UuidAnswer {
+    /// Create a new uuid_answer command.
+    pub fn new(uuid: impl Into<String>) -> Self {
+        Self { uuid: uuid.into() }
+    }
 }
 
 impl fmt::Display for UuidAnswer {
@@ -17,11 +25,22 @@ impl fmt::Display for UuidAnswer {
 
 /// Bridge two channels: `uuid_bridge <uuid> <other_uuid>`.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct UuidBridge {
     /// Channel UUID.
     pub uuid: String,
     /// UUID of the channel to bridge to.
     pub other: String,
+}
+
+impl UuidBridge {
+    /// Create a new uuid_bridge command.
+    pub fn new(uuid: impl Into<String>, other: impl Into<String>) -> Self {
+        Self {
+            uuid: uuid.into(),
+            other: other.into(),
+        }
+    }
 }
 
 impl fmt::Display for UuidBridge {
@@ -34,11 +53,22 @@ impl fmt::Display for UuidBridge {
 ///
 /// Sends a SIP REFER to the endpoint.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct UuidDeflect {
     /// Channel UUID.
     pub uuid: String,
     /// SIP URI to redirect to (e.g. `sip:user@host`).
     pub uri: String,
+}
+
+impl UuidDeflect {
+    /// Create a new uuid_deflect command.
+    pub fn new(uuid: impl Into<String>, uri: impl Into<String>) -> Self {
+        Self {
+            uuid: uuid.into(),
+            uri: uri.into(),
+        }
+    }
 }
 
 impl fmt::Display for UuidDeflect {
@@ -49,11 +79,30 @@ impl fmt::Display for UuidDeflect {
 
 /// Place a channel on hold or take it off hold: `uuid_hold [off] <uuid>`.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct UuidHold {
     /// Channel UUID.
     pub uuid: String,
     /// `true` = take off hold; `false` = place on hold.
     pub off: bool,
+}
+
+impl UuidHold {
+    /// Place a channel on hold.
+    pub fn hold(uuid: impl Into<String>) -> Self {
+        Self {
+            uuid: uuid.into(),
+            off: false,
+        }
+    }
+
+    /// Take a channel off hold.
+    pub fn unhold(uuid: impl Into<String>) -> Self {
+        Self {
+            uuid: uuid.into(),
+            off: true,
+        }
+    }
 }
 
 impl fmt::Display for UuidHold {
@@ -68,11 +117,30 @@ impl fmt::Display for UuidHold {
 
 /// Kill a channel: `uuid_kill <uuid> [cause]`.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct UuidKill {
     /// Channel UUID.
     pub uuid: String,
     /// Hangup cause string (e.g. `NORMAL_CLEARING`). If `None`, uses FreeSWITCH default.
     pub cause: Option<String>,
+}
+
+impl UuidKill {
+    /// Kill a channel with the default hangup cause.
+    pub fn new(uuid: impl Into<String>) -> Self {
+        Self {
+            uuid: uuid.into(),
+            cause: None,
+        }
+    }
+
+    /// Kill a channel with a specific hangup cause.
+    pub fn with_cause(uuid: impl Into<String>, cause: impl Into<String>) -> Self {
+        Self {
+            uuid: uuid.into(),
+            cause: Some(cause.into()),
+        }
+    }
 }
 
 impl fmt::Display for UuidKill {
@@ -91,11 +159,22 @@ impl fmt::Display for UuidKill {
 /// [`EslResponse::reply_status()`](crate::EslResponse::reply_status) will be
 /// [`ReplyStatus::Other`](crate::ReplyStatus::Other).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct UuidGetVar {
     /// Channel UUID.
     pub uuid: String,
     /// Variable name to read.
     pub key: String,
+}
+
+impl UuidGetVar {
+    /// Create a new uuid_getvar command.
+    pub fn new(uuid: impl Into<String>, key: impl Into<String>) -> Self {
+        Self {
+            uuid: uuid.into(),
+            key: key.into(),
+        }
+    }
 }
 
 impl fmt::Display for UuidGetVar {
@@ -106,6 +185,7 @@ impl fmt::Display for UuidGetVar {
 
 /// Set a channel variable: `uuid_setvar <uuid> <key> <value>`.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct UuidSetVar {
     /// Channel UUID.
     pub uuid: String,
@@ -113,6 +193,17 @@ pub struct UuidSetVar {
     pub key: String,
     /// Variable value.
     pub value: String,
+}
+
+impl UuidSetVar {
+    /// Create a new uuid_setvar command.
+    pub fn new(uuid: impl Into<String>, key: impl Into<String>, value: impl Into<String>) -> Self {
+        Self {
+            uuid: uuid.into(),
+            key: key.into(),
+            value: value.into(),
+        }
+    }
 }
 
 impl fmt::Display for UuidSetVar {
@@ -123,6 +214,7 @@ impl fmt::Display for UuidSetVar {
 
 /// Transfer a channel to a new destination: `uuid_transfer <uuid> <dest> [dialplan]`.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct UuidTransfer {
     /// Channel UUID.
     pub uuid: String,
@@ -130,6 +222,23 @@ pub struct UuidTransfer {
     pub destination: String,
     /// Dialplan to use (e.g. `"XML"`). If `None`, uses the channel's current dialplan.
     pub dialplan: Option<String>,
+}
+
+impl UuidTransfer {
+    /// Transfer a channel to a new destination.
+    pub fn new(uuid: impl Into<String>, destination: impl Into<String>) -> Self {
+        Self {
+            uuid: uuid.into(),
+            destination: destination.into(),
+            dialplan: None,
+        }
+    }
+
+    /// Set the dialplan to use for the transfer.
+    pub fn with_dialplan(mut self, dialplan: impl Into<String>) -> Self {
+        self.dialplan = Some(dialplan.into());
+        self
+    }
 }
 
 impl fmt::Display for UuidTransfer {
@@ -144,11 +253,22 @@ impl fmt::Display for UuidTransfer {
 
 /// Send DTMF digits to a channel: `uuid_send_dtmf <uuid> <digits>`.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct UuidSendDtmf {
     /// Channel UUID.
     pub uuid: String,
     /// DTMF digit string (e.g. `"1234#"`).
     pub dtmf: String,
+}
+
+impl UuidSendDtmf {
+    /// Create a new uuid_send_dtmf command.
+    pub fn new(uuid: impl Into<String>, dtmf: impl Into<String>) -> Self {
+        Self {
+            uuid: uuid.into(),
+            dtmf: dtmf.into(),
+        }
+    }
 }
 
 impl fmt::Display for UuidSendDtmf {

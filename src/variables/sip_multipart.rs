@@ -2,11 +2,22 @@ use super::EslArray;
 
 /// A single part from a SIP multipart body
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct MultipartItem {
     /// MIME type (e.g. `application/sdp`).
     pub mime_type: String,
     /// Body content for this part.
     pub data: String,
+}
+
+impl MultipartItem {
+    /// Create a new multipart item.
+    pub fn new(mime_type: impl Into<String>, data: impl Into<String>) -> Self {
+        Self {
+            mime_type: mime_type.into(),
+            data: data.into(),
+        }
+    }
 }
 
 /// Parses `variable_sip_multipart` ARRAY:: format.

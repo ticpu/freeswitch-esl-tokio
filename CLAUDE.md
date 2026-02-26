@@ -3,6 +3,17 @@
 This is a **library-first** crate. There is an examples/ folder buildable binaries
 `Cargo.lock` is gitignored per Cargo convention for libraries.
 
+## `#[non_exhaustive]` Policy
+
+All public enums and public structs with public fields have `#[non_exhaustive]`.
+When adding a new public struct or enum, **always** add `#[non_exhaustive]`.
+
+Because `#[non_exhaustive]` prevents struct literal construction from external
+crates (including `examples/`), every public struct must have a constructor
+(`new()` or named constructors). Optional fields use builder methods
+(`with_foo()`). **Always run `cargo build --examples`** after adding or
+modifying public structs to verify external construction still works.
+
 ## Build & Test Workflow
 
 **Always run `cargo fmt` before every commit.** The pre-commit hook enforces

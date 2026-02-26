@@ -9,7 +9,8 @@ use crate::commands::originate::{OriginateError, Variables};
 ///
 /// Wire format: `{module}[/{destination}]` where destination is typically
 /// empty or `auto_answer` (recognized by portaudio and pulseaudio).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AudioEndpoint {
     /// Destination string (e.g. `auto_answer`). `None` for bare module name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -20,6 +21,23 @@ pub struct AudioEndpoint {
 }
 
 impl AudioEndpoint {
+    /// Create a new audio endpoint with no destination.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the destination string.
+    pub fn with_destination(mut self, destination: impl Into<String>) -> Self {
+        self.destination = Some(destination.into());
+        self
+    }
+
+    /// Set per-channel variables.
+    pub fn with_variables(mut self, variables: Variables) -> Self {
+        self.variables = Some(variables);
+        self
+    }
+
     /// Format with the given module prefix (`portaudio`, `pulseaudio`, `alsa`).
     pub fn fmt_with_prefix(&self, f: &mut fmt::Formatter<'_>, prefix: &str) -> fmt::Result {
         write_variables(f, &self.variables)?;

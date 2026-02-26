@@ -21,6 +21,7 @@ const UNDEF: &str = "undef";
 /// FreeSWITCH dialplan type for originate commands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum DialplanType {
     /// Inline dialplan: applications execute directly without XML lookup.
     Inline,
@@ -59,6 +60,7 @@ impl FromStr for DialplanType {
 /// - `Channel` (`[]`) — applies only to one specific channel
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum VariablesType {
     /// `<>` scope — applies across all `:_:` separated threads.
     Enterprise,
@@ -305,6 +307,7 @@ pub use super::endpoint::Endpoint;
 /// - Inline: `name` or `name:args`
 /// - XML: `&name(args)`
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Application {
     /// Application name (e.g. `park`, `conference`, `socket`).
     pub name: String,
@@ -358,6 +361,7 @@ impl Application {
 /// the dialplan engine) or `&app(args)` / `app:args` (executes inline).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum OriginateTarget {
     /// Route through the dialplan engine to this extension.
     Extension(String),
@@ -390,11 +394,7 @@ impl From<Vec<Application>> for OriginateTarget {
 /// ```
 /// # use freeswitch_esl_tokio::commands::*;
 /// let cmd = Originate::application(
-///     Endpoint::Loopback(LoopbackEndpoint {
-///         extension: "9196".into(),
-///         context: "default".into(),
-///         variables: None,
-///     }),
+///     Endpoint::Loopback(LoopbackEndpoint::new("9196", "default")),
 ///     Application::simple("park"),
 /// )
 /// .cid_name("Alice")
@@ -783,6 +783,7 @@ impl FromStr for Originate {
 
 /// Errors from originate command parsing or construction.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum OriginateError {
     /// A single-quoted token was never closed.
     #[error("unclosed quote at: {0}")]

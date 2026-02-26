@@ -86,6 +86,7 @@ fn extract_variables(s: &str) -> Result<(Option<Variables>, &str), OriginateErro
 /// [`BridgeDialString`](super::bridge::BridgeDialString) where any endpoint type must be accepted.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum Endpoint {
     /// `sofia/{profile}/{destination}`
     Sofia(SofiaEndpoint),

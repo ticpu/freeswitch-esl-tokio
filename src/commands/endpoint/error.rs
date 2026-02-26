@@ -7,9 +7,19 @@ use crate::commands::originate::OriginateError;
 
 /// Bridge to a specific hangup cause: `error/{cause}`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ErrorEndpoint {
     /// Hangup cause string (e.g. `user_busy`, `no_answer`).
     pub cause: String,
+}
+
+impl ErrorEndpoint {
+    /// Create a new error endpoint with the given hangup cause.
+    pub fn new(cause: impl Into<String>) -> Self {
+        Self {
+            cause: cause.into(),
+        }
+    }
 }
 
 impl fmt::Display for ErrorEndpoint {

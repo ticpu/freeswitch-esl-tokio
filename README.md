@@ -30,11 +30,7 @@ async fn main() -> Result<(), EslError> {
     ]).await?;
 
     let cmd = Originate::application(
-        Endpoint::SofiaGateway(SofiaGateway {
-            gateway: "my_provider".into(),
-            destination: "18005551234".into(),
-            profile: None, variables: None,
-        }),
+        Endpoint::SofiaGateway(SofiaGateway::new("my_provider", "18005551234")),
         Application::new(
             "playback",
             Some("/usr/share/freeswitch/sounds/en/us/callie/ivr/ivr-welcome.wav"),
@@ -252,20 +248,11 @@ The `Endpoint` enum wraps them for polymorphic storage and serde.
 use freeswitch_esl_tokio::commands::*;
 
 // Direct SIP profile routing
-let ep = Endpoint::Sofia(SofiaEndpoint {
-    profile: "internal".into(),
-    destination: "1000@domain.com".into(),
-    variables: None,
-});
+let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "1000@domain.com"));
 assert_eq!(ep.to_string(), "sofia/internal/1000@domain.com");
 
 // SIP gateway routing
-let ep = Endpoint::SofiaGateway(SofiaGateway {
-    gateway: "my_provider".into(),
-    destination: "18005551234".into(),
-    profile: None,
-    variables: None,
-});
+let ep = Endpoint::SofiaGateway(SofiaGateway::new("my_provider", "18005551234"));
 assert_eq!(ep.to_string(), "sofia/gateway/my_provider/18005551234");
 
 // Parse from wire format
@@ -279,11 +266,7 @@ let ep: Endpoint = "sofia/gateway/my_provider/18005551234".parse().unwrap();
 ```rust
 use freeswitch_esl_tokio::commands::*;
 
-let gw = || Endpoint::SofiaGateway(SofiaGateway {
-    gateway: "my_provider".into(),
-    destination: "18005551234".into(),
-    profile: None, variables: None,
-});
+let gw = || Endpoint::SofiaGateway(SofiaGateway::new("my_provider", "18005551234"));
 
 // Inline applications
 let cmd = Originate::inline(gw(), vec![
@@ -312,28 +295,13 @@ ring (`,`) and sequential failover (`|`):
 use freeswitch_esl_tokio::commands::*;
 
 // Try primary and secondary simultaneously, then failover to backup
-let bridge = BridgeDialString {
-    variables: None,
-    groups: vec![
-        vec![
-            Endpoint::SofiaGateway(SofiaGateway {
-                gateway: "primary".into(),
-                destination: "18005551234".into(),
-                profile: None, variables: None,
-            }),
-            Endpoint::SofiaGateway(SofiaGateway {
-                gateway: "secondary".into(),
-                destination: "18005551234".into(),
-                profile: None, variables: None,
-            }),
-        ],
-        vec![Endpoint::SofiaGateway(SofiaGateway {
-            gateway: "backup".into(),
-            destination: "18005551234".into(),
-            profile: None, variables: None,
-        })],
+let bridge = BridgeDialString::new(vec![
+    vec![
+        Endpoint::SofiaGateway(SofiaGateway::new("primary", "18005551234")),
+        Endpoint::SofiaGateway(SofiaGateway::new("secondary", "18005551234")),
     ],
-};
+    vec![Endpoint::SofiaGateway(SofiaGateway::new("backup", "18005551234"))],
+]);
 // -> "sofia/gateway/primary/18005551234,sofia/gateway/secondary/18005551234|sofia/gateway/backup/18005551234"
 
 // Use with the bridge dptools application
@@ -350,12 +318,12 @@ dial string reference (variable scoping, `^^:` custom delimiters, enterprise
 use freeswitch_esl_tokio::commands::*;
 
 // UUID commands
-let kill = UuidKill { uuid: uuid.into(), cause: Some("NORMAL_CLEARING".into()) };
+let kill = UuidKill::with_cause(uuid, "NORMAL_CLEARING");
 // -> "uuid_kill <uuid> NORMAL_CLEARING"
 client.api(&kill.to_string()).await?;
 
 // Conference commands
-let dtmf = ConferenceDtmf { name: "room1".into(), member: "all".into(), dtmf: "1".into() };
+let dtmf = ConferenceDtmf::new("room1", "all", "1");
 // -> "conference room1 dtmf all 1"
 client.api(&dtmf.to_string()).await?;
 ```

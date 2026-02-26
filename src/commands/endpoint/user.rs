@@ -8,6 +8,7 @@ use crate::commands::originate::{OriginateError, Variables};
 
 /// Directory-based endpoint: `user/{name}[@{domain}]`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct UserEndpoint {
     /// User name from the directory.
     pub name: String,
@@ -17,6 +18,29 @@ pub struct UserEndpoint {
     /// Per-channel variables prepended as `{key=value}`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub variables: Option<Variables>,
+}
+
+impl UserEndpoint {
+    /// Create a new user endpoint.
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            domain: None,
+            variables: None,
+        }
+    }
+
+    /// Set the domain.
+    pub fn with_domain(mut self, domain: impl Into<String>) -> Self {
+        self.domain = Some(domain.into());
+        self
+    }
+
+    /// Set per-channel variables.
+    pub fn with_variables(mut self, variables: Variables) -> Self {
+        self.variables = Some(variables);
+        self
+    }
 }
 
 impl fmt::Display for UserEndpoint {

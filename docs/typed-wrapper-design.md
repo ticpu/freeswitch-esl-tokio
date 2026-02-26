@@ -9,7 +9,7 @@ Replace stringly-typed ESL interactions with fully typed Rust APIs:
 
 ```rust
 // Current (transport-layer only):
-client.api(&UuidKill { uuid: id.into(), cause: Some("NORMAL_CLEARING".into()) }.to_string()).await?;
+client.api(&UuidKill::with_cause(id, "NORMAL_CLEARING").to_string()).await?;
 
 // Future wrapper:
 client.channel(&uuid).kill(HangupCause::NormalClearing).await?;
@@ -160,12 +160,12 @@ pub struct ChannelHandle<'a> {
 
 impl ChannelHandle<'_> {
     pub async fn kill(&self, cause: HangupCause) -> Result<EslResponse, EslError> {
-        let cmd = UuidKill { uuid: self.uuid.clone(), cause: Some(cause.to_string()) };
+        let cmd = UuidKill::with_cause(self.uuid.clone(), cause.to_string());
         self.client.api(&cmd.to_string()).await
     }
 
     pub async fn set_var(&self, name: impl VariableName, value: &str) -> Result<EslResponse, EslError> {
-        let cmd = UuidSetVar { uuid: self.uuid.clone(), name: name.as_str().into(), value: value.into() };
+        let cmd = UuidSetVar::new(self.uuid.clone(), name.as_str(), value);
         self.client.api(&cmd.to_string()).await
     }
 

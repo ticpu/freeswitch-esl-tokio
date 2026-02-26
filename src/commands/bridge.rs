@@ -21,6 +21,7 @@ use super::originate::{OriginateError, Variables};
 /// - Each endpoint may have channel-scope `[variables]`
 /// - Global `{variables}` apply to all endpoints
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct BridgeDialString {
     /// Default-scope variables applied to all endpoints.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -28,6 +29,22 @@ pub struct BridgeDialString {
     /// Sequential failover groups (`|`-separated). Within each group,
     /// endpoints ring simultaneously (`,`-separated).
     pub groups: Vec<Vec<Endpoint>>,
+}
+
+impl BridgeDialString {
+    /// Create a new bridge dial string with the given failover groups.
+    pub fn new(groups: Vec<Vec<Endpoint>>) -> Self {
+        Self {
+            variables: None,
+            groups,
+        }
+    }
+
+    /// Set global default-scope variables.
+    pub fn with_variables(mut self, variables: Variables) -> Self {
+        self.variables = Some(variables);
+        self
+    }
 }
 
 impl fmt::Display for BridgeDialString {

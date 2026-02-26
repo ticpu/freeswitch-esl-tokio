@@ -8,6 +8,7 @@ use crate::commands::originate::{OriginateError, Variables};
 
 /// SIP endpoint via a named profile: `sofia/{profile}/{destination}`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct SofiaEndpoint {
     /// SIP profile name (e.g. `internal`, `external`).
     pub profile: String,
@@ -21,6 +22,7 @@ pub struct SofiaEndpoint {
 /// SIP endpoint via a configured gateway:
 /// `sofia/gateway/[{profile}::]{gateway}/{destination}`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct SofiaGateway {
     /// Gateway name as configured in the SIP profile.
     pub gateway: String,
@@ -38,8 +40,15 @@ pub struct SofiaGateway {
 /// `${sofia_contact([profile/]user@domain)}`.
 ///
 /// The library produces the expression string; FreeSWITCH evaluates it
-/// at call time. Use `profile: Some("*".into())` to search all profiles.
+/// at call time.
+///
+/// The special profile `"*"` makes FreeSWITCH iterate over every loaded
+/// SIP profile to find the user's registration, instead of searching a
+/// single named profile (see `sofia_contact_function` in
+/// `mod_sofia.c` where `strcmp(profile_name, "*")` skips the single-profile
+/// lookup and falls through to the all-profiles hash iteration).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct SofiaContact {
     /// User part of the contact lookup.
     pub user: String,
@@ -51,6 +60,74 @@ pub struct SofiaContact {
     /// Per-channel variables prepended as `{key=value}`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub variables: Option<Variables>,
+}
+
+impl SofiaEndpoint {
+    /// Create a new SIP profile endpoint.
+    pub fn new(profile: impl Into<String>, destination: impl Into<String>) -> Self {
+        Self {
+            profile: profile.into(),
+            destination: destination.into(),
+            variables: None,
+        }
+    }
+
+    /// Set per-channel variables.
+    pub fn with_variables(mut self, variables: Variables) -> Self {
+        self.variables = Some(variables);
+        self
+    }
+}
+
+impl SofiaGateway {
+    /// Create a new SIP gateway endpoint.
+    pub fn new(gateway: impl Into<String>, destination: impl Into<String>) -> Self {
+        Self {
+            gateway: gateway.into(),
+            destination: destination.into(),
+            profile: None,
+            variables: None,
+        }
+    }
+
+    /// Set the SIP profile qualifier.
+    pub fn with_profile(mut self, profile: impl Into<String>) -> Self {
+        self.profile = Some(profile.into());
+        self
+    }
+
+    /// Set per-channel variables.
+    pub fn with_variables(mut self, variables: Variables) -> Self {
+        self.variables = Some(variables);
+        self
+    }
+}
+
+impl SofiaContact {
+    /// Create a new sofia_contact runtime expression.
+    pub fn new(user: impl Into<String>, domain: impl Into<String>) -> Self {
+        Self {
+            user: user.into(),
+            domain: domain.into(),
+            profile: None,
+            variables: None,
+        }
+    }
+
+    /// Set the SIP profile for the contact lookup.
+    ///
+    /// Pass `"*"` to search all loaded SIP profiles for the user's
+    /// registration instead of a single named profile.
+    pub fn with_profile(mut self, profile: impl Into<String>) -> Self {
+        self.profile = Some(profile.into());
+        self
+    }
+
+    /// Set per-channel variables.
+    pub fn with_variables(mut self, variables: Variables) -> Self {
+        self.variables = Some(variables);
+        self
+    }
 }
 
 impl fmt::Display for SofiaEndpoint {

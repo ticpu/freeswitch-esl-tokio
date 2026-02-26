@@ -9,6 +9,7 @@ use crate::commands::originate::{OriginateError, Variables};
 /// Runtime expression resolving directory group members:
 /// `${group_call(group@domain[+order])}`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct GroupCall {
     /// Group name from the directory.
     pub group: String,
@@ -20,6 +21,30 @@ pub struct GroupCall {
     /// Per-channel variables prepended as `{key=value}`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub variables: Option<Variables>,
+}
+
+impl GroupCall {
+    /// Create a new group_call expression.
+    pub fn new(group: impl Into<String>, domain: impl Into<String>) -> Self {
+        Self {
+            group: group.into(),
+            domain: domain.into(),
+            order: None,
+            variables: None,
+        }
+    }
+
+    /// Set the distribution order (A=all, E=enterprise, F=first).
+    pub fn with_order(mut self, order: impl Into<String>) -> Self {
+        self.order = Some(order.into());
+        self
+    }
+
+    /// Set per-channel variables.
+    pub fn with_variables(mut self, variables: Variables) -> Self {
+        self.variables = Some(variables);
+        self
+    }
 }
 
 impl fmt::Display for GroupCall {

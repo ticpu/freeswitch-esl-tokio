@@ -100,6 +100,7 @@ async fn tcp_connect_with_timeout(host: &str, port: u16) -> EslResult<TcpStream>
 
 /// Connection mode for ESL
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ConnectionMode {
     /// Inbound connection - client connects to FreeSWITCH
     Inbound,
@@ -130,6 +131,7 @@ struct SharedState {
 /// Controls parameters that are fixed at connection time, such as the event
 /// queue capacity. Use [`Default::default()`] for standard settings.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct EslConnectOptions {
     /// Capacity of the mpsc channel delivering events. Default: 1000.
     pub event_queue_size: usize,

@@ -292,6 +292,7 @@ impl FromStr for CallDirection {
 /// or `"Other-Leg"`). The wire header format is `{prefix}-{suffix}`,
 /// e.g. `Caller-Channel-Created-Time`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
 pub struct ChannelTimetable {
     /// When the caller profile was created.
     pub profile_created: Option<i64>,
@@ -373,6 +374,7 @@ impl AsRef<str> for TimetablePrefix {
 
 /// Error returned when a timetable header is present but not a valid `i64`.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct ParseTimetableError {
     /// Full header name (e.g. `Caller-Channel-Created-Time`).
     pub header: String,
@@ -391,6 +393,16 @@ impl fmt::Display for ParseTimetableError {
 }
 
 impl std::error::Error for ParseTimetableError {}
+
+impl ParseTimetableError {
+    /// Create a new timetable parse error.
+    pub fn new(header: impl Into<String>, value: impl Into<String>) -> Self {
+        Self {
+            header: header.into(),
+            value: value.into(),
+        }
+    }
+}
 
 impl ChannelTimetable {
     /// Extract a timetable by looking up prefixed header names via a closure.

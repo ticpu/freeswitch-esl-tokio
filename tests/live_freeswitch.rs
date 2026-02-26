@@ -516,10 +516,7 @@ async fn bgapi_originate_ok(
 
 /// Kill a channel by UUID, ignoring errors (channel may already be gone).
 async fn kill_channel(client: &EslClient, uuid: &str) {
-    let cmd = UuidKill {
-        uuid: uuid.into(),
-        cause: None,
-    };
+    let cmd = UuidKill::new(uuid);
     let _ = client
         .api(&cmd.to_string())
         .await;
@@ -537,11 +534,7 @@ async fn live_originate_application_target() {
 
     // Single application target: &park() holds the channel, bgapi returns immediately
     let cmd = Originate::application(
-        Endpoint::Loopback(LoopbackEndpoint {
-            extension: "9199".into(),
-            context: "test".into(),
-            variables: None,
-        }),
+        Endpoint::Loopback(LoopbackEndpoint::new("9199", "test")),
         Application::simple("park"),
     );
 
@@ -561,11 +554,7 @@ async fn live_originate_extension_target() {
 
     // Extension target: route through XML dialplan to 9199 (echo) in test context
     let cmd = Originate::extension(
-        Endpoint::Loopback(LoopbackEndpoint {
-            extension: "9199".into(),
-            context: "test".into(),
-            variables: None,
-        }),
+        Endpoint::Loopback(LoopbackEndpoint::new("9199", "test")),
         "9199",
     )
     .dialplan(DialplanType::Xml)
@@ -588,11 +577,7 @@ async fn live_originate_inline_target() {
 
     // Inline dialplan: answer then hangup (instant)
     let cmd = Originate::inline(
-        Endpoint::Loopback(LoopbackEndpoint {
-            extension: "9199".into(),
-            context: "test".into(),
-            variables: None,
-        }),
+        Endpoint::Loopback(LoopbackEndpoint::new("9199", "test")),
         vec![
             Application::simple("answer"),
             Application::new("hangup", Some("NORMAL_CLEARING")),
@@ -619,11 +604,7 @@ async fn live_originate_timeout_fills_positional_gaps() {
     // Timeout without cid_name/cid_num forces `undef` placeholders on the wire.
     // Verifies FreeSWITCH accepts `undef` as a NULL positional arg.
     let cmd = Originate::application(
-        Endpoint::Loopback(LoopbackEndpoint {
-            extension: "9199".into(),
-            context: "test".into(),
-            variables: None,
-        }),
+        Endpoint::Loopback(LoopbackEndpoint::new("9199", "test")),
         Application::simple("park"),
     )
     .timeout(5);

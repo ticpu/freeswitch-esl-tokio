@@ -4,6 +4,7 @@ use std::fmt;
 
 /// Conference member mute/unmute action.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum MuteAction {
     /// Mute the member's audio.
     Mute,
@@ -22,6 +23,7 @@ impl fmt::Display for MuteAction {
 
 /// Mute or unmute a conference member: `conference <name> mute|unmute <member>`.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct ConferenceMute {
     /// Conference room name.
     pub name: String,
@@ -29,6 +31,17 @@ pub struct ConferenceMute {
     pub action: MuteAction,
     /// Conference member ID.
     pub member_id: String,
+}
+
+impl ConferenceMute {
+    /// Create a new conference mute/unmute command.
+    pub fn new(name: impl Into<String>, action: MuteAction, member_id: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            action,
+            member_id: member_id.into(),
+        }
+    }
 }
 
 impl fmt::Display for ConferenceMute {
@@ -43,6 +56,7 @@ impl fmt::Display for ConferenceMute {
 
 /// Conference member hold/unhold action.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum HoldAction {
     /// Place the member on hold with music-on-hold.
     Hold,
@@ -63,6 +77,7 @@ impl fmt::Display for HoldAction {
 ///
 /// `Hold` plays music-on-hold to the member; `Unhold` returns them to the conference.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct ConferenceHold {
     /// Conference room name.
     pub name: String,
@@ -72,6 +87,24 @@ pub struct ConferenceHold {
     pub member: String,
     /// MOH stream URI (e.g. `local_stream://moh`). Only meaningful with `HoldAction::Hold`.
     pub stream: Option<String>,
+}
+
+impl ConferenceHold {
+    /// Create a new conference hold/unhold command.
+    pub fn new(name: impl Into<String>, action: HoldAction, member: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            action,
+            member: member.into(),
+            stream: None,
+        }
+    }
+
+    /// Set the MOH stream URI for hold.
+    pub fn with_stream(mut self, stream: impl Into<String>) -> Self {
+        self.stream = Some(stream.into());
+        self
+    }
 }
 
 impl fmt::Display for ConferenceHold {
@@ -90,6 +123,7 @@ impl fmt::Display for ConferenceHold {
 
 /// Send DTMF to conference members: `conference <name> dtmf <member> <digits>`.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct ConferenceDtmf {
     /// Conference room name.
     pub name: String,
@@ -97,6 +131,21 @@ pub struct ConferenceDtmf {
     pub member: String,
     /// DTMF digit string (e.g. `"1234#"`).
     pub dtmf: String,
+}
+
+impl ConferenceDtmf {
+    /// Create a new conference DTMF command.
+    pub fn new(
+        name: impl Into<String>,
+        member: impl Into<String>,
+        dtmf: impl Into<String>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            member: member.into(),
+            dtmf: dtmf.into(),
+        }
+    }
 }
 
 impl fmt::Display for ConferenceDtmf {

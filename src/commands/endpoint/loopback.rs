@@ -8,6 +8,7 @@ use crate::commands::originate::{OriginateError, Variables};
 
 /// Internal loopback endpoint: `loopback/{extension}[/{context}]`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct LoopbackEndpoint {
     /// Extension number or pattern.
     pub extension: String,
@@ -16,6 +17,23 @@ pub struct LoopbackEndpoint {
     /// Per-channel variables prepended as `{key=value}`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub variables: Option<Variables>,
+}
+
+impl LoopbackEndpoint {
+    /// Create a new loopback endpoint.
+    pub fn new(extension: impl Into<String>, context: impl Into<String>) -> Self {
+        Self {
+            extension: extension.into(),
+            context: context.into(),
+            variables: None,
+        }
+    }
+
+    /// Set per-channel variables.
+    pub fn with_variables(mut self, variables: Variables) -> Self {
+        self.variables = Some(variables);
+        self
+    }
 }
 
 impl fmt::Display for LoopbackEndpoint {
