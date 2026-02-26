@@ -3,10 +3,11 @@
 //! These tests require FreeSWITCH ESL on 127.0.0.1:8022 with password ClueCon.
 //! Run with: cargo test --test live_freeswitch -- --ignored
 
-use freeswitch_esl_tokio::commands::{LoopbackEndpoint, UuidKill};
+use freeswitch_esl_tokio::commands::{LoopbackEndpoint, UuidGetVar, UuidKill, UuidSetVar};
 use freeswitch_esl_tokio::{
-    Application, DialplanType, Endpoint, EslClient, EslError, EslEvent, EslEventPriority,
-    EslEventType, EventFormat, EventHeader, HeaderLookup, Originate, ReplyStatus,
+    Application, ConnectionStatus, DialplanType, DisconnectReason, Endpoint, EslClient, EslError,
+    EslEvent, EslEventPriority, EslEventType, EventFormat, EventHeader, HeaderLookup, Originate,
+    ReplyStatus,
 };
 use std::time::Duration;
 use tokio::time::Instant;
@@ -674,4 +675,469 @@ async fn live_log_events_have_log_type() {
         .nolog()
         .await;
     panic!("did not receive any log event with EslEventType::Log");
+}
+
+// --- L2: Liveness detection live tests ---
+
+#[tokio::test]
+#[ignore]
+async fn live_liveness_heartbeat_resets_timer() {
+    let (client, mut events) = connect().await;
+
+    client
+        .subscribe_events(EventFormat::Plain, &[EslEventType::Heartbeat])
+        .await
+        .unwrap();
+
+    // Set liveness timeout to 30s, well above heartbeat interval (~20s)
+    client.set_liveness_timeout(Duration::from_secs(30));
+
+    // Wait for two heartbeats to confirm the timer resets
+    let mut heartbeat_count = 0;
+    let deadline = Instant::now() + Duration::from_secs(45);
+    while Instant::now() < deadline {
+        match tokio::time::timeout_at(deadline, events.recv()).await {
+            Ok(Some(Ok(evt))) => {
+                if evt.event_type() == Some(EslEventType::Heartbeat) {
+                    heartbeat_count += 1;
+                    if heartbeat_count >= 2 {
+                        break;
+                    }
+                }
+            }
+            Ok(Some(Err(e))) => panic!("event error: {}", e),
+            Ok(None) => panic!("connection closed unexpectedly"),
+            Err(_) => break,
+        }
+    }
+
+    assert!(client.is_connected(), "connection should still be alive");
+    assert!(
+        heartbeat_count >= 2,
+        "expected at least 2 heartbeats, got {}",
+        heartbeat_count
+    );
+}
+
+// --- L3: Command timeout live tests ---
+
+#[tokio::test]
+#[ignore]
+async fn live_command_timeout_msleep() {
+    let (client, _events) = connect().await;
+
+    // Set a short command timeout, then send a blocking api call
+    client.set_command_timeout(Duration::from_secs(1));
+
+    let result = client
+        .api("msleep 5000")
+        .await;
+
+    assert!(
+        matches!(result, Err(EslError::Timeout { .. })),
+        "expected Timeout error, got: {:?}",
+        result
+    );
+
+    // Verify the connection is still usable after timeout.
+    // Increase timeout for the recovery command.
+    client.set_command_timeout(Duration::from_secs(10));
+
+    // msleep result may arrive late and consume the next reply slot.
+    // Wait for the blocked msleep to complete on the server side.
+    tokio::time::sleep(Duration::from_secs(5)).await;
+
+    let resp = client
+        .api("status")
+        .await;
+    assert!(
+        resp.is_ok(),
+        "command after timeout should succeed: {:?}",
+        resp
+    );
+}
+
+// --- L4: Event filter live tests ---
+
+#[tokio::test]
+#[ignore]
+async fn live_filter_event_name() {
+    let (client, mut events) = connect().await;
+
+    // Subscribe to multiple event types
+    client
+        .subscribe_events(
+            EventFormat::Plain,
+            &[EslEventType::Heartbeat, EslEventType::BackgroundJob],
+        )
+        .await
+        .unwrap();
+
+    // Filter: only receive HEARTBEAT
+    client
+        .filter(EventHeader::EventName, "HEARTBEAT")
+        .await
+        .unwrap();
+
+    // Fire a bgapi to generate a BACKGROUND_JOB event
+    client
+        .bgapi("status")
+        .await
+        .unwrap();
+
+    // We should only see HEARTBEAT, not BACKGROUND_JOB
+    let deadline = Instant::now() + Duration::from_secs(25);
+    let mut got_heartbeat = false;
+    while Instant::now() < deadline {
+        match tokio::time::timeout_at(deadline, events.recv()).await {
+            Ok(Some(Ok(evt))) => {
+                assert_ne!(
+                    evt.event_type(),
+                    Some(EslEventType::BackgroundJob),
+                    "BACKGROUND_JOB should have been filtered out"
+                );
+                if evt.event_type() == Some(EslEventType::Heartbeat) {
+                    got_heartbeat = true;
+                    break;
+                }
+            }
+            Ok(Some(Err(e))) => panic!("event error: {}", e),
+            Ok(None) => panic!("connection closed"),
+            Err(_) => break,
+        }
+    }
+    assert!(
+        got_heartbeat,
+        "should have received HEARTBEAT through filter"
+    );
+
+    // Delete filter, verify BACKGROUND_JOB now arrives
+    client
+        .filter_delete(EventHeader::EventName, Some("HEARTBEAT"))
+        .await
+        .unwrap();
+
+    client
+        .bgapi("status")
+        .await
+        .unwrap();
+
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline {
+        match tokio::time::timeout_at(deadline, events.recv()).await {
+            Ok(Some(Ok(evt))) => {
+                if evt.event_type() == Some(EslEventType::BackgroundJob) {
+                    return; // filter successfully removed
+                }
+            }
+            Ok(Some(Err(e))) => panic!("event error: {}", e),
+            Ok(None) => panic!("connection closed"),
+            Err(_) => break,
+        }
+    }
+    panic!("BACKGROUND_JOB not received after filter_delete");
+}
+
+// --- L6: Command builder verification against real FS ---
+
+#[tokio::test]
+#[ignore]
+async fn live_uuid_setvar_getvar_round_trip() {
+    let (client, mut events) = connect().await;
+
+    client
+        .subscribe_events(EventFormat::Plain, &[EslEventType::BackgroundJob])
+        .await
+        .unwrap();
+
+    // Create a channel to work with
+    let cmd = Originate::application(
+        Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("test")),
+        Application::simple("park"),
+    );
+    let uuid = bgapi_originate_ok(&client, &mut events, &cmd).await;
+
+    // Set a variable on the channel
+    let set_cmd = UuidSetVar::new(&uuid, "esl_test_var", "hello_world");
+    let resp = client
+        .api(&set_cmd.to_string())
+        .await
+        .unwrap();
+    assert!(
+        resp.body()
+            .unwrap_or("")
+            .contains("+OK"),
+        "uuid_setvar failed: {:?}",
+        resp.body()
+    );
+
+    // Get the variable back
+    let get_cmd = UuidGetVar::new(&uuid, "esl_test_var");
+    let resp = client
+        .api(&get_cmd.to_string())
+        .await
+        .unwrap();
+    assert_eq!(
+        resp.body()
+            .map(|b| b.trim()),
+        Some("hello_world"),
+        "uuid_getvar should return the value we set"
+    );
+
+    kill_channel(&client, &uuid).await;
+}
+
+#[tokio::test]
+#[ignore]
+async fn live_uuid_kill_with_cause() {
+    let (client, mut events) = connect().await;
+
+    client
+        .subscribe_events(
+            EventFormat::Plain,
+            &[
+                EslEventType::BackgroundJob,
+                EslEventType::ChannelHangupComplete,
+            ],
+        )
+        .await
+        .unwrap();
+
+    let cmd = Originate::application(
+        Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("test")),
+        Application::simple("park"),
+    );
+    let uuid = bgapi_originate_ok(&client, &mut events, &cmd).await;
+
+    // Kill with a specific hangup cause
+    let kill_cmd = UuidKill::with_cause(&uuid, freeswitch_esl_tokio::HangupCause::UserBusy);
+    let resp = client
+        .api(&kill_cmd.to_string())
+        .await
+        .unwrap();
+    assert!(
+        resp.body()
+            .unwrap_or("")
+            .contains("+OK"),
+        "uuid_kill failed: {:?}",
+        resp.body()
+    );
+
+    // Verify the hangup cause in the CHANNEL_HANGUP_COMPLETE event
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline {
+        match tokio::time::timeout_at(deadline, events.recv()).await {
+            Ok(Some(Ok(evt))) => {
+                if evt.event_type() == Some(EslEventType::ChannelHangupComplete)
+                    && evt.unique_id() == Some(&uuid)
+                {
+                    let cause = evt
+                        .hangup_cause()
+                        .expect("should parse hangup cause")
+                        .expect("should have hangup cause");
+                    assert_eq!(
+                        cause,
+                        freeswitch_esl_tokio::HangupCause::UserBusy,
+                        "hangup cause should be USER_BUSY"
+                    );
+                    return;
+                }
+            }
+            Ok(Some(Err(e))) => panic!("event error: {}", e),
+            Ok(None) => panic!("connection closed"),
+            Err(_) => break,
+        }
+    }
+    panic!("did not receive CHANNEL_HANGUP_COMPLETE for {}", uuid);
+}
+
+// --- L7: Connection lifecycle tests ---
+
+#[tokio::test]
+#[ignore]
+async fn live_disconnect_status() {
+    let (client, _events) = connect().await;
+    assert!(client.is_connected());
+
+    client
+        .disconnect()
+        .await
+        .unwrap();
+
+    // Allow the reader loop to notice the shutdown
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    assert!(
+        !client.is_connected(),
+        "should be disconnected after disconnect()"
+    );
+    // The final status may be ClientRequested or ServerNotice depending on
+    // timing: we set ClientRequested before shutdown, but the reader loop
+    // may process the server's goodbye message and overwrite with ServerNotice.
+    assert!(
+        matches!(
+            client.status(),
+            ConnectionStatus::Disconnected(
+                DisconnectReason::ClientRequested | DisconnectReason::ServerNotice { .. }
+            )
+        ),
+        "status should be ClientRequested or ServerNotice, got: {:?}",
+        client.status()
+    );
+}
+
+#[tokio::test]
+#[ignore]
+async fn live_reconnect_clean_state() {
+    // Connect, disconnect, then reconnect and verify clean state
+    let (client1, _events1) = connect().await;
+    assert!(client1.is_connected());
+
+    let resp1 = client1
+        .api("hostname")
+        .await
+        .unwrap();
+    let hostname = resp1
+        .body()
+        .unwrap()
+        .trim()
+        .to_string();
+
+    client1
+        .disconnect()
+        .await
+        .unwrap();
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert!(!client1.is_connected());
+
+    // Reconnect
+    let (client2, _events2) = connect().await;
+    assert!(client2.is_connected());
+
+    let resp2 = client2
+        .api("hostname")
+        .await
+        .unwrap();
+    assert_eq!(
+        resp2
+            .body()
+            .unwrap()
+            .trim(),
+        hostname,
+        "hostname should match after reconnect"
+    );
+}
+
+// --- L8: sendevent UUID in response ---
+
+#[tokio::test]
+#[ignore]
+async fn live_sendevent_returns_event_uuid() {
+    let (client, _events) = connect().await;
+
+    let mut event = EslEvent::with_type(EslEventType::Custom);
+    event.set_header("Event-Name", "CUSTOM");
+    event.set_header("Event-Subclass", "esl_test::uuid_check");
+
+    let resp = client
+        .sendevent(event)
+        .await
+        .unwrap();
+    assert!(resp.is_success());
+
+    let uuid = resp.event_uuid();
+    assert!(
+        uuid.is_some(),
+        "sendevent should return event UUID in +OK reply, got: {:?}",
+        resp.reply_text()
+    );
+    // UUID should look like a UUID (36 chars with dashes)
+    let uuid = uuid.unwrap();
+    assert!(
+        uuid.len() >= 36,
+        "event UUID should be at least 36 chars: {}",
+        uuid
+    );
+}
+
+// --- L9: bgapi correlation ---
+
+#[tokio::test]
+#[ignore]
+async fn live_bgapi_correlation() {
+    let (client, mut events) = connect().await;
+
+    client
+        .subscribe_events(EventFormat::Plain, &[EslEventType::BackgroundJob])
+        .await
+        .unwrap();
+
+    // Send multiple bgapi commands and collect their Job-UUIDs
+    let resp1 = client
+        .bgapi("status")
+        .await
+        .unwrap();
+    let job1 = resp1
+        .job_uuid()
+        .expect("bgapi should return Job-UUID")
+        .to_string();
+
+    let resp2 = client
+        .bgapi("version")
+        .await
+        .unwrap();
+    let job2 = resp2
+        .job_uuid()
+        .expect("bgapi should return Job-UUID")
+        .to_string();
+
+    let resp3 = client
+        .bgapi("hostname")
+        .await
+        .unwrap();
+    let job3 = resp3
+        .job_uuid()
+        .expect("bgapi should return Job-UUID")
+        .to_string();
+
+    assert_ne!(job1, job2, "Job-UUIDs should be unique");
+    assert_ne!(job2, job3, "Job-UUIDs should be unique");
+
+    // Collect BACKGROUND_JOB events and match them to our Job-UUIDs
+    let expected: std::collections::HashSet<String> = [job1.clone(), job2.clone(), job3.clone()]
+        .into_iter()
+        .collect();
+    let mut matched = std::collections::HashSet::new();
+
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while matched.len() < 3 && Instant::now() < deadline {
+        match tokio::time::timeout_at(deadline, events.recv()).await {
+            Ok(Some(Ok(evt))) => {
+                if evt.event_type() == Some(EslEventType::BackgroundJob) {
+                    if let Some(job_uuid) = evt.job_uuid() {
+                        if expected.contains(job_uuid) {
+                            assert!(
+                                evt.body()
+                                    .is_some(),
+                                "BACKGROUND_JOB for {} should have body",
+                                job_uuid
+                            );
+                            matched.insert(job_uuid.to_string());
+                        }
+                    }
+                }
+            }
+            Ok(Some(Err(e))) => panic!("event error: {}", e),
+            Ok(None) => panic!("connection closed"),
+            Err(_) => break,
+        }
+    }
+
+    assert_eq!(
+        matched.len(),
+        3,
+        "should match all 3 bgapi jobs, matched: {:?}, expected: {:?}",
+        matched,
+        expected
+    );
 }
