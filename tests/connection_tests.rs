@@ -1193,3 +1193,183 @@ mod reexec {
         assert!(client.is_connected());
     }
 }
+
+// --- bgapi correlation with mock ---
+
+#[tokio::test]
+async fn bgapi_returns_job_uuid_from_reply() {
+    let (mut mock, client, _events) = setup_connected_pair("ClueCon").await;
+
+    let api_task = tokio::spawn({
+        let client = client.clone();
+        async move {
+            client
+                .bgapi("status")
+                .await
+        }
+    });
+
+    let cmd = mock
+        .read_command()
+        .await;
+    assert!(cmd.starts_with("bgapi status"));
+
+    mock.send_raw(
+        "Content-Type: command/reply\nReply-Text: +OK Job-UUID: d8efc742-test-uuid\nJob-UUID: d8efc742-test-uuid\n\n",
+    )
+    .await;
+
+    let response = api_task
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(response.job_uuid(), Some("d8efc742-test-uuid"));
+}
+
+#[tokio::test]
+async fn bgapi_background_job_event_delivered() {
+    let (mut mock, client, mut events) = setup_connected_pair("ClueCon").await;
+    let job_uuid = "aabb1122-bgapi-test";
+
+    let api_task = tokio::spawn({
+        let client = client.clone();
+        async move {
+            client
+                .bgapi("status")
+                .await
+        }
+    });
+
+    let _cmd = mock
+        .read_command()
+        .await;
+    mock.send_raw(&format!(
+        "Content-Type: command/reply\nReply-Text: +OK Job-UUID: {job_uuid}\nJob-UUID: {job_uuid}\n\n"
+    ))
+    .await;
+
+    let response = api_task
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(response.job_uuid(), Some(job_uuid));
+
+    let mut headers = HashMap::new();
+    headers.insert("Job-UUID".to_string(), job_uuid.to_string());
+    mock.send_event_plain_with_body("BACKGROUND_JOB", &headers, "+OK status output\n")
+        .await;
+
+    let event = recv_event(&mut events).await;
+    assert_eq!(event.event_type(), Some(EslEventType::BackgroundJob));
+    assert_eq!(event.job_uuid(), Some(job_uuid));
+    assert_eq!(event.body(), Some("+OK status output\n"));
+}
+
+#[tokio::test]
+async fn bgapi_multiple_jobs_correlated() {
+    let (mut mock, client, mut events) = setup_connected_pair("ClueCon").await;
+
+    let uuids = ["job-uuid-001", "job-uuid-002", "job-uuid-003"];
+    let bodies = ["+OK status\n", "+OK version\n", "+OK hostname\n"];
+
+    for uuid in &uuids {
+        let api_task = tokio::spawn({
+            let client = client.clone();
+            async move {
+                client
+                    .bgapi("status")
+                    .await
+            }
+        });
+        let _cmd = mock
+            .read_command()
+            .await;
+        mock.send_raw(&format!(
+            "Content-Type: command/reply\nReply-Text: +OK Job-UUID: {uuid}\nJob-UUID: {uuid}\n\n"
+        ))
+        .await;
+        let resp = api_task
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(resp.job_uuid(), Some(*uuid));
+    }
+
+    // Send events in reverse order
+    for i in (0..3).rev() {
+        let mut headers = HashMap::new();
+        headers.insert("Job-UUID".to_string(), uuids[i].to_string());
+        mock.send_event_plain_with_body("BACKGROUND_JOB", &headers, bodies[i])
+            .await;
+    }
+
+    let mut matched = std::collections::HashSet::new();
+    for _ in 0..3 {
+        let event = recv_event(&mut events).await;
+        assert_eq!(event.event_type(), Some(EslEventType::BackgroundJob));
+        let job_uuid = event
+            .job_uuid()
+            .expect("BACKGROUND_JOB should have Job-UUID")
+            .to_string();
+        let idx = uuids
+            .iter()
+            .position(|u| *u == job_uuid)
+            .expect("Job-UUID should match one of the sent commands");
+        assert_eq!(event.body(), Some(bodies[idx]));
+        matched.insert(job_uuid);
+    }
+    assert_eq!(matched.len(), 3);
+}
+
+// --- Rude rejection ---
+
+#[tokio::test]
+async fn rude_rejection_returns_access_denied() {
+    let (mut mock, client, mut events) = setup_connected_pair("ClueCon").await;
+
+    mock.send_raw("Content-Type: text/rude-rejection\n\n")
+        .await;
+
+    let result = tokio::time::timeout(Duration::from_secs(5), events.recv())
+        .await
+        .expect("timeout");
+    match result {
+        Some(Err(EslError::AccessDenied { .. })) => {}
+        other => panic!("expected AccessDenied error, got: {:?}", other),
+    }
+
+    let closed = tokio::time::timeout(Duration::from_secs(5), events.recv())
+        .await
+        .expect("timeout");
+    assert!(
+        closed.is_none(),
+        "stream should be closed after rude rejection"
+    );
+
+    match client.status() {
+        ConnectionStatus::Disconnected(DisconnectReason::IoError(_)) => {}
+        other => panic!("expected Disconnected(IoError), got: {:?}", other),
+    }
+}
+
+// --- TCP connection refused ---
+
+#[tokio::test]
+async fn connect_refused_returns_connection_error() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .unwrap();
+    let port = listener
+        .local_addr()
+        .unwrap()
+        .port();
+    drop(listener);
+
+    let err = EslClient::connect("127.0.0.1", port, "pw")
+        .await
+        .unwrap_err();
+    assert!(
+        err.is_connection_error(),
+        "connection refused should be a connection error, got: {err}"
+    );
+}

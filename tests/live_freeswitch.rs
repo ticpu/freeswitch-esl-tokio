@@ -1142,3 +1142,50 @@ async fn live_bgapi_correlation() {
         expected
     );
 }
+
+// --- L10: bgapi single round-trip ---
+
+#[tokio::test]
+#[ignore]
+async fn live_bgapi_single_round_trip() {
+    let (client, mut events) = connect().await;
+
+    client
+        .subscribe_events(EventFormat::Plain, &[EslEventType::BackgroundJob])
+        .await
+        .unwrap();
+
+    let resp = client
+        .bgapi("status")
+        .await
+        .unwrap();
+    let job_uuid = resp
+        .job_uuid()
+        .expect("bgapi should return Job-UUID")
+        .to_string();
+
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        match tokio::time::timeout_at(deadline, events.recv()).await {
+            Ok(Some(Ok(evt))) => {
+                if evt.event_type() == Some(EslEventType::BackgroundJob)
+                    && evt.job_uuid() == Some(job_uuid.as_str())
+                {
+                    let body = evt
+                        .body()
+                        .expect("BACKGROUND_JOB should have a body");
+                    assert!(!body.is_empty(), "body should contain status output");
+                    assert_eq!(
+                        evt.job_uuid(),
+                        Some(job_uuid.as_str()),
+                        "event Job-UUID must match"
+                    );
+                    return;
+                }
+            }
+            Ok(Some(Err(e))) => panic!("event error: {}", e),
+            Ok(None) => panic!("connection closed"),
+            Err(_) => panic!("timeout waiting for BACKGROUND_JOB {}", job_uuid),
+        }
+    }
+}

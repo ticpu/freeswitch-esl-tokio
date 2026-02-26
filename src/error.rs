@@ -216,3 +216,37 @@ impl EslError {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn access_denied_not_recoverable() {
+        let err = EslError::AccessDenied {
+            reason: "ACL".into(),
+        };
+        assert!(!err.is_recoverable());
+    }
+
+    #[test]
+    fn queue_full_is_recoverable() {
+        assert!(EslError::QueueFull.is_recoverable());
+    }
+
+    #[test]
+    fn command_failed_is_recoverable() {
+        let err = EslError::CommandFailed {
+            reply_text: "-ERR no such command".into(),
+        };
+        assert!(err.is_recoverable());
+    }
+
+    #[test]
+    fn unexpected_reply_is_recoverable() {
+        let err = EslError::UnexpectedReply {
+            reply_text: "garbage".into(),
+        };
+        assert!(err.is_recoverable());
+    }
+}

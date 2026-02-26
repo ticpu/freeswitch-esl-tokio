@@ -245,4 +245,21 @@ mod tests {
         buffer.compact();
         assert_eq!(buffer.data(), b"World");
     }
+
+    #[test]
+    fn buffer_exceeding_max_size_returns_error() {
+        let mut buffer = EslBuffer::new();
+        let chunk = vec![0u8; 1024 * 1024];
+        for _ in 0..17 {
+            buffer.extend_from_slice(&chunk);
+        }
+        assert!(buffer.len() > MAX_BUFFER_SIZE);
+        let err = buffer
+            .check_size_limits()
+            .unwrap_err();
+        assert!(
+            matches!(err, crate::EslError::BufferOverflow { .. }),
+            "expected BufferOverflow, got: {err}"
+        );
+    }
 }

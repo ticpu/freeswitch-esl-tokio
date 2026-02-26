@@ -105,6 +105,36 @@ impl MockClient {
             .await;
     }
 
+    /// Send a text/event-plain event with an inner body (e.g. BACKGROUND_JOB)
+    pub async fn send_event_plain_with_body(
+        &mut self,
+        event_name: &str,
+        headers: &HashMap<String, String>,
+        event_body: &str,
+    ) {
+        let mut inner = format!(
+            "Event-Name: {}\n",
+            percent_encode(event_name.as_bytes(), NON_ALPHANUMERIC)
+        );
+        for (key, value) in headers {
+            inner.push_str(&format!(
+                "{}: {}\n",
+                key,
+                percent_encode(value.as_bytes(), NON_ALPHANUMERIC)
+            ));
+        }
+        inner.push_str(&format!("Content-Length: {}\n", event_body.len()));
+        inner.push('\n');
+        inner.push_str(event_body);
+
+        let envelope = format!(
+            "Content-Length: {}\nContent-Type: text/event-plain\n\n",
+            inner.len()
+        );
+        self.send_raw(&format!("{}{}", envelope, inner))
+            .await;
+    }
+
     /// Send a HEARTBEAT event with realistic headers
     pub async fn send_heartbeat(&mut self) {
         let mut headers = HashMap::new();
