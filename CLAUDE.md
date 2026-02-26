@@ -46,9 +46,11 @@ modifying public structs to verify external construction still works.
   `EslEvent` both implement it.
 - **`From<Concrete> for Enum`.** Endpoint variant enums should have `From`
   impls for each concrete type (e.g. `From<SofiaEndpoint> for Endpoint`).
-- **Re-export all public types from `lib.rs`.** Every public type reachable
-  via `commands::`, `channel::`, `event::` etc. should also be importable
-  from the crate root.
+- **Crate root re-exports: core and dptools only.** Only re-export types from
+  `lib.rs` that belong to FreeSWITCH core or dptools (channel state, events,
+  originate, endpoints, `Uuid*` commands, `BridgeDialString`). Module-specific
+  types like conference commands (`ConferenceMute`, `MuteAction`) stay in their
+  submodule (`commands::conference`) and are not re-exported from the crate root.
 
 ## Build & Test Workflow
 

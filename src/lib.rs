@@ -146,10 +146,9 @@ pub use channel::{
 };
 pub use command::{CommandBuilder, EslCommand, EslResponse, ReplyStatus};
 pub use commands::{
-    Application, BridgeDialString, ConferenceDtmf, ConferenceHold, ConferenceMute, DialString,
-    DialplanType, Endpoint, HoldAction, MuteAction, Originate, OriginateError, OriginateTarget,
-    UuidAnswer, UuidBridge, UuidDeflect, UuidGetVar, UuidHold, UuidKill, UuidSendDtmf, UuidSetVar,
-    UuidTransfer, Variables, VariablesType,
+    Application, BridgeDialString, DialString, DialplanType, Endpoint, Originate, OriginateError,
+    OriginateTarget, UuidAnswer, UuidBridge, UuidDeflect, UuidGetVar, UuidHold, UuidKill,
+    UuidSendDtmf, UuidSetVar, UuidTransfer, Variables, VariablesType,
 };
 pub use connection::{
     ConnectionMode, ConnectionStatus, DisconnectReason, EslClient, EslConnectOptions,
