@@ -383,6 +383,10 @@ pub enum HangupCause {
     BadIdentityInfo = 821,
     UnsupportedCertificate = 822,
     InvalidIdentity = 823,
+    /// Stale Date (STIR/SHAKEN).
+    StaleDate = 824,
+    /// Reject all calls.
+    RejectAll = 825,
 }
 
 impl HangupCause {
@@ -474,6 +478,8 @@ impl HangupCause {
             821 => Some(Self::BadIdentityInfo),
             822 => Some(Self::UnsupportedCertificate),
             823 => Some(Self::InvalidIdentity),
+            824 => Some(Self::StaleDate),
+            825 => Some(Self::RejectAll),
             _ => None,
         }
     }
@@ -562,6 +568,8 @@ impl fmt::Display for HangupCause {
             Self::BadIdentityInfo => "BAD_IDENTITY_INFO",
             Self::UnsupportedCertificate => "UNSUPPORTED_CERTIFICATE",
             Self::InvalidIdentity => "INVALID_IDENTITY",
+            Self::StaleDate => "STALE_DATE",
+            Self::RejectAll => "REJECT_ALL",
         };
         f.write_str(name)
     }
@@ -656,6 +664,8 @@ impl FromStr for HangupCause {
                 "BAD_IDENTITY_INFO" => Self::BadIdentityInfo,
                 "UNSUPPORTED_CERTIFICATE" => Self::UnsupportedCertificate,
                 "INVALID_IDENTITY" => Self::InvalidIdentity,
+                "STALE_DATE" => Self::StaleDate,
+                "REJECT_ALL" => Self::RejectAll,
                 _ => return Err(ParseHangupCauseError(s.to_string())),
             },
         )

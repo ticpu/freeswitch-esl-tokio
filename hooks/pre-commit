@@ -36,4 +36,10 @@ if ! "$SCRIPT_DIR/check-event-types.sh"; then
     exit 1
 fi
 
+echo "Checking HangupCause against switch_call_cause_t..."
+if ! "$SCRIPT_DIR/check-hangup-causes.sh"; then
+    echo "❌ HangupCause enum is out of sync with FreeSWITCH. Update src/channel.rs."
+    exit 1
+fi
+
 echo "✅ Pre-commit checks passed"
