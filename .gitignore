@@ -27,3 +27,6 @@ Thumbs.db
 
 # Cached FreeSWITCH source for hook checks
 .freeswitch-src/
+
+# Code review transcripts (not for publishing)
+review/
