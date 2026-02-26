@@ -400,23 +400,18 @@ cargo test --test live_freeswitch -- --ignored
 - Rust 1.70+
 - Tokio async runtime
 
-## How it compares
+## Other Rust ESL crates
 
-| | freeswitch-esl-tokio | [freeswitch-esl](https://crates.io/crates/freeswitch-esl) | [eslrs](https://crates.io/crates/eslrs) | [freeswitch-esl-rs](https://crates.io/crates/freeswitch-esl-rs) |
-|---|---|---|---|---|
-| Async (Tokio) | yes | yes | yes | no (blocking) |
-| Split reader/writer | yes | no | no | n/a |
-| Inbound + outbound | both | both | both | inbound only |
-| Event formats | plain, JSON, XML | JSON only | plain, JSON, XML | plain only |
-| Liveness detection | yes | no | no | no |
-| Command timeout | yes (default 5s) | no | no | no |
-| Error classification | yes | no | no | no |
-| Typed state enums | 5 (`ChannelState`, `CallState`, ...) | no | no | no |
-| Typed header enums | ![EventHeader](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/event-header-count.json)<br>![ChannelVariable](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/channel-var-count.json)<br>![HeaderLookup](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/header-lookup-count.json) | no | no | no |
-| Channel timetable | yes (decoupled from event type) | no | no | no |
-| Command builders | 13 typed structs | none | basic | none |
-| Event types | ![Event Types](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/event-type-count.json) | — | — | — |
-| Test count | ![Tests](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/test-count.json) | — | — | — |
+- [freeswitch-esl](https://crates.io/crates/freeswitch-esl) -- async/tokio,
+  JSON-only events, no split reader/writer, no liveness detection, no command
+  builders or typed state. Stale since 2023.
+- [eslrs](https://crates.io/crates/eslrs) -- async, still in RC. Unified
+  stream (not split), silently discards unexpected responses, no timeouts.
+- [freeswitch-esl-rs](https://crates.io/crates/freeswitch-esl-rs) --
+  synchronous/blocking, inbound only, plain events only.
+
+None of them offer typed endpoints, command builders, `HeaderLookup`, or
+connection health monitoring.
 
 ## License
 
