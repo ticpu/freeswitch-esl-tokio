@@ -47,23 +47,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     pass += 1;
 
     // Step 3: Originate call to outbound socket via Originate builder
-    let originate = Originate {
-        endpoint: Endpoint::Loopback(LoopbackEndpoint {
+    let originate = Originate::application(
+        Endpoint::Loopback(LoopbackEndpoint {
             extension: "9199".into(),
             context: "test".into(),
             variables: None,
         }),
-        target: Application::new(
+        Application::new(
             "socket",
             Some(format!("127.0.0.1:{} async full", outbound_port)),
-        )
-        .into(),
-        dialplan: None,
-        context: None,
-        cid_name: None,
-        cid_num: None,
-        timeout: None,
-    };
+        ),
+    );
     let resp = inbound
         .api(&originate.to_string())
         .await?;

@@ -29,19 +29,18 @@ async fn main() -> Result<(), EslError> {
         EslEventType::ChannelDestroy,
     ]).await?;
 
-    let cmd = Originate {
-        endpoint: Endpoint::SofiaGateway(SofiaGateway {
+    let cmd = Originate::application(
+        Endpoint::SofiaGateway(SofiaGateway {
             gateway: "my_provider".into(),
             destination: "18005551234".into(),
             profile: None, variables: None,
         }),
-        target: Application::new(
+        Application::new(
             "playback",
             Some("/usr/share/freeswitch/sounds/en/us/callie/ivr/ivr-welcome.wav"),
-        ).into(),
-        dialplan: None, context: None, cid_name: None, cid_num: None,
-        timeout: Some(30),
-    };
+        ),
+    )
+    .timeout(30);
 
     let response = client.bgapi(&cmd.to_string()).await?;
     response.into_result()?;
@@ -280,31 +279,22 @@ let ep: Endpoint = "sofia/gateway/my_provider/18005551234".parse().unwrap();
 ```rust
 use freeswitch_esl_tokio::commands::*;
 
-let cmd = Originate {
-    endpoint: Endpoint::SofiaGateway(SofiaGateway {
-        gateway: "my_provider".into(),
-        destination: "18005551234".into(),
-        profile: None,
-        variables: None,
-    }),
-    target: vec![Application::new("conference", Some("room1"))].into(),
-    dialplan: Some(DialplanType::Inline),
-    context: None, cid_name: None, cid_num: None, timeout: None,
-};
+let gw = || Endpoint::SofiaGateway(SofiaGateway {
+    gateway: "my_provider".into(),
+    destination: "18005551234".into(),
+    profile: None, variables: None,
+});
+
+// Inline applications
+let cmd = Originate::inline(gw(), vec![
+    Application::new("conference", Some("room1")),
+]).unwrap();
 // -> "originate sofia/gateway/my_provider/18005551234 conference:room1 inline"
 
-// Originate to a dialplan extension
-let ext_cmd = Originate {
-    endpoint: Endpoint::SofiaGateway(SofiaGateway {
-        gateway: "my_provider".into(),
-        destination: "18005551234".into(),
-        profile: None, variables: None,
-    }),
-    target: OriginateTarget::Extension("1000".into()),
-    dialplan: Some(DialplanType::Xml),
-    context: Some("default".into()),
-    cid_name: None, cid_num: None, timeout: None,
-};
+// Extension target with dialplan and context
+let ext_cmd = Originate::extension(gw(), "1000")
+    .dialplan(DialplanType::Xml).unwrap()
+    .context("default");
 // -> "originate sofia/gateway/my_provider/18005551234 1000 XML default"
 client.bgapi(&cmd.to_string()).await?;
 

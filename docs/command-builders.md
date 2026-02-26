@@ -13,7 +13,7 @@ Pure `Display`/`FromStr` types with no transport coupling. They produce and pars
 strings. `EslClient` just calls `.to_string()`.
 
 ```rust
-let cmd = Originate::new(endpoint, app);
+let cmd = Originate::application(endpoint, app).timeout(30);
 client.bgapi(&cmd.to_string()).await?;
 
 let parsed: Originate = cmd.to_string().parse()?;
@@ -219,8 +219,9 @@ Key design choices:
 - **`Variables`** — flat YAML map deserializes as `VariablesType::Default` (the
   99% case). Explicit `{scope, vars}` form for Enterprise/Channel scopes.
 - **`Endpoint`** — externally tagged enum with `snake_case` variant names.
-- **`Originate`/`BridgeDialString`** — straightforward derives with
-  `skip_serializing_if` on Option fields.
+- **`Originate`** — manual `Serialize`/`Deserialize` via `OriginateRaw` intermediate
+  type. Validates invariants (no Extension+Inline, no empty InlineApplications) on
+  deserialize. `BridgeDialString` uses straightforward derives.
 
 ## Dependencies
 

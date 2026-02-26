@@ -381,49 +381,245 @@ impl From<Vec<Application>> for OriginateTarget {
 
 /// Originate command builder: `originate <endpoint> <target> [dialplan] [context] [cid_name] [cid_num] [timeout]`.
 ///
-/// The target is either a dialplan extension, a single XML-format application,
-/// or a list of inline applications. See [`OriginateTarget`].
+/// Constructed via [`Originate::extension`], [`Originate::application`], or
+/// [`Originate::inline`]. Invalid states (Extension + Inline dialplan, empty
+/// inline apps) are rejected at construction time rather than at `Display`.
 ///
-/// Application arguments containing spaces are automatically single-quoted.
-/// Implements both `Display` (for wire format) and `FromStr` (for round-trip parsing).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// Optional fields are set via consuming-self chaining methods:
+///
+/// ```
+/// # use freeswitch_esl_tokio::commands::*;
+/// let cmd = Originate::application(
+///     Endpoint::Loopback(LoopbackEndpoint {
+///         extension: "9196".into(),
+///         context: "default".into(),
+///         variables: None,
+///     }),
+///     Application::simple("park"),
+/// )
+/// .cid_name("Alice")
+/// .cid_num("5551234")
+/// .timeout(30);
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Originate {
-    /// Dial target (sofia gateway, loopback, or raw URI).
-    pub endpoint: Endpoint,
-    /// What to do with the answered channel.
+    endpoint: Endpoint,
+    target: OriginateTarget,
+    dialplan: Option<DialplanType>,
+    context: Option<String>,
+    cid_name: Option<String>,
+    cid_num: Option<String>,
+    timeout: Option<u32>,
+}
+
+/// Intermediate type for serde, mirroring the old public-field layout.
+#[derive(Serialize, Deserialize)]
+struct OriginateRaw {
+    endpoint: Endpoint,
     #[serde(flatten)]
-    pub target: OriginateTarget,
-    /// Dialplan engine. `None` defaults to XML.
+    target: OriginateTarget,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub dialplan: Option<DialplanType>,
-    /// Dialplan context. `None` uses the profile's default.
+    dialplan: Option<DialplanType>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub context: Option<String>,
-    /// Caller ID name for the originated leg.
+    context: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cid_name: Option<String>,
-    /// Caller ID number for the originated leg.
+    cid_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cid_num: Option<String>,
-    /// Timeout in seconds. `None` uses FreeSWITCH default (60s).
+    cid_num: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub timeout: Option<u32>,
+    timeout: Option<u32>,
+}
+
+impl TryFrom<OriginateRaw> for Originate {
+    type Error = OriginateError;
+
+    fn try_from(raw: OriginateRaw) -> Result<Self, Self::Error> {
+        if matches!(raw.target, OriginateTarget::Extension(_))
+            && matches!(raw.dialplan, Some(DialplanType::Inline))
+        {
+            return Err(OriginateError::ExtensionWithInlineDialplan);
+        }
+        if let OriginateTarget::InlineApplications(ref apps) = raw.target {
+            if apps.is_empty() {
+                return Err(OriginateError::EmptyInlineApplications);
+            }
+        }
+        Ok(Self {
+            endpoint: raw.endpoint,
+            target: raw.target,
+            dialplan: raw.dialplan,
+            context: raw.context,
+            cid_name: raw.cid_name,
+            cid_num: raw.cid_num,
+            timeout: raw.timeout,
+        })
+    }
+}
+
+impl From<Originate> for OriginateRaw {
+    fn from(o: Originate) -> Self {
+        Self {
+            endpoint: o.endpoint,
+            target: o.target,
+            dialplan: o.dialplan,
+            context: o.context,
+            cid_name: o.cid_name,
+            cid_num: o.cid_num,
+            timeout: o.timeout,
+        }
+    }
+}
+
+impl Serialize for Originate {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        OriginateRaw::from(self.clone()).serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for Originate {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let raw = OriginateRaw::deserialize(deserializer)?;
+        Originate::try_from(raw).map_err(serde::de::Error::custom)
+    }
+}
+
+impl Originate {
+    /// Route through the dialplan engine to an extension.
+    pub fn extension(endpoint: Endpoint, extension: impl Into<String>) -> Self {
+        Self {
+            endpoint,
+            target: OriginateTarget::Extension(extension.into()),
+            dialplan: None,
+            context: None,
+            cid_name: None,
+            cid_num: None,
+            timeout: None,
+        }
+    }
+
+    /// Execute a single XML-format application on the answered channel.
+    pub fn application(endpoint: Endpoint, app: Application) -> Self {
+        Self {
+            endpoint,
+            target: OriginateTarget::Application(app),
+            dialplan: None,
+            context: None,
+            cid_name: None,
+            cid_num: None,
+            timeout: None,
+        }
+    }
+
+    /// Execute inline applications on the answered channel.
+    ///
+    /// Returns `Err` if the iterator yields no applications.
+    pub fn inline(
+        endpoint: Endpoint,
+        apps: impl IntoIterator<Item = Application>,
+    ) -> Result<Self, OriginateError> {
+        let apps: Vec<Application> = apps
+            .into_iter()
+            .collect();
+        if apps.is_empty() {
+            return Err(OriginateError::EmptyInlineApplications);
+        }
+        Ok(Self {
+            endpoint,
+            target: OriginateTarget::InlineApplications(apps),
+            dialplan: None,
+            context: None,
+            cid_name: None,
+            cid_num: None,
+            timeout: None,
+        })
+    }
+
+    /// Set the dialplan type.
+    ///
+    /// Returns `Err` if setting `Inline` on an `Extension` target.
+    pub fn dialplan(mut self, dp: DialplanType) -> Result<Self, OriginateError> {
+        if matches!(self.target, OriginateTarget::Extension(_)) && dp == DialplanType::Inline {
+            return Err(OriginateError::ExtensionWithInlineDialplan);
+        }
+        self.dialplan = Some(dp);
+        Ok(self)
+    }
+
+    /// Set the dialplan context.
+    pub fn context(mut self, ctx: impl Into<String>) -> Self {
+        self.context = Some(ctx.into());
+        self
+    }
+
+    /// Set the caller ID name.
+    pub fn cid_name(mut self, name: impl Into<String>) -> Self {
+        self.cid_name = Some(name.into());
+        self
+    }
+
+    /// Set the caller ID number.
+    pub fn cid_num(mut self, num: impl Into<String>) -> Self {
+        self.cid_num = Some(num.into());
+        self
+    }
+
+    /// Set the originate timeout in seconds.
+    pub fn timeout(mut self, seconds: u32) -> Self {
+        self.timeout = Some(seconds);
+        self
+    }
+
+    /// The dial endpoint.
+    pub fn endpoint(&self) -> &Endpoint {
+        &self.endpoint
+    }
+
+    /// Mutable reference to the dial endpoint.
+    pub fn endpoint_mut(&mut self) -> &mut Endpoint {
+        &mut self.endpoint
+    }
+
+    /// The originate target (extension, application, or inline apps).
+    pub fn target(&self) -> &OriginateTarget {
+        &self.target
+    }
+
+    /// The dialplan type, if explicitly set.
+    pub fn dialplan_type(&self) -> Option<DialplanType> {
+        self.dialplan
+    }
+
+    /// The dialplan context, if set.
+    pub fn context_str(&self) -> Option<&str> {
+        self.context
+            .as_deref()
+    }
+
+    /// The caller ID name, if set.
+    pub fn caller_id_name(&self) -> Option<&str> {
+        self.cid_name
+            .as_deref()
+    }
+
+    /// The caller ID number, if set.
+    pub fn caller_id_number(&self) -> Option<&str> {
+        self.cid_num
+            .as_deref()
+    }
+
+    /// The timeout in seconds, if set.
+    pub fn timeout_seconds(&self) -> Option<u32> {
+        self.timeout
+    }
 }
 
 impl fmt::Display for Originate {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let target_str = match &self.target {
-            OriginateTarget::Extension(ext) => {
-                if self.dialplan == Some(DialplanType::Inline) {
-                    return Err(fmt::Error);
-                }
-                ext.clone()
-            }
+            OriginateTarget::Extension(ext) => ext.clone(),
             OriginateTarget::Application(app) => app.to_string_with_dialplan(&DialplanType::Xml),
             OriginateTarget::InlineApplications(apps) => {
-                if apps.is_empty() {
-                    return Err(fmt::Error);
-                }
+                // Constructor guarantees non-empty
                 let parts: Vec<String> = apps
                     .iter()
                     .map(|a| a.to_string_with_dialplan(&DialplanType::Inline))
@@ -570,15 +766,18 @@ impl FromStr for Originate {
             None
         };
 
-        Ok(Self {
-            endpoint,
-            target,
-            dialplan,
-            context,
-            cid_name,
-            cid_num,
-            timeout,
-        })
+        // Validate via constructors then set parsed fields directly (same module)
+        let mut orig = match target {
+            OriginateTarget::Extension(ref ext) => Self::extension(endpoint, ext.clone()),
+            OriginateTarget::Application(ref app) => Self::application(endpoint, app.clone()),
+            OriginateTarget::InlineApplications(ref apps) => Self::inline(endpoint, apps.clone())?,
+        };
+        orig.dialplan = dialplan;
+        orig.context = context;
+        orig.cid_name = cid_name;
+        orig.cid_num = cid_num;
+        orig.timeout = timeout;
+        Ok(orig)
     }
 }
 
@@ -591,6 +790,12 @@ pub enum OriginateError {
     /// General parse failure with a description.
     #[error("parse error: {0}")]
     ParseError(String),
+    /// Inline originate requires at least one application.
+    #[error("inline originate requires at least one application")]
+    EmptyInlineApplications,
+    /// Extension target cannot use inline dialplan.
+    #[error("extension target is incompatible with inline dialplan")]
+    ExtensionWithInlineDialplan,
 }
 
 #[cfg(test)]
@@ -808,15 +1013,9 @@ mod tests {
             destination: "123@example.com".into(),
             variables: None,
         });
-        let orig = Originate {
-            endpoint: ep,
-            target: Application::new("conference", Some("1")).into(),
-            dialplan: Some(DialplanType::Xml),
-            context: None,
-            cid_name: None,
-            cid_num: None,
-            timeout: None,
-        };
+        let orig = Originate::application(ep, Application::new("conference", Some("1")))
+            .dialplan(DialplanType::Xml)
+            .unwrap();
         assert_eq!(
             orig.to_string(),
             "originate sofia/internal/123@example.com &conference(1) XML"
@@ -830,15 +1029,10 @@ mod tests {
             destination: "123@example.com".into(),
             variables: None,
         });
-        let orig = Originate {
-            endpoint: ep,
-            target: vec![Application::new("conference", Some("1"))].into(),
-            dialplan: Some(DialplanType::Inline),
-            context: None,
-            cid_name: None,
-            cid_num: None,
-            timeout: None,
-        };
+        let orig = Originate::inline(ep, vec![Application::new("conference", Some("1"))])
+            .unwrap()
+            .dialplan(DialplanType::Inline)
+            .unwrap();
         assert_eq!(
             orig.to_string(),
             "originate sofia/internal/123@example.com conference:1 inline"
@@ -852,15 +1046,10 @@ mod tests {
             destination: "123@example.com".into(),
             variables: None,
         });
-        let orig = Originate {
-            endpoint: ep,
-            target: OriginateTarget::Extension("1000".into()),
-            dialplan: Some(DialplanType::Xml),
-            context: Some("default".into()),
-            cid_name: None,
-            cid_num: None,
-            timeout: None,
-        };
+        let orig = Originate::extension(ep, "1000")
+            .dialplan(DialplanType::Xml)
+            .unwrap()
+            .context("default");
         assert_eq!(
             orig.to_string(),
             "originate sofia/internal/123@example.com 1000 XML default"
@@ -874,7 +1063,7 @@ mod tests {
             .parse()
             .unwrap();
         assert_eq!(parsed.to_string(), input);
-        assert!(matches!(parsed.target, OriginateTarget::Extension(ref e) if e == "1000"));
+        assert!(matches!(parsed.target(), OriginateTarget::Extension(ref e) if e == "1000"));
     }
 
     #[test]
@@ -883,7 +1072,7 @@ mod tests {
         let parsed: Originate = input
             .parse()
             .unwrap();
-        assert!(matches!(parsed.target, OriginateTarget::Extension(ref e) if e == "1000"));
+        assert!(matches!(parsed.target(), OriginateTarget::Extension(ref e) if e == "1000"));
         assert_eq!(parsed.to_string(), input);
     }
 
@@ -894,18 +1083,19 @@ mod tests {
             destination: "123@example.com".into(),
             variables: None,
         });
-        let orig = Originate {
-            endpoint: ep,
-            target: OriginateTarget::Extension("1000".into()),
-            dialplan: Some(DialplanType::Inline),
-            context: None,
-            cid_name: None,
-            cid_num: None,
-            timeout: None,
-        };
-        use std::fmt::Write;
-        let mut buf = String::new();
-        assert!(write!(buf, "{}", orig).is_err());
+        let result = Originate::extension(ep, "1000").dialplan(DialplanType::Inline);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn originate_empty_inline_errors() {
+        let ep = Endpoint::Sofia(SofiaEndpoint {
+            profile: "internal".into(),
+            destination: "123@example.com".into(),
+            variables: None,
+        });
+        let result = Originate::inline(ep, vec![]);
+        assert!(result.is_err());
     }
 
     #[test]
@@ -914,7 +1104,7 @@ mod tests {
         let orig: Originate = input
             .parse()
             .unwrap();
-        assert!(matches!(orig.target, OriginateTarget::Extension(ref e) if e == "123"));
+        assert!(matches!(orig.target(), OriginateTarget::Extension(ref e) if e == "123"));
         assert_eq!(orig.to_string(), input);
     }
 
@@ -925,15 +1115,10 @@ mod tests {
             context: "test".into(),
             variables: None,
         });
-        let orig = Originate {
-            endpoint: ep,
-            target: Application::new("socket", Some("127.0.0.1:8040 async full")).into(),
-            dialplan: None,
-            context: None,
-            cid_name: None,
-            cid_num: None,
-            timeout: None,
-        };
+        let orig = Originate::application(
+            ep,
+            Application::new("socket", Some("127.0.0.1:8040 async full")),
+        );
         assert_eq!(
             orig.to_string(),
             "originate loopback/9199/test '&socket(127.0.0.1:8040 async full)'"
@@ -947,7 +1132,7 @@ mod tests {
             .parse()
             .unwrap();
         assert_eq!(parsed.to_string(), input);
-        if let OriginateTarget::Application(ref app) = parsed.target {
+        if let OriginateTarget::Application(ref app) = parsed.target() {
             assert_eq!(
                 app.args
                     .as_deref(),
@@ -965,15 +1150,9 @@ mod tests {
             destination: "123@example.com".into(),
             variables: None,
         });
-        let orig = Originate {
-            endpoint: ep,
-            target: Application::new("conference", Some("1")).into(),
-            dialplan: Some(DialplanType::Xml),
-            context: None,
-            cid_name: None,
-            cid_num: None,
-            timeout: None,
-        };
+        let orig = Originate::application(ep, Application::new("conference", Some("1")))
+            .dialplan(DialplanType::Xml)
+            .unwrap();
         let s = orig.to_string();
         let parsed: Originate = s
             .parse()
@@ -988,7 +1167,7 @@ mod tests {
             .parse()
             .unwrap();
         assert_eq!(parsed.to_string(), input);
-        if let OriginateTarget::InlineApplications(ref apps) = parsed.target {
+        if let OriginateTarget::InlineApplications(ref apps) = parsed.target() {
             assert!(apps[0]
                 .args
                 .is_none());
@@ -1014,15 +1193,7 @@ mod tests {
             destination: "123@example.com".into(),
             variables: None,
         });
-        let orig = Originate {
-            endpoint: ep,
-            target: vec![Application::simple("park")].into(),
-            dialplan: None,
-            context: None,
-            cid_name: None,
-            cid_num: None,
-            timeout: None,
-        };
+        let orig = Originate::inline(ep, vec![Application::simple("park")]).unwrap();
         assert!(orig
             .to_string()
             .contains("inline"));
@@ -1150,15 +1321,13 @@ mod tests {
             destination: "123@example.com".into(),
             variables: None,
         });
-        let orig = Originate {
-            endpoint: ep,
-            target: Application::new("park", None::<&str>).into(),
-            dialplan: Some(DialplanType::Xml),
-            context: Some("default".into()),
-            cid_name: Some("Test".into()),
-            cid_num: Some("5551234".into()),
-            timeout: Some(30),
-        };
+        let orig = Originate::application(ep, Application::new("park", None::<&str>))
+            .dialplan(DialplanType::Xml)
+            .unwrap()
+            .context("default")
+            .cid_name("Test")
+            .cid_num("5551234")
+            .timeout(30);
         let json = serde_json::to_string(&orig).unwrap();
         assert!(json.contains("\"application\""));
         let parsed: Originate = serde_json::from_str(&json).unwrap();
@@ -1174,11 +1343,32 @@ mod tests {
             "context": "default"
         }"#;
         let orig: Originate = serde_json::from_str(json).unwrap();
-        assert!(matches!(orig.target, OriginateTarget::Extension(ref e) if e == "1000"));
+        assert!(matches!(orig.target(), OriginateTarget::Extension(ref e) if e == "1000"));
         assert_eq!(
             orig.to_string(),
             "originate sofia/internal/123@example.com 1000 XML default"
         );
+    }
+
+    #[test]
+    fn serde_originate_extension_with_inline_rejected() {
+        let json = r#"{
+            "endpoint": {"sofia": {"profile": "internal", "destination": "123@example.com"}},
+            "extension": "1000",
+            "dialplan": "inline"
+        }"#;
+        let result = serde_json::from_str::<Originate>(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn serde_originate_empty_inline_rejected() {
+        let json = r#"{
+            "endpoint": {"sofia": {"profile": "internal", "destination": "123@example.com"}},
+            "inline_applications": []
+        }"#;
+        let result = serde_json::from_str::<Originate>(json);
+        assert!(result.is_err());
     }
 
     #[test]
@@ -1191,7 +1381,7 @@ mod tests {
             ]
         }"#;
         let orig: Originate = serde_json::from_str(json).unwrap();
-        if let OriginateTarget::InlineApplications(ref apps) = orig.target {
+        if let OriginateTarget::InlineApplications(ref apps) = orig.target() {
             assert_eq!(apps.len(), 2);
         } else {
             panic!("expected InlineApplications");
@@ -1208,15 +1398,7 @@ mod tests {
             destination: "123@example.com".into(),
             variables: None,
         });
-        let orig = Originate {
-            endpoint: ep,
-            target: Application::new("park", None::<&str>).into(),
-            dialplan: None,
-            context: None,
-            cid_name: None,
-            cid_num: None,
-            timeout: None,
-        };
+        let orig = Originate::application(ep, Application::new("park", None::<&str>));
         let json = serde_json::to_string(&orig).unwrap();
         assert!(!json.contains("dialplan"));
         assert!(!json.contains("context"));
@@ -1287,15 +1469,7 @@ mod tests {
             destination: "123@example.com".into(),
             variables: None,
         });
-        let orig = Originate {
-            endpoint: ep,
-            target: Application::simple("park").into(),
-            dialplan: None,
-            context: None,
-            cid_name: None,
-            cid_num: None,
-            timeout: None,
-        };
+        let orig = Originate::application(ep, Application::simple("park"));
         assert_eq!(
             orig.to_string(),
             "originate sofia/internal/123@example.com &park()"
@@ -1304,19 +1478,12 @@ mod tests {
 
     #[test]
     fn originate_timeout_only_fills_positional_gaps() {
-        let cmd = Originate {
-            endpoint: Endpoint::Loopback(LoopbackEndpoint {
-                extension: "9199".into(),
-                context: "test".into(),
-                variables: None,
-            }),
-            target: Application::simple("park").into(),
-            dialplan: None,
-            context: None,
-            cid_name: None,
-            cid_num: None,
-            timeout: Some(30),
-        };
+        let ep = Endpoint::Loopback(LoopbackEndpoint {
+            extension: "9199".into(),
+            context: "test".into(),
+            variables: None,
+        });
+        let cmd = Originate::application(ep, Application::simple("park")).timeout(30);
         // timeout is arg 7; dialplan/context/cid must be filled so FS
         // doesn't interpret "30" as the dialplan name
         assert_eq!(
@@ -1327,19 +1494,12 @@ mod tests {
 
     #[test]
     fn originate_cid_num_only_fills_preceding_gaps() {
-        let cmd = Originate {
-            endpoint: Endpoint::Loopback(LoopbackEndpoint {
-                extension: "9199".into(),
-                context: "test".into(),
-                variables: None,
-            }),
-            target: Application::simple("park").into(),
-            dialplan: None,
-            context: None,
-            cid_name: None,
-            cid_num: Some("5551234".into()),
-            timeout: None,
-        };
+        let ep = Endpoint::Loopback(LoopbackEndpoint {
+            extension: "9199".into(),
+            context: "test".into(),
+            variables: None,
+        });
+        let cmd = Originate::application(ep, Application::simple("park")).cid_num("5551234");
         assert_eq!(
             cmd.to_string(),
             "originate loopback/9199/test &park() XML default undef 5551234"
@@ -1348,19 +1508,12 @@ mod tests {
 
     #[test]
     fn originate_context_only_fills_dialplan() {
-        let cmd = Originate {
-            endpoint: Endpoint::Loopback(LoopbackEndpoint {
-                extension: "9199".into(),
-                context: "test".into(),
-                variables: None,
-            }),
-            target: OriginateTarget::Extension("1000".into()),
-            dialplan: None,
-            context: Some("myctx".into()),
-            cid_name: None,
-            cid_num: None,
-            timeout: None,
-        };
+        let ep = Endpoint::Loopback(LoopbackEndpoint {
+            extension: "9199".into(),
+            context: "test".into(),
+            variables: None,
+        });
+        let cmd = Originate::extension(ep, "1000").context("myctx");
         assert_eq!(
             cmd.to_string(),
             "originate loopback/9199/test 1000 XML myctx"
@@ -1374,19 +1527,12 @@ mod tests {
     /// representation differs. This is an accepted asymmetry.
     #[test]
     fn originate_context_gap_filler_round_trip_asymmetry() {
-        let cmd = Originate {
-            endpoint: Endpoint::Loopback(LoopbackEndpoint {
-                extension: "9199".into(),
-                context: "test".into(),
-                variables: None,
-            }),
-            target: Application::simple("park").into(),
-            dialplan: None,
-            context: None,
-            cid_name: Some("Alice".into()),
-            cid_num: None,
-            timeout: None,
-        };
+        let ep = Endpoint::Loopback(LoopbackEndpoint {
+            extension: "9199".into(),
+            context: "test".into(),
+            variables: None,
+        });
+        let cmd = Originate::application(ep, Application::simple("park")).cid_name("Alice");
         let wire = cmd.to_string();
         assert!(wire.contains("default"), "gap-filler should emit 'default'");
 
@@ -1394,9 +1540,32 @@ mod tests {
             .parse()
             .unwrap();
         // Struct-level asymmetry: None became Some("default")
-        assert_eq!(parsed.context, Some("default".into()));
+        assert_eq!(parsed.context_str(), Some("default"));
 
         // Wire format is identical (the important invariant)
         assert_eq!(parsed.to_string(), wire);
+    }
+
+    #[test]
+    fn originate_accessors() {
+        let ep = Endpoint::Loopback(LoopbackEndpoint {
+            extension: "9199".into(),
+            context: "default".into(),
+            variables: None,
+        });
+        let cmd = Originate::extension(ep, "1000")
+            .dialplan(DialplanType::Xml)
+            .unwrap()
+            .context("default")
+            .cid_name("Alice")
+            .cid_num("5551234")
+            .timeout(30);
+
+        assert!(matches!(cmd.target(), OriginateTarget::Extension(ref e) if e == "1000"));
+        assert_eq!(cmd.dialplan_type(), Some(DialplanType::Xml));
+        assert_eq!(cmd.context_str(), Some("default"));
+        assert_eq!(cmd.caller_id_name(), Some("Alice"));
+        assert_eq!(cmd.caller_id_number(), Some("5551234"));
+        assert_eq!(cmd.timeout_seconds(), Some(30));
     }
 }

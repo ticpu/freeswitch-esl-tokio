@@ -6,7 +6,7 @@
 use freeswitch_esl_tokio::commands::{LoopbackEndpoint, UuidKill};
 use freeswitch_esl_tokio::{
     Application, DialplanType, Endpoint, EslClient, EslError, EslEvent, EslEventPriority,
-    EslEventType, EventFormat, EventHeader, HeaderLookup, Originate, OriginateTarget, ReplyStatus,
+    EslEventType, EventFormat, EventHeader, HeaderLookup, Originate, ReplyStatus,
 };
 use std::time::Duration;
 use tokio::time::Instant;
@@ -536,19 +536,14 @@ async fn live_originate_application_target() {
         .unwrap();
 
     // Single application target: &park() holds the channel, bgapi returns immediately
-    let cmd = Originate {
-        endpoint: Endpoint::Loopback(LoopbackEndpoint {
+    let cmd = Originate::application(
+        Endpoint::Loopback(LoopbackEndpoint {
             extension: "9199".into(),
             context: "test".into(),
             variables: None,
         }),
-        target: Application::simple("park").into(),
-        dialplan: None,
-        context: None,
-        cid_name: None,
-        cid_num: None,
-        timeout: None,
-    };
+        Application::simple("park"),
+    );
 
     let uuid = bgapi_originate_ok(&client, &mut events, &cmd).await;
     kill_channel(&client, &uuid).await;
@@ -565,19 +560,17 @@ async fn live_originate_extension_target() {
         .unwrap();
 
     // Extension target: route through XML dialplan to 9199 (echo) in test context
-    let cmd = Originate {
-        endpoint: Endpoint::Loopback(LoopbackEndpoint {
+    let cmd = Originate::extension(
+        Endpoint::Loopback(LoopbackEndpoint {
             extension: "9199".into(),
             context: "test".into(),
             variables: None,
         }),
-        target: OriginateTarget::Extension("9199".into()),
-        dialplan: Some(DialplanType::Xml),
-        context: Some("test".into()),
-        cid_name: None,
-        cid_num: None,
-        timeout: None,
-    };
+        "9199",
+    )
+    .dialplan(DialplanType::Xml)
+    .unwrap()
+    .context("test");
 
     let uuid = bgapi_originate_ok(&client, &mut events, &cmd).await;
     kill_channel(&client, &uuid).await;
@@ -594,22 +587,18 @@ async fn live_originate_inline_target() {
         .unwrap();
 
     // Inline dialplan: answer then hangup (instant)
-    let cmd = Originate {
-        endpoint: Endpoint::Loopback(LoopbackEndpoint {
+    let cmd = Originate::inline(
+        Endpoint::Loopback(LoopbackEndpoint {
             extension: "9199".into(),
             context: "test".into(),
             variables: None,
         }),
-        target: OriginateTarget::InlineApplications(vec![
+        vec![
             Application::simple("answer"),
             Application::new("hangup", Some("NORMAL_CLEARING")),
-        ]),
-        dialplan: None,
-        context: None,
-        cid_name: None,
-        cid_num: None,
-        timeout: None,
-    };
+        ],
+    )
+    .unwrap();
 
     // answer+hangup is instant, bgapi returns the result quickly
     let uuid = bgapi_originate_ok(&client, &mut events, &cmd).await;
@@ -629,19 +618,15 @@ async fn live_originate_timeout_fills_positional_gaps() {
 
     // Timeout without cid_name/cid_num forces `undef` placeholders on the wire.
     // Verifies FreeSWITCH accepts `undef` as a NULL positional arg.
-    let cmd = Originate {
-        endpoint: Endpoint::Loopback(LoopbackEndpoint {
+    let cmd = Originate::application(
+        Endpoint::Loopback(LoopbackEndpoint {
             extension: "9199".into(),
             context: "test".into(),
             variables: None,
         }),
-        target: Application::simple("park").into(),
-        dialplan: None,
-        context: None,
-        cid_name: None,
-        cid_num: None,
-        timeout: Some(5),
-    };
+        Application::simple("park"),
+    )
+    .timeout(5);
 
     let uuid = bgapi_originate_ok(&client, &mut events, &cmd).await;
     kill_channel(&client, &uuid).await;

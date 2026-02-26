@@ -77,23 +77,21 @@
 //! Typed builders for common API commands — no raw string assembly needed:
 //!
 //! ```rust
-//! use freeswitch_esl_tokio::{Originate, Endpoint, Application, OriginateTarget};
+//! use freeswitch_esl_tokio::{Originate, Endpoint, Application};
 //! use freeswitch_esl_tokio::commands::SofiaGateway;
 //!
-//! let cmd = Originate {
-//!     endpoint: Endpoint::SofiaGateway(SofiaGateway {
+//! let cmd = Originate::application(
+//!     Endpoint::SofiaGateway(SofiaGateway {
+//!         gateway: "my_provider".into(),
 //!         destination: "18005551234".into(),
 //!         profile: None,
-//!         gateway: "my_provider".into(),
 //!         variables: None,
 //!     }),
-//!     target: Application::simple("park").into(),
-//!     dialplan: None,
-//!     context: None,
-//!     cid_name: Some("Outbound Call".into()),
-//!     cid_num: Some("5551234".into()),
-//!     timeout: Some(30),
-//! };
+//!     Application::simple("park"),
+//! )
+//! .cid_name("Outbound Call")
+//! .cid_num("5551234")
+//! .timeout(30);
 //!
 //! // Use with client.api(&cmd.to_string()) or client.bgapi(&cmd.to_string())
 //! assert!(cmd.to_string().contains("sofia/gateway/my_provider/18005551234"));

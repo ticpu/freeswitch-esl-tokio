@@ -17,8 +17,7 @@ use freeswitch_esl_tokio::commands::{
 };
 use freeswitch_esl_tokio::{
     Application, DialplanType, Endpoint, EslClient, EslError, EslEventType, EventFormat,
-    EventHeader, HeaderLookup, Originate, OriginateTarget, Variables, VariablesType,
-    DEFAULT_ESL_PORT,
+    EventHeader, HeaderLookup, Originate, Variables, VariablesType, DEFAULT_ESL_PORT,
 };
 use tracing::{error, info};
 
@@ -31,19 +30,17 @@ fn print_endpoint_examples() {
 
     println!("\n-- SofiaEndpoint: sofia/profile/destination --");
 
-    let cmd = Originate {
-        endpoint: Endpoint::Sofia(SofiaEndpoint {
+    let cmd = Originate::extension(
+        Endpoint::Sofia(SofiaEndpoint {
             profile: "internal".into(),
             destination: "1000@10.0.0.1".into(),
             variables: None,
         }),
-        target: OriginateTarget::Extension("1000".into()),
-        dialplan: None,
-        context: None,
-        cid_name: Some("Alice".into()),
-        cid_num: Some("5551234".into()),
-        timeout: Some(30),
-    };
+        "1000",
+    )
+    .cid_name("Alice")
+    .cid_num("5551234")
+    .timeout(30);
     // originate sofia/internal/1000@10.0.0.1 1000 XML default Alice 5551234 30
     println!("{}", cmd);
 
@@ -53,40 +50,31 @@ fn print_endpoint_examples() {
 
     println!("\n-- SofiaGateway: sofia/gateway/name/destination --");
 
-    let cmd = Originate {
-        endpoint: Endpoint::SofiaGateway(SofiaGateway {
+    // Application::simple(name) creates a no-arg application
+    let cmd = Originate::application(
+        Endpoint::SofiaGateway(SofiaGateway {
             gateway: "my_provider".into(),
             destination: "18005551234".into(),
             // None: gateway name only; Some("external") qualifies as profile::gateway
             profile: None,
             variables: None,
         }),
-        // Application::simple(name).into() converts Application -> OriginateTarget::Application
-        target: Application::simple("park").into(),
-        dialplan: None,
-        context: None,
-        cid_name: None,
-        cid_num: None,
-        timeout: Some(60),
-    };
+        Application::simple("park"),
+    )
+    .timeout(60);
     // originate sofia/gateway/my_provider/18005551234 &park() XML undef undef 60
     println!("{}", cmd);
 
     // With a profile qualifier: sofia/gateway/external::my_provider/destination
-    let cmd = Originate {
-        endpoint: Endpoint::SofiaGateway(SofiaGateway {
+    let cmd = Originate::application(
+        Endpoint::SofiaGateway(SofiaGateway {
             gateway: "my_provider".into(),
             destination: "18005551234".into(),
             profile: Some("external".into()),
             variables: None,
         }),
-        target: Application::simple("park").into(),
-        dialplan: None,
-        context: None,
-        cid_name: None,
-        cid_num: None,
-        timeout: None,
-    };
+        Application::simple("park"),
+    );
     // originate sofia/gateway/external::my_provider/18005551234 &park()
     println!("{}", cmd);
 
@@ -96,19 +84,14 @@ fn print_endpoint_examples() {
 
     println!("\n-- UserEndpoint: user/name@domain --");
 
-    let cmd = Originate {
-        endpoint: Endpoint::User(UserEndpoint {
+    let cmd = Originate::extension(
+        Endpoint::User(UserEndpoint {
             name: "1000".into(),
             domain: Some("pbx.example.com".into()),
             variables: None,
         }),
-        target: OriginateTarget::Extension("5000".into()),
-        dialplan: None,
-        context: None,
-        cid_name: None,
-        cid_num: None,
-        timeout: None,
-    };
+        "5000",
+    );
     // originate user/1000@pbx.example.com 5000
     println!("{}", cmd);
 
@@ -118,21 +101,17 @@ fn print_endpoint_examples() {
 
     println!("\n-- SofiaContact: ${{sofia_contact([profile/]user@domain)}} --");
 
-    let cmd = Originate {
-        endpoint: Endpoint::SofiaContact(SofiaContact {
+    let cmd = Originate::application(
+        Endpoint::SofiaContact(SofiaContact {
             user: "bob".into(),
             domain: "pbx.example.com".into(),
             // "*" searches all profiles; use a profile name to limit the lookup
             profile: Some("*".into()),
             variables: None,
         }),
-        target: Application::simple("park").into(),
-        dialplan: None,
-        context: None,
-        cid_name: None,
-        cid_num: None,
-        timeout: Some(20),
-    };
+        Application::simple("park"),
+    )
+    .timeout(20);
     // originate ${sofia_contact(*/bob@pbx.example.com)} &park() XML undef undef 20
     println!("{}", cmd);
 
@@ -142,21 +121,16 @@ fn print_endpoint_examples() {
 
     println!("\n-- GroupCall: ${{group_call(group@domain[+order])}} --");
 
-    let cmd = Originate {
-        endpoint: Endpoint::GroupCall(GroupCall {
+    let cmd = Originate::application(
+        Endpoint::GroupCall(GroupCall {
             group: "support".into(),
             domain: "pbx.example.com".into(),
             // A=all members simultaneously, F=first registered, E=enterprise
             order: Some("A".into()),
             variables: None,
         }),
-        target: Application::simple("park").into(),
-        dialplan: None,
-        context: None,
-        cid_name: None,
-        cid_num: None,
-        timeout: None,
-    };
+        Application::simple("park"),
+    );
     // originate ${group_call(support@pbx.example.com+A)} &park()
     println!("{}", cmd);
 
@@ -166,20 +140,15 @@ fn print_endpoint_examples() {
 
     println!("\n-- LoopbackEndpoint: loopback/extension/context --");
 
-    let cmd = Originate {
-        endpoint: Endpoint::Loopback(LoopbackEndpoint {
+    let cmd = Originate::application(
+        Endpoint::Loopback(LoopbackEndpoint {
             // 9196 = delay_echo in the default FreeSWITCH configuration
             extension: "9196".into(),
             context: "default".into(),
             variables: None,
         }),
-        target: Application::simple("park").into(),
-        dialplan: None,
-        context: None,
-        cid_name: None,
-        cid_num: None,
-        timeout: None,
-    };
+        Application::simple("park"),
+    );
     // originate loopback/9196/default &park()
     println!("{}", cmd);
 
@@ -189,17 +158,12 @@ fn print_endpoint_examples() {
 
     println!("\n-- ErrorEndpoint: error/cause --");
 
-    let cmd = Originate {
-        endpoint: Endpoint::Error(ErrorEndpoint {
+    let cmd = Originate::application(
+        Endpoint::Error(ErrorEndpoint {
             cause: "USER_BUSY".into(),
         }),
-        target: Application::simple("park").into(),
-        dialplan: None,
-        context: None,
-        cid_name: None,
-        cid_num: None,
-        timeout: None,
-    };
+        Application::simple("park"),
+    );
     // originate error/USER_BUSY &park()
     println!("{}", cmd);
 
@@ -209,18 +173,13 @@ fn print_endpoint_examples() {
 
     println!("\n-- AudioEndpoint: portaudio[/destination] --");
 
-    let cmd = Originate {
-        endpoint: Endpoint::PortAudio(AudioEndpoint {
+    let cmd = Originate::application(
+        Endpoint::PortAudio(AudioEndpoint {
             destination: Some("auto_answer".into()),
             variables: None,
         }),
-        target: Application::simple("park").into(),
-        dialplan: None,
-        context: None,
-        cid_name: None,
-        cid_num: None,
-        timeout: None,
-    };
+        Application::simple("park"),
+    );
     // originate portaudio/auto_answer &park()
     println!("{}", cmd);
 
@@ -236,20 +195,15 @@ fn print_endpoint_examples() {
     let mut vars = Variables::new(VariablesType::Default);
     vars.insert("hangup_after_bridge", "true");
     vars.insert("continue_on_fail", "true");
-    let cmd = Originate {
-        endpoint: Endpoint::SofiaGateway(SofiaGateway {
+    let cmd = Originate::application(
+        Endpoint::SofiaGateway(SofiaGateway {
             gateway: "carrier".into(),
             destination: "15551234567".into(),
             profile: None,
             variables: Some(vars),
         }),
-        target: Application::simple("bridge").into(),
-        dialplan: None,
-        context: None,
-        cid_name: None,
-        cid_num: None,
-        timeout: None,
-    };
+        Application::simple("bridge"),
+    );
     // originate {hangup_after_bridge=true,continue_on_fail=true}sofia/gateway/carrier/15551234567 &bridge()
     println!("{}", cmd);
 
@@ -259,19 +213,14 @@ fn print_endpoint_examples() {
     let mut vars = Variables::new(VariablesType::Channel);
     vars.insert("originate_timeout", "20");
     vars.insert("sip_h_X-Tenant", "acme");
-    let cmd = Originate {
-        endpoint: Endpoint::Sofia(SofiaEndpoint {
+    let cmd = Originate::application(
+        Endpoint::Sofia(SofiaEndpoint {
             profile: "external".into(),
             destination: "sip:alice@carrier.example.com".into(),
             variables: Some(vars),
         }),
-        target: Application::simple("park").into(),
-        dialplan: None,
-        context: None,
-        cid_name: None,
-        cid_num: None,
-        timeout: None,
-    };
+        Application::simple("park"),
+    );
     // originate [originate_timeout=20,sip_h_X-Tenant=acme]sofia/external/sip:alice@carrier.example.com &park()
     println!("{}", cmd);
 
@@ -280,20 +229,15 @@ fn print_endpoint_examples() {
 
     let mut vars = Variables::new(VariablesType::Default);
     vars.insert("absolute_codec_string", "PCMU,PCMA,G722");
-    let cmd = Originate {
-        endpoint: Endpoint::SofiaGateway(SofiaGateway {
+    let cmd = Originate::application(
+        Endpoint::SofiaGateway(SofiaGateway {
             gateway: "gw1".into(),
             destination: "1234".into(),
             profile: None,
             variables: Some(vars),
         }),
-        target: Application::simple("park").into(),
-        dialplan: None,
-        context: None,
-        cid_name: None,
-        cid_num: None,
-        timeout: None,
-    };
+        Application::simple("park"),
+    );
     // originate {absolute_codec_string=PCMU\,PCMA\,G722}sofia/gateway/gw1/1234 &park()
     println!("{}", cmd);
 
@@ -306,68 +250,58 @@ fn print_endpoint_examples() {
     // Extension: routed through the XML dialplan engine
     println!("\n-- Extension (routes through XML dialplan) --");
 
-    let cmd = Originate {
-        endpoint: Endpoint::SofiaGateway(SofiaGateway {
+    let cmd = Originate::extension(
+        Endpoint::SofiaGateway(SofiaGateway {
             gateway: "gw1".into(),
             destination: "18005551234".into(),
             profile: None,
             variables: None,
         }),
-        target: OriginateTarget::Extension("1000".into()),
-        dialplan: Some(DialplanType::Xml),
-        context: Some("default".into()),
-        cid_name: None,
-        cid_num: None,
-        timeout: None,
-    };
+        "1000",
+    )
+    .dialplan(DialplanType::Xml)
+    .unwrap()
+    .context("default");
     // originate sofia/gateway/gw1/18005551234 1000 XML default
     println!("{}", cmd);
 
     // Application: single &app(args) XML form
     println!("\n-- Application (&app(args)) with spaces auto-quoted --");
 
-    let cmd = Originate {
-        endpoint: Endpoint::SofiaGateway(SofiaGateway {
+    // Args containing spaces are automatically single-quoted on the wire.
+    // FreeSWITCH's originate parser requires this.
+    let cmd = Originate::application(
+        Endpoint::SofiaGateway(SofiaGateway {
             gateway: "gw1".into(),
             destination: "18005551234".into(),
             profile: None,
             variables: None,
         }),
-        // Args containing spaces are automatically single-quoted on the wire.
-        // FreeSWITCH's originate parser requires this.
-        target: Application::new("socket", Some("127.0.0.1:8040 async full")).into(),
-        dialplan: None,
-        context: None,
-        cid_name: None,
-        cid_num: None,
-        timeout: None,
-    };
+        Application::new("socket", Some("127.0.0.1:8040 async full")),
+    );
     // originate sofia/gateway/gw1/18005551234 '&socket(127.0.0.1:8040 async full)'
     println!("{}", cmd);
 
     // Inline applications: comma-separated app:args list
     println!("\n-- InlineApplications (app:args,app:args) --");
 
-    let cmd = Originate {
-        endpoint: Endpoint::SofiaGateway(SofiaGateway {
+    // Originate::inline() returns Result; empty app list is rejected
+    let cmd = Originate::inline(
+        Endpoint::SofiaGateway(SofiaGateway {
             gateway: "gw1".into(),
             destination: "18005551234".into(),
             profile: None,
             variables: None,
         }),
-        // Vec<Application>::into() produces OriginateTarget::InlineApplications
-        target: vec![
+        vec![
             Application::new("conference", Some("test_room")),
             Application::simple("hangup"),
-        ]
-        .into(),
-        // DialplanType::Inline is emitted as "inline" on the wire
-        dialplan: Some(DialplanType::Inline),
-        context: None,
-        cid_name: None,
-        cid_num: None,
-        timeout: None,
-    };
+        ],
+    )
+    .unwrap()
+    // DialplanType::Inline is emitted as "inline" on the wire
+    .dialplan(DialplanType::Inline)
+    .unwrap();
     // originate sofia/gateway/gw1/18005551234 conference:test_room,hangup inline
     println!("{}", cmd);
 
@@ -471,19 +405,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // loopback/9196/default routes to the built-in delay_echo test in the
     // default FreeSWITCH configuration -- no registered phones required.
-    let cmd = Originate {
-        endpoint: Endpoint::Loopback(LoopbackEndpoint {
+    let cmd = Originate::application(
+        Endpoint::Loopback(LoopbackEndpoint {
             extension: "9196".into(),
             context: "default".into(),
             variables: None,
         }),
-        target: Application::simple("park").into(),
-        dialplan: None,
-        context: None,
-        cid_name: Some("ESL Test".into()),
-        cid_num: Some("0000000000".into()),
-        timeout: Some(10),
-    };
+        Application::simple("park"),
+    )
+    .cid_name("ESL Test")
+    .cid_num("0000000000")
+    .timeout(10);
 
     println!("\n=== Live call via bgapi ===");
     println!("originate: {}", cmd);
