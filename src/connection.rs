@@ -1127,6 +1127,10 @@ impl EslClient {
 
     /// Set liveness timeout. Any inbound TCP traffic resets the timer.
     /// Set to zero to disable (default).
+    ///
+    /// Requires an active subscription to [`EslEventType::Heartbeat`] so
+    /// FreeSWITCH sends periodic traffic on idle connections. Without it,
+    /// the timer will expire and the connection will be closed.
     pub fn set_liveness_timeout(&self, duration: Duration) {
         self.shared
             .liveness_timeout_ms
