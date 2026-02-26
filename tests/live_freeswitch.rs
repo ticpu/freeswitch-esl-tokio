@@ -10,25 +10,37 @@ use freeswitch_esl_tokio::{
     EventHeader, HeaderLookup, Originate, ReplyStatus,
 };
 use std::time::Duration;
+use tokio::sync::Semaphore;
 use tokio::time::Instant;
 
 const ESL_HOST: &str = "127.0.0.1";
 const ESL_PORT: u16 = 8022;
 const ESL_PASSWORD: &str = "ClueCon";
+const MAX_CONCURRENT_CONNECTIONS: usize = 5;
 
-async fn connect() -> (EslClient, freeswitch_esl_tokio::EslEventStream) {
+static CONN_SEMAPHORE: Semaphore = Semaphore::const_new(MAX_CONCURRENT_CONNECTIONS);
+
+async fn connect() -> (
+    EslClient,
+    freeswitch_esl_tokio::EslEventStream,
+    tokio::sync::SemaphorePermit<'static>,
+) {
+    let permit = CONN_SEMAPHORE
+        .acquire()
+        .await
+        .expect("semaphore closed");
     let opts = EslConnectOptions::new().with_connect_timeout(Duration::from_secs(30));
     let (client, events) = EslClient::connect_with_options(ESL_HOST, ESL_PORT, ESL_PASSWORD, opts)
         .await
         .expect("failed to connect to FreeSWITCH");
     client.set_command_timeout(Duration::from_secs(10));
-    (client, events)
+    (client, events, permit)
 }
 
 #[tokio::test]
 #[ignore]
 async fn live_connect_and_status() {
-    let (client, _events) = connect().await;
+    let (client, _events, _permit) = connect().await;
     assert!(client.is_connected());
 
     let resp = client
@@ -44,7 +56,7 @@ async fn live_connect_and_status() {
 #[tokio::test]
 #[ignore]
 async fn live_subscribe_and_recv_heartbeat() {
-    let (client, mut events) = connect().await;
+    let (client, mut events, _permit) = connect().await;
 
     client
         .subscribe_events(EventFormat::Plain, &[EslEventType::Heartbeat])
@@ -66,7 +78,7 @@ async fn live_subscribe_and_recv_heartbeat() {
 #[tokio::test]
 #[ignore]
 async fn live_sendevent_with_priority() {
-    let (client, _events) = connect().await;
+    let (client, _events, _permit) = connect().await;
 
     let mut event = EslEvent::with_type(EslEventType::Custom);
     event.set_header("Event-Name", "CUSTOM");
@@ -87,7 +99,7 @@ async fn live_sendevent_with_priority() {
 #[tokio::test]
 #[ignore]
 async fn live_sendevent_with_array_header() {
-    let (client, _events) = connect().await;
+    let (client, _events, _permit) = connect().await;
 
     let mut event = EslEvent::with_type(EslEventType::Custom);
     event.set_header("Event-Name", "CUSTOM");
@@ -115,7 +127,7 @@ async fn live_sendevent_with_array_header() {
 #[tokio::test]
 #[ignore]
 async fn live_recv_custom_sendevent() {
-    let (client, mut events) = connect().await;
+    let (client, mut events, _permit) = connect().await;
 
     let subclass = format!("esl_test::live_{}", std::process::id());
 
@@ -156,7 +168,7 @@ async fn live_recv_custom_sendevent() {
 #[tokio::test]
 #[ignore]
 async fn live_api_multiple_commands() {
-    let (client, _events) = connect().await;
+    let (client, _events, _permit) = connect().await;
 
     let version = client
         .api("version")
@@ -195,7 +207,7 @@ async fn live_api_multiple_commands() {
 #[tokio::test]
 #[ignore]
 async fn live_reply_status_ok() {
-    let (client, _events) = connect().await;
+    let (client, _events, _permit) = connect().await;
 
     // subscribe_events uses send_command_ok → into_result(), so Ok means +OK
     client
@@ -207,7 +219,7 @@ async fn live_reply_status_ok() {
 #[tokio::test]
 #[ignore]
 async fn live_reply_status_err() {
-    let (client, _events) = connect().await;
+    let (client, _events, _permit) = connect().await;
 
     // log with an invalid level triggers -ERR from FreeSWITCH.
     // log() returns the raw EslResponse (not through send_command_ok),
@@ -245,7 +257,7 @@ async fn live_reply_status_err() {
 #[tokio::test]
 #[ignore]
 async fn live_noevents_stops_delivery() {
-    let (client, mut events) = connect().await;
+    let (client, mut events, _permit) = connect().await;
     let subclass = format!("esl_test::noev_{}", std::process::id());
 
     client
@@ -308,7 +320,7 @@ async fn live_noevents_stops_delivery() {
 #[tokio::test]
 #[ignore]
 async fn live_nixevent_selective_unsubscribe() {
-    let (client, mut events) = connect().await;
+    let (client, mut events, _permit) = connect().await;
     let subclass = format!("esl_test::nix_{}", std::process::id());
 
     // Subscribe to both HEARTBEAT and CUSTOM
@@ -359,7 +371,7 @@ async fn live_nixevent_selective_unsubscribe() {
 #[tokio::test]
 #[ignore]
 async fn live_api_err_body() {
-    let (client, _events) = connect().await;
+    let (client, _events, _permit) = connect().await;
 
     // api with a non-existent command returns -ERR in the body
     let resp = client
@@ -379,7 +391,7 @@ async fn live_api_err_body() {
 #[tokio::test]
 #[ignore]
 async fn live_channel_timetable_on_create() {
-    let (client, mut events) = connect().await;
+    let (client, mut events, _permit) = connect().await;
 
     client
         .subscribe_events(
@@ -527,7 +539,7 @@ async fn kill_channel(client: &EslClient, uuid: &str) {
 #[tokio::test]
 #[ignore]
 async fn live_originate_application_target() {
-    let (client, mut events) = connect().await;
+    let (client, mut events, _permit) = connect().await;
 
     client
         .subscribe_events(EventFormat::Plain, &[EslEventType::BackgroundJob])
@@ -547,7 +559,7 @@ async fn live_originate_application_target() {
 #[tokio::test]
 #[ignore]
 async fn live_originate_extension_target() {
-    let (client, mut events) = connect().await;
+    let (client, mut events, _permit) = connect().await;
 
     client
         .subscribe_events(EventFormat::Plain, &[EslEventType::BackgroundJob])
@@ -570,7 +582,7 @@ async fn live_originate_extension_target() {
 #[tokio::test]
 #[ignore]
 async fn live_originate_inline_target() {
-    let (client, mut events) = connect().await;
+    let (client, mut events, _permit) = connect().await;
 
     client
         .subscribe_events(EventFormat::Plain, &[EslEventType::BackgroundJob])
@@ -596,7 +608,7 @@ async fn live_originate_inline_target() {
 #[tokio::test]
 #[ignore]
 async fn live_originate_timeout_fills_positional_gaps() {
-    let (client, mut events) = connect().await;
+    let (client, mut events, _permit) = connect().await;
 
     client
         .subscribe_events(EventFormat::Plain, &[EslEventType::BackgroundJob])
@@ -618,7 +630,7 @@ async fn live_originate_timeout_fills_positional_gaps() {
 #[tokio::test]
 #[ignore]
 async fn live_log_events_have_log_type() {
-    let (client, mut events) = connect().await;
+    let (client, mut events, _permit) = connect().await;
 
     // Enable log forwarding at DEBUG level to generate log traffic
     let resp = client
@@ -683,7 +695,7 @@ async fn live_log_events_have_log_type() {
 #[tokio::test]
 #[ignore]
 async fn live_liveness_heartbeat_resets_timer() {
-    let (client, mut events) = connect().await;
+    let (client, mut events, _permit) = connect().await;
 
     client
         .subscribe_events(EventFormat::Plain, &[EslEventType::Heartbeat])
@@ -725,7 +737,7 @@ async fn live_liveness_heartbeat_resets_timer() {
 #[tokio::test]
 #[ignore]
 async fn live_command_timeout_msleep() {
-    let (client, _events) = connect().await;
+    let (client, _events, _permit) = connect().await;
 
     // Set a short command timeout, then send a blocking api call
     client.set_command_timeout(Duration::from_secs(1));
@@ -763,7 +775,7 @@ async fn live_command_timeout_msleep() {
 #[tokio::test]
 #[ignore]
 async fn live_filter_event_name() {
-    let (client, mut events) = connect().await;
+    let (client, mut events, _permit) = connect().await;
 
     // Subscribe to multiple event types
     client
@@ -844,7 +856,7 @@ async fn live_filter_event_name() {
 #[tokio::test]
 #[ignore]
 async fn live_uuid_setvar_getvar_round_trip() {
-    let (client, mut events) = connect().await;
+    let (client, mut events, _permit) = connect().await;
 
     client
         .subscribe_events(EventFormat::Plain, &[EslEventType::BackgroundJob])
@@ -891,7 +903,7 @@ async fn live_uuid_setvar_getvar_round_trip() {
 #[tokio::test]
 #[ignore]
 async fn live_uuid_kill_with_cause() {
-    let (client, mut events) = connect().await;
+    let (client, mut events, _permit) = connect().await;
 
     client
         .subscribe_events(
@@ -957,7 +969,7 @@ async fn live_uuid_kill_with_cause() {
 #[tokio::test]
 #[ignore]
 async fn live_disconnect_status() {
-    let (client, _events) = connect().await;
+    let (client, _events, _permit) = connect().await;
     assert!(client.is_connected());
 
     client
@@ -991,7 +1003,7 @@ async fn live_disconnect_status() {
 #[ignore]
 async fn live_reconnect_clean_state() {
     // Connect, disconnect, then reconnect and verify clean state
-    let (client1, _events1) = connect().await;
+    let (client1, _events1, _permit1) = connect().await;
     assert!(client1.is_connected());
 
     let resp1 = client1
@@ -1012,7 +1024,7 @@ async fn live_reconnect_clean_state() {
     assert!(!client1.is_connected());
 
     // Reconnect
-    let (client2, _events2) = connect().await;
+    let (client2, _events2, _permit2) = connect().await;
     assert!(client2.is_connected());
 
     let resp2 = client2
@@ -1034,7 +1046,7 @@ async fn live_reconnect_clean_state() {
 #[tokio::test]
 #[ignore]
 async fn live_sendevent_returns_event_uuid() {
-    let (client, _events) = connect().await;
+    let (client, _events, _permit) = connect().await;
 
     let mut event = EslEvent::with_type(EslEventType::Custom);
     event.set_header("Event-Name", "CUSTOM");
@@ -1066,7 +1078,7 @@ async fn live_sendevent_returns_event_uuid() {
 #[tokio::test]
 #[ignore]
 async fn live_bgapi_correlation() {
-    let (client, mut events) = connect().await;
+    let (client, mut events, _permit) = connect().await;
 
     client
         .subscribe_events(EventFormat::Plain, &[EslEventType::BackgroundJob])
@@ -1148,7 +1160,7 @@ async fn live_bgapi_correlation() {
 #[tokio::test]
 #[ignore]
 async fn live_bgapi_single_round_trip() {
-    let (client, mut events) = connect().await;
+    let (client, mut events, _permit) = connect().await;
 
     client
         .subscribe_events(EventFormat::Plain, &[EslEventType::BackgroundJob])
