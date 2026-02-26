@@ -44,7 +44,7 @@ jobs:
       - name: Count typed enum variants
         run: |
           echo "EVENT_HEADER_COUNT=$(grep -c '=> "' src/headers.rs)" >> "$GITHUB_ENV"
-          echo "CHANNEL_VAR_COUNT=$(grep -c '=> "' src/variables/channel_variable.rs)" >> "$GITHUB_ENV"
+          echo "CHANNEL_VAR_COUNT=$(grep -c '=> "' src/variables/core.rs)" >> "$GITHUB_ENV"
           echo "HEADER_LOOKUP_COUNT=$(sed -n '/^pub trait HeaderLookup/,/^}/p' src/lookup.rs | grep -c '^ *fn ')" >> "$GITHUB_ENV"
 
       - name: Test

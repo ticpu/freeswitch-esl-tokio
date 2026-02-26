@@ -67,7 +67,7 @@ async fn main() -> Result<(), EslError> {
 
 ```toml
 [dependencies]
-freeswitch-esl-tokio = "1"
+freeswitch-esl-tokio = "2"
 tokio = { version = "1.0", features = ["full"] }
 ```
 
@@ -201,16 +201,16 @@ FreeSWITCH connects to your application via the `socket` dialplan app.
 After accepting, send `connect` to establish the session:
 
 ```rust
-use freeswitch_esl_tokio::{EslClient, AppCommand, EventFormat};
+use freeswitch_esl_tokio::{EslClient, AppCommand, EventFormat, EventHeader, HeaderLookup};
 use tokio::net::TcpListener;
 
 let listener = TcpListener::bind("0.0.0.0:8040").await?;
 let (client, mut events) = EslClient::accept_outbound(&listener).await?;
 
-// Must be the first command after accept, returns channel info as an EslEvent
+// Must be the first command after accept, returns channel info as an EslResponse
 let channel_data = client.connect_session().await?;
 // Channel-Name is always present in connect response
-println!("Channel: {}", channel_data.header("Channel-Name").unwrap());
+println!("Channel: {}", channel_data.header(EventHeader::ChannelName).unwrap());
 
 // Subscribe, enable linger, resume dialplan
 client.myevents(EventFormat::Plain).await?;
@@ -322,9 +322,10 @@ dial string reference (variable scoping, `^^:` custom delimiters, enterprise
 
 ```rust
 use freeswitch_esl_tokio::commands::*;
+use freeswitch_esl_tokio::HangupCause;
 
 // UUID commands
-let kill = UuidKill::with_cause(uuid, "NORMAL_CLEARING");
+let kill = UuidKill::with_cause(uuid, HangupCause::NormalClearing);
 // -> "uuid_kill <uuid> NORMAL_CLEARING"
 client.api(&kill.to_string()).await?;
 
@@ -336,7 +337,7 @@ client.api(&dtmf.to_string()).await?;
 
 > Output strings verified by unit tests in
 > [`commands/originate.rs`](src/commands/originate.rs),
-> [`commands/endpoint.rs`](src/commands/endpoint.rs),
+> [`commands/endpoint/`](src/commands/endpoint/),
 > [`commands/bridge.rs`](src/commands/bridge.rs),
 > [`commands/channel.rs`](src/commands/channel.rs), and
 > [`commands/conference.rs`](src/commands/conference.rs).
@@ -379,21 +380,20 @@ Other scopes use the explicit form:
 {"scope": "enterprise", "vars": {"key": "value"}}
 ```
 
-### serde_yaml caveat
+### YAML serialization
 
 The `Endpoint` enum uses serde's externally tagged newtype variants. With
-`serde_json` this produces `{"sofia": {...}}`. With `serde_yaml` v0.9, newtype
-enum variants serialize as YAML tags instead of mappings:
+`serde_json` this produces `{"sofia": {...}}`. YAML libraries that use YAML
+tags for externally tagged enums (e.g. `serde_yml`) will produce:
 
 ```yaml
-# serde_yaml v0.9 format (uses YAML tags):
 endpoint: !sofia
   profile: internal
   destination: "1000@domain.com"
 ```
 
 This is valid YAML and round-trips correctly, but differs from the
-`{"sofia": {...}}` format that `serde_json` produces.
+`{"sofia": {...}}` mapping format that `serde_json` produces.
 
 ## Variable parsers
 
@@ -421,7 +421,7 @@ instead of returning raw strings:
 use freeswitch_esl_tokio::{ChannelState, CallDirection, HeaderLookup};
 
 // Typed enums parsed from headers, no string matching needed
-if let Some(state) = event.channel_state() {
+if let Ok(Some(state)) = event.channel_state() {
     match state {
         ChannelState::CsExecute => println!("Executing app"),
         ChannelState::CsHangup => println!("Hanging up"),
@@ -471,7 +471,7 @@ let codec = event.variable(ChannelVariable::ReadCodec);    // Option<&str>
 ### Custom channel tracker with `HeaderLookup`
 
 The `HeaderLookup` trait lets any `HashMap<String, String>` wrapper share
-the same typed accessors as `EslEvent`. Implement two methods, get ~17
+the same typed accessors as `EslEvent`. Implement two methods, get all typed
 accessors for free:
 
 ```rust
