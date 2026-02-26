@@ -34,7 +34,7 @@
 //! dialplan application. You run a TCP listener and accept connections:
 //!
 //! ```rust,no_run
-//! use freeswitch_esl_tokio::{EslClient, EslError, AppCommand, EventFormat};
+//! use freeswitch_esl_tokio::{EslClient, EslError, AppCommand, EventFormat, HeaderLookup};
 //! use tokio::net::TcpListener;
 //!
 //! #[tokio::main]
@@ -47,7 +47,7 @@
 //!     // First command must be connect_session — establishes the session
 //!     // and returns all channel variables as headers.
 //!     let channel_data = client.connect_session().await?;
-//!     println!("Channel: {}", channel_data.header("Channel-Name").unwrap_or("?"));
+//!     println!("Channel: {}", channel_data.channel_name().unwrap_or("?"));
 //!
 //!     client.myevents(EventFormat::Plain).await?;
 //!     client.linger(None).await?; // keep socket open after hangup

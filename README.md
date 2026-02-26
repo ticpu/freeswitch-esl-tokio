@@ -199,7 +199,7 @@ let (client, mut events) = EslClient::accept_outbound(&listener).await?;
 // Must be the first command after accept, returns channel info as an EslEvent
 let channel_data = client.connect_session().await?;
 // Channel-Name is always present in connect response
-println!("Channel: {}", channel_data.header("Channel-Name").unwrap());
+println!("Channel: {}", channel_data.channel_name().unwrap());
 
 // Subscribe, enable linger, resume dialplan
 client.myevents(EventFormat::Plain).await?;

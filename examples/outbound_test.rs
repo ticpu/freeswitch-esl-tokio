@@ -9,7 +9,7 @@
 use freeswitch_esl_tokio::commands::originate::{
     Application, ApplicationList, Endpoint, Originate,
 };
-use freeswitch_esl_tokio::{EslClient, EslEventType, EventFormat};
+use freeswitch_esl_tokio::{EslClient, EslEventType, EventFormat, HeaderLookup};
 use std::time::Duration;
 use tokio::net::TcpListener;
 
@@ -67,11 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let resp = inbound
         .api(&originate.to_string())
         .await?;
-    if resp.is_success()
-        || resp
-            .body()
-            .is_some_and(|b| b.starts_with("+OK"))
-    {
+    if resp.is_success() {
         step_ok("originate call");
         pass += 1;
     } else {
@@ -115,13 +111,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         Ok(resp) => {
             let channel = resp
-                .header("Channel-Name")
+                .channel_name()
                 .unwrap_or("(unknown)");
             let control = resp
-                .header("Control")
+                .header_str("Control")
                 .unwrap_or("(missing)");
             let mode = resp
-                .header("Socket-Mode")
+                .header_str("Socket-Mode")
                 .unwrap_or("(missing)");
             step_ok(&format!(
                 "connect session (channel: {}, control: {}, mode: {})",

@@ -8,7 +8,9 @@
 //! To test this, configure FreeSWITCH with:
 //! <action application="socket" data="localhost:8040 async full"/>
 
-use freeswitch_esl_tokio::{AppCommand, EslClient, EslEventType, EventFormat, EventHeader};
+use freeswitch_esl_tokio::{
+    AppCommand, EslClient, EslEventType, EventFormat, EventHeader, HeaderLookup,
+};
 use tokio::net::TcpListener;
 use tracing::{debug, error, info};
 
@@ -52,7 +54,7 @@ async fn handle_call(
         .connect_session()
         .await?;
     let channel = connect_resp
-        .header("Channel-Name")
+        .channel_name()
         .unwrap_or("(unknown)");
     info!("Session established: {}", channel);
 
