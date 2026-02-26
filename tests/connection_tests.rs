@@ -135,7 +135,7 @@ async fn test_disconnect_notice() {
 
     assert!(!_client.is_connected());
     match _client.status() {
-        ConnectionStatus::Disconnected(DisconnectReason::ServerNotice) => {}
+        ConnectionStatus::Disconnected(DisconnectReason::ServerNotice { .. }) => {}
         other => panic!("Expected ServerNotice, got: {:?}", other),
     }
 }
@@ -687,7 +687,7 @@ async fn test_filter_delete_command() {
         let client = client.clone();
         async move {
             client
-                .filter_delete("Event-Name", Some("CHANNEL_CREATE"))
+                .filter_delete_raw("Event-Name", Some("CHANNEL_CREATE"))
                 .await
         }
     });

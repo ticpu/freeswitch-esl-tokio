@@ -14,13 +14,14 @@ use tokio::time::{timeout, Instant};
 use tracing::{debug, info, trace, warn};
 
 use crate::{
-    command::{EslCommand, EslResponse},
+    command::{EslCommand, EslResponse, ExecuteOptions},
     constants::{
         CONTENT_TYPE_LOG_DATA, DEFAULT_TIMEOUT_MS, HEADER_CONTENT_TYPE, MAX_EVENT_QUEUE_SIZE,
         SOCKET_BUF_SIZE,
     },
     error::{EslError, EslResult},
     event::{EslEvent, EslEventType, EventFormat},
+    headers::EventHeader,
     protocol::{EslMessage, EslParser, MessageType},
 };
 
@@ -49,8 +50,16 @@ pub enum ConnectionStatus {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum DisconnectReason {
-    /// Server sent a text/disconnect-notice with Content-Disposition: disconnect
-    ServerNotice,
+    /// Server sent a `text/disconnect-notice` with `Content-Disposition: disconnect`.
+    ///
+    /// The notice may include a `Controlled-Session-UUID` header identifying
+    /// the session and a body with a human-readable message.
+    ServerNotice {
+        /// UUID of the controlled session, if present in the notice.
+        controlled_session_uuid: Option<String>,
+        /// Body text from the disconnect notice (e.g. "Disconnected, goodbye.").
+        body: Option<String>,
+    },
     /// Liveness timeout exceeded without any inbound traffic
     HeartbeatExpired,
     /// TCP I/O error (io::Error is not Clone, so we store the message)
@@ -64,7 +73,16 @@ pub enum DisconnectReason {
 impl std::fmt::Display for DisconnectReason {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            DisconnectReason::ServerNotice => write!(f, "server sent disconnect notice"),
+            DisconnectReason::ServerNotice {
+                controlled_session_uuid,
+                ..
+            } => {
+                if let Some(uuid) = controlled_session_uuid {
+                    write!(f, "server sent disconnect notice (session {})", uuid)
+                } else {
+                    write!(f, "server sent disconnect notice")
+                }
+            }
             DisconnectReason::HeartbeatExpired => write!(f, "liveness timeout expired"),
             DisconnectReason::IoError(msg) => write!(f, "I/O error: {}", msg),
             DisconnectReason::ConnectionClosed => write!(f, "connection closed"),
@@ -128,6 +146,8 @@ struct SharedState {
     event_overflow: AtomicBool,
     /// Total count of dropped events
     dropped_event_count: AtomicU64,
+    /// Auth response from inbound connect (None for outbound)
+    auth_response: Option<EslResponse>,
 }
 
 /// Options for ESL connection configuration.
@@ -239,13 +259,16 @@ async fn recv_message(
     }
 }
 
-/// Perform authentication on the stream.
+/// Perform authentication on the stream, returning the auth response.
+///
+/// For `userauth`, the response contains `Allowed-Events`, `Allowed-API`,
+/// and `Allowed-LOG` headers describing the user's access policy.
 async fn authenticate(
     stream: &mut TcpStream,
     parser: &mut EslParser,
     read_buffer: &mut [u8],
     method: AuthMethod<'_>,
-) -> EslResult<()> {
+) -> EslResult<EslResponse> {
     debug!("[AUTH] Waiting for auth request from FreeSWITCH");
     let message = recv_message(stream, parser, read_buffer).await?;
 
@@ -290,7 +313,7 @@ async fn authenticate(
     }
 
     debug!("Authentication successful");
-    Ok(())
+    Ok(response)
 }
 
 /// Try to send an event (or error) to the application via try_send.
@@ -431,11 +454,18 @@ async fn reader_loop_inner(
                             debug!("Received disconnect notice with linger disposition, ignoring");
                             continue;
                         }
+                        let controlled_session_uuid = message
+                            .headers
+                            .get("Controlled-Session-UUID")
+                            .cloned();
                         info!("Received disconnect notice from server");
                         let _ = shared
                             .status_tx
                             .send(ConnectionStatus::Disconnected(
-                                DisconnectReason::ServerNotice,
+                                DisconnectReason::ServerNotice {
+                                    controlled_session_uuid,
+                                    body: message.body,
+                                },
                             ));
                         return;
                     }
@@ -616,10 +646,16 @@ impl EslClient {
         let mut parser = EslParser::new();
         let mut read_buffer = [0u8; SOCKET_BUF_SIZE];
 
-        authenticate(&mut stream, &mut parser, &mut read_buffer, method).await?;
+        let auth_response =
+            authenticate(&mut stream, &mut parser, &mut read_buffer, method).await?;
 
         info!("Successfully connected and authenticated to FreeSWITCH");
-        Ok(Self::split_and_spawn_with_options(stream, parser, options))
+        Ok(Self::split_and_spawn_with_options(
+            stream,
+            parser,
+            options,
+            Some(auth_response),
+        ))
     }
 
     /// Accept outbound connection from FreeSWITCH
@@ -657,13 +693,14 @@ impl EslClient {
         stream: TcpStream,
         options: EslConnectOptions,
     ) -> (Self, EslEventStream) {
-        Self::split_and_spawn_with_options(stream, EslParser::new(), options)
+        Self::split_and_spawn_with_options(stream, EslParser::new(), options, None)
     }
 
     fn split_and_spawn_with_options(
         stream: TcpStream,
         parser: EslParser,
         options: EslConnectOptions,
+        auth_response: Option<EslResponse>,
     ) -> (Self, EslEventStream) {
         let queue_size = options
             .event_queue_size
@@ -681,6 +718,7 @@ impl EslClient {
             command_timeout_ms: AtomicU64::new(DEFAULT_COMMAND_TIMEOUT_MS),
             event_overflow: AtomicBool::new(false),
             dropped_event_count: AtomicU64::new(0),
+            auth_response,
         });
         let (event_tx, event_rx) = mpsc::channel(queue_size);
 
@@ -883,8 +921,14 @@ impl EslClient {
         Ok(())
     }
 
-    /// Set event filter
-    pub async fn filter_events(&self, header: &str, value: &str) -> EslResult<()> {
+    /// Set event filter using a typed [`EventHeader`].
+    pub async fn filter(&self, header: EventHeader, value: &str) -> EslResult<()> {
+        self.filter_raw(header.as_str(), value)
+            .await
+    }
+
+    /// Set event filter using a raw header name string.
+    pub async fn filter_raw(&self, header: &str, value: &str) -> EslResult<()> {
         let cmd = EslCommand::Filter {
             header: header.to_string(),
             value: value.to_string(),
@@ -896,17 +940,32 @@ impl EslClient {
         Ok(())
     }
 
-    /// Execute application on channel
+    /// Execute application on channel.
     pub async fn execute(
         &self,
         app: &str,
         args: Option<&str>,
         uuid: Option<&str>,
     ) -> EslResult<EslResponse> {
+        self.execute_with_options(app, args, uuid, ExecuteOptions::default())
+            .await
+    }
+
+    /// Execute application on channel with custom options.
+    ///
+    /// See [`ExecuteOptions`] for available flags (`event-lock`, `async`, `loops`).
+    pub async fn execute_with_options(
+        &self,
+        app: &str,
+        args: Option<&str>,
+        uuid: Option<&str>,
+        options: ExecuteOptions,
+    ) -> EslResult<EslResponse> {
         let cmd = EslCommand::Execute {
             app: app.to_string(),
             args: args.map(|s| s.to_string()),
             uuid: uuid.map(|s| s.to_string()),
+            options,
         };
         self.send_command(cmd)
             .await
@@ -1034,11 +1093,20 @@ impl EslClient {
             .await
     }
 
-    /// Remove an event filter for a specific header.
+    /// Remove an event filter for a typed [`EventHeader`].
     ///
     /// Without a value, removes all filters for the given header.
     /// With a value, removes only the filter matching that header+value pair.
-    pub async fn filter_delete(&self, header: &str, value: Option<&str>) -> EslResult<()> {
+    pub async fn filter_delete(&self, header: EventHeader, value: Option<&str>) -> EslResult<()> {
+        self.filter_delete_raw(header.as_str(), value)
+            .await
+    }
+
+    /// Remove an event filter using a raw header name string.
+    ///
+    /// Without a value, removes all filters for the given header.
+    /// With a value, removes only the filter matching that header+value pair.
+    pub async fn filter_delete_raw(&self, header: &str, value: Option<&str>) -> EslResult<()> {
         let cmd = EslCommand::FilterDelete {
             header: header.to_string(),
             value: value.map(|v| v.to_string()),
@@ -1049,7 +1117,7 @@ impl EslClient {
 
     /// Remove all event filters.
     pub async fn filter_delete_all(&self) -> EslResult<()> {
-        self.filter_delete("all", None)
+        self.filter_delete_raw("all", None)
             .await
     }
 
@@ -1116,6 +1184,17 @@ impl EslClient {
     pub async fn exit(&self) -> EslResult<EslResponse> {
         self.send_command(EslCommand::Exit)
             .await
+    }
+
+    /// Authentication response from the inbound connect handshake.
+    ///
+    /// For `userauth`, contains `Allowed-Events`, `Allowed-API`, and
+    /// `Allowed-LOG` headers describing the user's access policy.
+    /// Returns `None` for outbound connections (no auth handshake).
+    pub fn auth_response(&self) -> Option<&EslResponse> {
+        self.shared
+            .auth_response
+            .as_ref()
     }
 
     /// Number of events dropped due to a full event queue.
@@ -1246,8 +1325,14 @@ mod tests {
     async fn test_connection_status_eq() {
         assert_eq!(ConnectionStatus::Connected, ConnectionStatus::Connected);
         assert_eq!(
-            ConnectionStatus::Disconnected(DisconnectReason::ServerNotice),
-            ConnectionStatus::Disconnected(DisconnectReason::ServerNotice)
+            ConnectionStatus::Disconnected(DisconnectReason::ServerNotice {
+                controlled_session_uuid: None,
+                body: None,
+            }),
+            ConnectionStatus::Disconnected(DisconnectReason::ServerNotice {
+                controlled_session_uuid: None,
+                body: None,
+            })
         );
         assert_ne!(
             ConnectionStatus::Connected,

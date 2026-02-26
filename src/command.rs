@@ -123,6 +123,18 @@ impl EslResponse {
             .map(|s| s.as_str())
     }
 
+    /// UUID of the event fired by `sendevent`.
+    ///
+    /// FreeSWITCH returns `+OK <event-uuid>` in the Reply-Text for
+    /// `sendevent` commands. Returns `None` if the reply doesn't
+    /// contain a UUID after `+OK `.
+    pub fn event_uuid(&self) -> Option<&str> {
+        self.reply_text()
+            .and_then(|t| t.strip_prefix("+OK "))
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+    }
+
     /// Convert to result based on success status.
     ///
     /// ```
@@ -239,6 +251,48 @@ impl CommandBuilder {
     }
 }
 
+/// Options for `sendmsg execute` commands.
+///
+/// Controls optional headers that modify execution behavior in outbound
+/// ESL mode (socket application with `async full`).
+#[derive(Debug, Clone, Default)]
+#[non_exhaustive]
+pub struct ExecuteOptions {
+    /// Lock the event queue during execution so events are serialized
+    /// with the application (prevents race conditions on fast-executing apps).
+    pub event_lock: bool,
+    /// Return immediately instead of waiting for the application to finish.
+    /// Only meaningful in outbound `async full` mode.
+    pub async_mode: bool,
+    /// Repeat the application N times.
+    pub loops: Option<u32>,
+}
+
+impl ExecuteOptions {
+    /// Create default options (no event-lock, no async, no loops).
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Enable the `Event-Lock` header.
+    pub fn with_event_lock(mut self) -> Self {
+        self.event_lock = true;
+        self
+    }
+
+    /// Enable the `async` header.
+    pub fn with_async(mut self) -> Self {
+        self.async_mode = true;
+        self
+    }
+
+    /// Set the `loops` header.
+    pub fn with_loops(mut self, count: u32) -> Self {
+        self.loops = Some(count);
+        self
+    }
+}
+
 /// ESL command types for the wire protocol.
 ///
 /// Most users won't construct these directly — use [`EslClient`](crate::EslClient)
@@ -298,6 +352,8 @@ pub enum EslCommand {
         args: Option<String>,
         /// Target channel UUID (omit in outbound mode).
         uuid: Option<String>,
+        /// Optional execution flags (event-lock, async, loops).
+        options: ExecuteOptions,
     },
     /// Exit/logout.
     Exit,
@@ -394,11 +450,17 @@ impl fmt::Debug for EslCommand {
                 .field("uuid", uuid)
                 .field("event", event)
                 .finish(),
-            EslCommand::Execute { app, args, uuid } => f
+            EslCommand::Execute {
+                app,
+                args,
+                uuid,
+                options,
+            } => f
                 .debug_struct("Execute")
                 .field("app", app)
                 .field("args", args)
                 .field("uuid", uuid)
+                .field("options", options)
                 .finish(),
             EslCommand::Exit => write!(f, "Exit"),
             EslCommand::Log { level } => f
@@ -512,7 +574,12 @@ impl EslCommand {
 
                 Ok(builder.build())
             }
-            EslCommand::Execute { app, args, uuid } => {
+            EslCommand::Execute {
+                app,
+                args,
+                uuid,
+                options,
+            } => {
                 validate_no_newlines(app, "execute app")?;
                 if let Some(a) = args {
                     validate_no_newlines(a, "execute args")?;
@@ -527,6 +594,16 @@ impl EslCommand {
 
                 if let Some(args) = args {
                     event.set_header("execute-app-arg", args.clone());
+                }
+
+                if options.event_lock {
+                    event.set_header("event-lock", "true");
+                }
+                if options.async_mode {
+                    event.set_header("async", "true");
+                }
+                if let Some(loops) = options.loops {
+                    event.set_header("loops", loops.to_string());
                 }
 
                 EslCommand::SendMsg {
@@ -709,6 +786,63 @@ mod tests {
             .unwrap();
         assert!(hangup.contains("execute-app-name: hangup"));
         assert!(hangup.contains("execute-app-arg: NORMAL_CLEARING"));
+    }
+
+    #[test]
+    fn test_execute_with_options_wire_format() {
+        let cmd = EslCommand::Execute {
+            app: "playback".to_string(),
+            args: Some("tone_stream://%(200,100,440)".to_string()),
+            uuid: Some("abc-123".to_string()),
+            options: ExecuteOptions::new()
+                .with_event_lock()
+                .with_async()
+                .with_loops(3),
+        };
+        let wire = cmd
+            .to_wire_format()
+            .unwrap();
+        assert!(wire.contains("event-lock: true"));
+        assert!(wire.contains("async: true"));
+        assert!(wire.contains("loops: 3"));
+        assert!(wire.contains("execute-app-name: playback"));
+    }
+
+    #[test]
+    fn test_execute_default_options_no_extra_headers() {
+        let cmd = EslCommand::Execute {
+            app: "answer".to_string(),
+            args: None,
+            uuid: None,
+            options: ExecuteOptions::default(),
+        };
+        let wire = cmd
+            .to_wire_format()
+            .unwrap();
+        assert!(!wire.contains("event-lock"));
+        assert!(!wire.contains("async"));
+        assert!(!wire.contains("loops"));
+    }
+
+    #[test]
+    fn test_event_uuid_from_sendevent_reply() {
+        let headers: HashMap<String, String> = [(
+            "Reply-Text".into(),
+            "+OK 7d54c1e6-4a31-11e9-b1e3-001a4a160100".into(),
+        )]
+        .into();
+        let resp = EslResponse::new(headers, None);
+        assert_eq!(
+            resp.event_uuid(),
+            Some("7d54c1e6-4a31-11e9-b1e3-001a4a160100")
+        );
+    }
+
+    #[test]
+    fn test_event_uuid_none_for_plain_ok() {
+        let headers: HashMap<String, String> = [("Reply-Text".into(), "+OK".into())].into();
+        let resp = EslResponse::new(headers, None);
+        assert_eq!(resp.event_uuid(), None);
     }
 
     #[test]

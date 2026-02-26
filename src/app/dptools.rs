@@ -3,7 +3,7 @@
 use std::fmt;
 
 use crate::channel::HangupCause;
-use crate::command::EslCommand;
+use crate::command::{EslCommand, ExecuteOptions};
 use crate::commands::originate::DialplanType;
 
 /// Constructors for common dptools application commands.
@@ -20,6 +20,7 @@ impl AppCommand {
             app: "answer".to_string(),
             args: None,
             uuid: None,
+            options: ExecuteOptions::default(),
         }
     }
 
@@ -29,6 +30,7 @@ impl AppCommand {
             app: "hangup".to_string(),
             args: cause.map(|c| c.to_string()),
             uuid: None,
+            options: ExecuteOptions::default(),
         }
     }
 
@@ -38,6 +40,7 @@ impl AppCommand {
             app: "playback".to_string(),
             args: Some(file.to_string()),
             uuid: None,
+            options: ExecuteOptions::default(),
         }
     }
 
@@ -48,6 +51,7 @@ impl AppCommand {
             app: "bridge".to_string(),
             args: Some(destination.to_string()),
             uuid: None,
+            options: ExecuteOptions::default(),
         }
     }
 
@@ -57,6 +61,7 @@ impl AppCommand {
             app: "set".to_string(),
             args: Some(format!("{}={}", name, value)),
             uuid: None,
+            options: ExecuteOptions::default(),
         }
     }
 
@@ -66,6 +71,7 @@ impl AppCommand {
             app: "park".to_string(),
             args: None,
             uuid: None,
+            options: ExecuteOptions::default(),
         }
     }
 
@@ -96,6 +102,7 @@ impl AppCommand {
             app: "transfer".to_string(),
             args: Some(args),
             uuid: None,
+            options: ExecuteOptions::default(),
         }
     }
 }

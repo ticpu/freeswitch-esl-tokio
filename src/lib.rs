@@ -144,7 +144,7 @@ pub use channel::{
     ParseAnswerStateError, ParseCallDirectionError, ParseCallStateError, ParseChannelStateError,
     ParseHangupCauseError, ParseTimetableError, TimetablePrefix,
 };
-pub use command::{CommandBuilder, EslCommand, EslResponse, ReplyStatus};
+pub use command::{CommandBuilder, EslCommand, EslResponse, ExecuteOptions, ReplyStatus};
 pub use commands::{
     Application, BridgeDialString, DialString, DialplanType, Endpoint, Originate, OriginateError,
     OriginateTarget, UuidAnswer, UuidBridge, UuidDeflect, UuidGetVar, UuidHold, UuidKill,

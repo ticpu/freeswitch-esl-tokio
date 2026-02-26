@@ -337,7 +337,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let (Some(header), Some(value)) = (&args.filter_header, &args.filter_value) {
         eprintln!("Applying filter: {} = {}", header, value);
         client
-            .filter_events(header, value)
+            .filter_raw(header, value)
             .await?;
     }
 

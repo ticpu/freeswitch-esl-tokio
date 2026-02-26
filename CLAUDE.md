@@ -46,6 +46,17 @@ modifying public structs to verify external construction still works.
   `EslEvent` both implement it.
 - **`From<Concrete> for Enum`.** Endpoint variant enums should have `From`
   impls for each concrete type (e.g. `From<SofiaEndpoint> for Endpoint`).
+- **Typed + raw method pairs.** When an `EslClient` method accepts a typed
+  enum (`EventHeader`, `EslEventType`), provide a `_raw(&str)` companion for
+  headers/events not yet in the enum. Pattern: `filter()` / `filter_raw()`,
+  `subscribe_events()` / `subscribe_events_raw()`.
+- **Options structs for optional wire headers.** When a command has optional
+  protocol headers (e.g. `event-lock`, `async`, `loops` for `sendmsg execute`),
+  use an `Options` struct with builder methods rather than adding parameters.
+  Keep the base method simple; add `_with_options()` variant.
+- **Preserve wire context in error/status enums.** Disconnect notices, auth
+  responses, and other protocol messages may carry useful context (headers,
+  body). Always preserve it for the caller rather than discarding.
 - **Crate root re-exports: core and dptools only.** Only re-export types from
   `lib.rs` that belong to FreeSWITCH core or dptools (channel state, events,
   originate, endpoints, `Uuid*` commands, `BridgeDialString`). Module-specific
