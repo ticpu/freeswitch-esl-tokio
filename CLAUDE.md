@@ -88,6 +88,7 @@ cargo test --lib
 Before tagging a release:
 
 ```sh
+cargo semver-checks check-release
 cargo clippy --release -- -D warnings
 cargo test --release
 cargo build --release
