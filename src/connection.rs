@@ -14,7 +14,10 @@ use tracing::{debug, info, trace, warn};
 
 use crate::{
     command::{EslCommand, EslResponse},
-    constants::{DEFAULT_TIMEOUT_MS, HEADER_CONTENT_TYPE, MAX_EVENT_QUEUE_SIZE, SOCKET_BUF_SIZE},
+    constants::{
+        CONTENT_TYPE_LOG_DATA, DEFAULT_TIMEOUT_MS, HEADER_CONTENT_TYPE, MAX_EVENT_QUEUE_SIZE,
+        SOCKET_BUF_SIZE,
+    },
     error::{EslError, EslResult},
     event::{EslEvent, EslEventType, EventFormat},
     protocol::{EslMessage, EslParser, MessageType},
@@ -362,28 +365,35 @@ async fn reader_loop_inner(
             Ok(Some(message)) => {
                 match message.message_type {
                     MessageType::Event => {
-                        let format = match message
+                        let ct = message
                             .headers
                             .get(HEADER_CONTENT_TYPE)
-                            .map(|ct| EventFormat::from_content_type(ct))
-                        {
-                            Some(Ok(f)) => f,
-                            Some(Err(e)) => {
-                                warn!("Unknown event content type: {}", e);
-                                if !dispatch_event(
-                                    &event_tx,
-                                    &shared,
-                                    Err(EslError::InvalidEventFormat {
-                                        format: e
-                                            .0
-                                            .clone(),
-                                    }),
-                                ) {
-                                    return;
+                            .map(|s| s.as_str());
+
+                        // log/data uses single-level framing handled inside
+                        // parse_event; skip the format check for it.
+                        let format = if ct == Some(CONTENT_TYPE_LOG_DATA) {
+                            EventFormat::Plain
+                        } else {
+                            match ct.map(EventFormat::from_content_type) {
+                                Some(Ok(f)) => f,
+                                Some(Err(e)) => {
+                                    warn!("Unknown event content type: {}", e);
+                                    if !dispatch_event(
+                                        &event_tx,
+                                        &shared,
+                                        Err(EslError::InvalidEventFormat {
+                                            format: e
+                                                .0
+                                                .clone(),
+                                        }),
+                                    ) {
+                                        return;
+                                    }
+                                    continue;
                                 }
-                                continue;
+                                None => EventFormat::Plain,
                             }
-                            None => EventFormat::Plain,
                         };
 
                         let event_result = parser.parse_event(message, format);
