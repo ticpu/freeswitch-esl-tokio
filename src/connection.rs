@@ -781,7 +781,7 @@ impl EslClient {
     ///
     /// Returns immediately with a `Job-UUID` in the response. The actual result
     /// arrives later as a [`EslEventType::BackgroundJob`] event — subscribe to it
-    /// and correlate via [`EslEvent::job_uuid`] / [`EslResponse::job_uuid`]:
+    /// and correlate via [`HeaderLookup::job_uuid()`](crate::HeaderLookup::job_uuid) / [`EslResponse::job_uuid`]:
     ///
     /// ```rust,no_run
     /// # async fn example(client: &freeswitch_esl_tokio::EslClient) -> Result<(), freeswitch_esl_tokio::EslError> {

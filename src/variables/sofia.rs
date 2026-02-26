@@ -16,7 +16,7 @@ define_header_enum! {
     error_type: ParseSofiaVariableError,
     /// mod_sofia / SIP channel variable names (the part after the `variable_` prefix).
     ///
-    /// Use with [`EslEvent::variable()`](crate::EslEvent::variable) for type-safe lookups.
+    /// Use with [`HeaderLookup::variable()`](crate::HeaderLookup::variable) for type-safe lookups.
     /// Core FreeSWITCH variables belong in [`ChannelVariable`](super::ChannelVariable).
     pub enum SofiaVariable {
         // --- SIP From ---

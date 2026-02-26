@@ -14,8 +14,8 @@ pub use sofia::{ParseSofiaVariableError, SofiaVariable};
 /// Trait for typed channel variable name enums.
 ///
 /// Implement this on variable name enums to use them with
-/// [`EslEvent::variable()`](crate::EslEvent::variable) and
-/// [`HeaderLookup::variable()`](crate::HeaderLookup::variable).
+/// [`HeaderLookup::variable()`](crate::HeaderLookup::variable) and
+/// [`variable_str()`](crate::HeaderLookup::variable_str).
 /// For variables not covered by any typed enum, use `variable_str()`.
 pub trait VariableName {
     /// Wire-format variable name (e.g. `"sip_call_id"`).
