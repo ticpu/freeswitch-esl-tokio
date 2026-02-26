@@ -5,9 +5,9 @@
 
 use freeswitch_esl_tokio::commands::{LoopbackEndpoint, UuidGetVar, UuidKill, UuidSetVar};
 use freeswitch_esl_tokio::{
-    Application, ConnectionStatus, DialplanType, DisconnectReason, Endpoint, EslClient, EslError,
-    EslEvent, EslEventPriority, EslEventType, EventFormat, EventHeader, HeaderLookup, Originate,
-    ReplyStatus,
+    Application, ConnectionStatus, DialplanType, DisconnectReason, Endpoint, EslClient,
+    EslConnectOptions, EslError, EslEvent, EslEventPriority, EslEventType, EventFormat,
+    EventHeader, HeaderLookup, Originate, ReplyStatus,
 };
 use std::time::Duration;
 use tokio::time::Instant;
@@ -17,7 +17,8 @@ const ESL_PORT: u16 = 8022;
 const ESL_PASSWORD: &str = "ClueCon";
 
 async fn connect() -> (EslClient, freeswitch_esl_tokio::EslEventStream) {
-    let (client, events) = EslClient::connect(ESL_HOST, ESL_PORT, ESL_PASSWORD)
+    let opts = EslConnectOptions::new().with_connect_timeout(Duration::from_secs(30));
+    let (client, events) = EslClient::connect_with_options(ESL_HOST, ESL_PORT, ESL_PASSWORD, opts)
         .await
         .expect("failed to connect to FreeSWITCH");
     client.set_command_timeout(Duration::from_secs(10));

@@ -116,12 +116,13 @@ impl std::fmt::Display for DisconnectReason {
 }
 
 /// Establish a TCP connection with a timeout.
-async fn tcp_connect_with_timeout(host: &str, port: u16) -> EslResult<TcpStream> {
-    let tcp_result = timeout(
-        Duration::from_millis(DEFAULT_TIMEOUT_MS),
-        TcpStream::connect((host, port)),
-    )
-    .await;
+async fn tcp_connect_with_timeout(
+    host: &str,
+    port: u16,
+    connect_timeout: Duration,
+) -> EslResult<TcpStream> {
+    let timeout_ms = connect_timeout.as_millis() as u64;
+    let tcp_result = timeout(connect_timeout, TcpStream::connect((host, port))).await;
 
     match tcp_result {
         Ok(Ok(s)) => {
@@ -133,13 +134,8 @@ async fn tcp_connect_with_timeout(host: &str, port: u16) -> EslResult<TcpStream>
             Err(EslError::Io(e))
         }
         Err(_) => {
-            warn!(
-                "[CONNECT] TCP connect timed out after {}ms",
-                DEFAULT_TIMEOUT_MS
-            );
-            Err(EslError::Timeout {
-                timeout_ms: DEFAULT_TIMEOUT_MS,
-            })
+            warn!("[CONNECT] TCP connect timed out after {}ms", timeout_ms);
+            Err(EslError::Timeout { timeout_ms })
         }
     }
 }
@@ -179,12 +175,14 @@ struct SharedState {
 /// Options for ESL connection configuration.
 ///
 /// Controls parameters that are fixed at connection time, such as the event
-/// queue capacity. Use [`Default::default()`] for standard settings.
+/// queue capacity and connect timeout. Use [`Default::default()`] for standard settings.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct EslConnectOptions {
     /// Capacity of the mpsc channel delivering events. Default: 1000.
     pub event_queue_size: usize,
+    /// Timeout for TCP connect and each auth handshake read. Default: 2s.
+    pub connect_timeout: Duration,
 }
 
 impl EslConnectOptions {
@@ -198,12 +196,19 @@ impl EslConnectOptions {
         self.event_queue_size = size;
         self
     }
+
+    /// Set the timeout for TCP connect and auth handshake.
+    pub fn with_connect_timeout(mut self, timeout: Duration) -> Self {
+        self.connect_timeout = timeout;
+        self
+    }
 }
 
 impl Default for EslConnectOptions {
     fn default() -> Self {
         Self {
             event_queue_size: MAX_EVENT_QUEUE_SIZE,
+            connect_timeout: Duration::from_millis(DEFAULT_TIMEOUT_MS),
         }
     }
 }
@@ -262,7 +267,9 @@ async fn recv_message(
     stream: &mut TcpStream,
     parser: &mut EslParser,
     read_buffer: &mut [u8],
+    read_timeout: Duration,
 ) -> EslResult<EslMessage> {
+    let timeout_ms = read_timeout.as_millis() as u64;
     loop {
         if let Some(message) = parser.parse_message()? {
             trace!(
@@ -273,20 +280,12 @@ async fn recv_message(
         }
 
         trace!("[RECV] Buffer needs more data, reading from socket");
-        let read_result = timeout(
-            Duration::from_millis(DEFAULT_TIMEOUT_MS),
-            stream.read(read_buffer),
-        )
-        .await;
+        let read_result = timeout(read_timeout, stream.read(read_buffer)).await;
 
         let bytes_read = match read_result {
             Ok(Ok(n)) => n,
             Ok(Err(e)) => return Err(EslError::Io(e)),
-            Err(_) => {
-                return Err(EslError::Timeout {
-                    timeout_ms: DEFAULT_TIMEOUT_MS,
-                })
-            }
+            Err(_) => return Err(EslError::Timeout { timeout_ms }),
         };
 
         trace!("[RECV] Read {} bytes from socket", bytes_read);
@@ -307,9 +306,10 @@ async fn authenticate(
     parser: &mut EslParser,
     read_buffer: &mut [u8],
     method: AuthMethod<'_>,
+    connect_timeout: Duration,
 ) -> EslResult<EslResponse> {
     debug!("[AUTH] Waiting for auth request from FreeSWITCH");
-    let message = recv_message(stream, parser, read_buffer).await?;
+    let message = recv_message(stream, parser, read_buffer, connect_timeout).await?;
 
     if message.message_type == MessageType::RudeRejection {
         let reason = message
@@ -339,7 +339,7 @@ async fn authenticate(
         .await
         .map_err(EslError::Io)?;
 
-    let response_msg = recv_message(stream, parser, read_buffer).await?;
+    let response_msg = recv_message(stream, parser, read_buffer, connect_timeout).await?;
     let response = response_msg.into_response();
 
     if !response.is_success() {
@@ -765,12 +765,19 @@ impl EslClient {
 
         info!("Connecting to FreeSWITCH at {}:{}", host, port);
 
-        let mut stream = tcp_connect_with_timeout(host, port).await?;
+        let connect_timeout = options.connect_timeout;
+        let mut stream = tcp_connect_with_timeout(host, port, connect_timeout).await?;
         let mut parser = EslParser::new();
         let mut read_buffer = [0u8; SOCKET_BUF_SIZE];
 
-        let auth_response =
-            authenticate(&mut stream, &mut parser, &mut read_buffer, method).await?;
+        let auth_response = authenticate(
+            &mut stream,
+            &mut parser,
+            &mut read_buffer,
+            method,
+            connect_timeout,
+        )
+        .await?;
 
         info!("Successfully connected and authenticated to FreeSWITCH");
         Ok(Self::split_and_spawn_with_options(
