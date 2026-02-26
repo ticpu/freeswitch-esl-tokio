@@ -135,7 +135,7 @@ pub mod variables;
 
 pub(crate) mod buffer;
 pub(crate) mod command;
-pub mod constants;
+pub(crate) mod constants;
 pub(crate) mod protocol;
 
 pub use app::dptools::AppCommand;
@@ -144,7 +144,7 @@ pub use channel::{
     ParseCallDirectionError, ParseCallStateError, ParseChannelStateError, ParseTimetableError,
     TimetablePrefix,
 };
-pub use command::{CommandBuilder, EslResponse, ReplyStatus};
+pub use command::{CommandBuilder, EslCommand, EslResponse, ReplyStatus};
 pub use commands::{
     Application, DialString, DialplanType, Endpoint, Originate, OriginateError, OriginateTarget,
     Variables, VariablesType,

@@ -45,35 +45,6 @@ pub const HEADER_CONTENT_LENGTH: &str = "Content-Length";
 /// Protocol framing header: command reply status.
 pub const HEADER_REPLY_TEXT: &str = "Reply-Text";
 
-/// Use [`EventHeader::EventName`](crate::headers::EventHeader::EventName) instead.
-#[deprecated(since = "1.2.0", note = "use EventHeader::EventName")]
-pub const HEADER_EVENT_NAME: &str = "Event-Name";
-/// Use [`EventHeader::UniqueId`](crate::headers::EventHeader::UniqueId) instead.
-#[deprecated(since = "1.2.0", note = "use EventHeader::UniqueId")]
-pub const HEADER_UNIQUE_ID: &str = "Unique-ID";
-/// Use [`EventHeader::CallerUniqueId`](crate::headers::EventHeader::CallerUniqueId) instead.
-#[deprecated(since = "1.2.0", note = "use EventHeader::CallerUniqueId")]
-pub const HEADER_CALLER_UUID: &str = "Caller-Unique-ID";
-/// Use [`EventHeader::JobUuid`](crate::headers::EventHeader::JobUuid) instead.
-#[deprecated(since = "1.2.0", note = "use EventHeader::JobUuid")]
-pub const HEADER_JOB_UUID: &str = "Job-UUID";
-
-/// Use [`EventHeader::ChannelState`](crate::headers::EventHeader::ChannelState) instead.
-#[deprecated(since = "1.2.0", note = "use EventHeader::ChannelState")]
-pub const HEADER_CHANNEL_STATE: &str = "Channel-State";
-/// Use [`EventHeader::ChannelStateNumber`](crate::headers::EventHeader::ChannelStateNumber) instead.
-#[deprecated(since = "1.2.0", note = "use EventHeader::ChannelStateNumber")]
-pub const HEADER_CHANNEL_STATE_NUMBER: &str = "Channel-State-Number";
-/// Use [`EventHeader::ChannelCallState`](crate::headers::EventHeader::ChannelCallState) instead.
-#[deprecated(since = "1.2.0", note = "use EventHeader::ChannelCallState")]
-pub const HEADER_CHANNEL_CALL_STATE: &str = "Channel-Call-State";
-/// Use [`EventHeader::AnswerState`](crate::headers::EventHeader::AnswerState) instead.
-#[deprecated(since = "1.2.0", note = "use EventHeader::AnswerState")]
-pub const HEADER_ANSWER_STATE: &str = "Answer-State";
-/// Use [`EventHeader::CallDirection`](crate::headers::EventHeader::CallDirection) instead.
-#[deprecated(since = "1.2.0", note = "use EventHeader::CallDirection")]
-pub const HEADER_CALL_DIRECTION: &str = "Call-Direction";
-
 /// Connection timeout in milliseconds
 pub const DEFAULT_TIMEOUT_MS: u64 = 2000;
 

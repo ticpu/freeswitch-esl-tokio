@@ -14,6 +14,20 @@ crates (including `examples/`), every public struct must have a constructor
 (`with_foo()`). **Always run `cargo build --examples`** after adding or
 modifying public structs to verify external construction still works.
 
+## API Boundary Rules
+
+- **Never expose dependency types in public signatures.** Return `impl Iterator`
+  (not `indexmap::map::Iter`), wrap dependency errors (not `#[from] serde_json::Error`).
+  A dependency major-version bump becomes a semver break if its types leak.
+- **`pub(crate)` modules can still leak types.** If a public function returns a
+  type from a `pub(crate)` module, that type is visible but unnameable by callers.
+  Either re-export the type or don't return it.
+- **Struct fields that control behavior should be private.** Expose via accessor
+  methods (e.g. `scope()` not `pub vars_type`). This prevents callers from
+  mutating invariants after construction.
+- **`constants` module is `pub(crate)`.** Only `DEFAULT_ESL_PORT` is re-exported.
+  Internal protocol constants are implementation details.
+
 ## Build & Test Workflow
 
 **Always run `cargo fmt` before every commit.** The pre-commit hook enforces

@@ -86,8 +86,7 @@ impl VariablesType {
 /// and values with spaces are wrapped in single quotes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Variables {
-    /// Scope of these variables on the originate command.
-    pub vars_type: VariablesType,
+    vars_type: VariablesType,
     inner: IndexMap<String, String>,
 }
 
@@ -153,20 +152,25 @@ impl Variables {
             .len()
     }
 
+    /// Variable scope (Enterprise, Default, or Channel).
+    pub fn scope(&self) -> VariablesType {
+        self.vars_type
+    }
+
     /// Iterate over key-value pairs in insertion order.
-    pub fn iter(&self) -> indexmap::map::Iter<'_, String, String> {
+    pub fn iter(&self) -> impl Iterator<Item = (&String, &String)> {
         self.inner
             .iter()
     }
 
     /// Mutable iterator over key-value pairs in insertion order.
-    pub fn iter_mut(&mut self) -> indexmap::map::IterMut<'_, String, String> {
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&String, &mut String)> {
         self.inner
             .iter_mut()
     }
 
     /// Mutable iterator over values in insertion order.
-    pub fn values_mut(&mut self) -> indexmap::map::ValuesMut<'_, String, String> {
+    pub fn values_mut(&mut self) -> impl Iterator<Item = &mut String> {
         self.inner
             .values_mut()
     }
@@ -1258,7 +1262,7 @@ mod tests {
         let json = serde_json::to_string(&vars).unwrap();
         // Default scope serializes as a flat map
         let parsed: Variables = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed.vars_type, VariablesType::Default);
+        assert_eq!(parsed.scope(), VariablesType::Default);
         assert_eq!(parsed.get("key1"), Some("val1"));
         assert_eq!(parsed.get("key2"), Some("val2"));
     }
@@ -1271,7 +1275,7 @@ mod tests {
         // Non-default scope serializes as {scope, vars}
         assert!(json.contains("\"enterprise\""));
         let parsed: Variables = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed.vars_type, VariablesType::Enterprise);
+        assert_eq!(parsed.scope(), VariablesType::Enterprise);
         assert_eq!(parsed.get("key1"), Some("val1"));
     }
 
@@ -1279,7 +1283,7 @@ mod tests {
     fn serde_variables_flat_map_deserializes_as_default() {
         let json = r#"{"key1":"val1","key2":"val2"}"#;
         let vars: Variables = serde_json::from_str(json).unwrap();
-        assert_eq!(vars.vars_type, VariablesType::Default);
+        assert_eq!(vars.scope(), VariablesType::Default);
         assert_eq!(vars.get("key1"), Some("val1"));
         assert_eq!(vars.get("key2"), Some("val2"));
     }
@@ -1288,7 +1292,7 @@ mod tests {
     fn serde_variables_scoped_deserializes() {
         let json = r#"{"scope":"channel","vars":{"k":"v"}}"#;
         let vars: Variables = serde_json::from_str(json).unwrap();
-        assert_eq!(vars.vars_type, VariablesType::Channel);
+        assert_eq!(vars.scope(), VariablesType::Channel);
         assert_eq!(vars.get("k"), Some("v"));
     }
 

@@ -224,67 +224,123 @@ impl CommandBuilder {
     }
 }
 
-/// ESL command types
+/// ESL command types for the wire protocol.
+///
+/// Most users won't construct these directly — use [`EslClient`](crate::EslClient)
+/// methods or [`AppCommand`](crate::AppCommand) instead. This enum is public so
+/// that [`send_command()`](crate::EslClient::send_command) callers can name the type.
 #[derive(Clone)]
+#[non_exhaustive]
 pub enum EslCommand {
-    /// Authenticate with password
-    Auth { password: String },
-    /// Authenticate with user and password
-    UserAuth { user: String, password: String },
-    /// Execute API command
-    Api { command: String },
-    /// Execute background API command
-    BgApi { command: String },
-    /// Subscribe to events
-    Events { format: String, events: String },
-    /// Set event filters
-    Filter { header: String, value: String },
-    /// Send message to channel
+    /// Authenticate with password.
+    Auth {
+        /// ESL password (from `event_socket.conf.xml`).
+        password: String,
+    },
+    /// Authenticate with user and password.
+    UserAuth {
+        /// Username (e.g. `admin@default`).
+        user: String,
+        /// Password for this user.
+        password: String,
+    },
+    /// Execute API command.
+    Api {
+        /// Full command string (e.g. `"status"`, `"sofia status"`).
+        command: String,
+    },
+    /// Execute background API command.
+    BgApi {
+        /// Full command string.
+        command: String,
+    },
+    /// Subscribe to events.
+    Events {
+        /// Event format (`plain`, `json`, `xml`).
+        format: String,
+        /// Space-separated event names or `ALL`.
+        events: String,
+    },
+    /// Set event filters.
+    Filter {
+        /// Header name to filter on.
+        header: String,
+        /// Required header value.
+        value: String,
+    },
+    /// Send message to channel.
     SendMsg {
+        /// Target channel UUID (omit in outbound mode).
         uuid: Option<String>,
+        /// Event containing sendmsg headers and optional body.
         event: EslEvent,
     },
-    /// Execute application on channel
+    /// Execute application on channel.
     Execute {
+        /// Application name (e.g. `"answer"`, `"playback"`).
         app: String,
+        /// Application arguments.
         args: Option<String>,
+        /// Target channel UUID (omit in outbound mode).
         uuid: Option<String>,
     },
-    /// Exit/logout
+    /// Exit/logout.
     Exit,
-    /// Enable log forwarding at the given level
-    Log { level: String },
-    /// Disable log forwarding
+    /// Enable log forwarding at the given level.
+    Log {
+        /// Log level (e.g. `"debug"`, `"warning"`).
+        level: String,
+    },
+    /// Disable log forwarding.
     NoLog,
-    /// No operation / keepalive
+    /// No operation / keepalive.
     NoOp,
-    /// Fire an event into FreeSWITCH's event bus
-    SendEvent { event: EslEvent },
-    /// Subscribe to session events (outbound: no uuid, inbound: with uuid)
+    /// Fire an event into FreeSWITCH's event bus.
+    SendEvent {
+        /// Event to fire.
+        event: EslEvent,
+    },
+    /// Subscribe to session events (outbound: no uuid, inbound: with uuid).
     MyEvents {
+        /// Event format (`plain`, `json`, `xml`).
         format: String,
+        /// Channel UUID for inbound mode; omit for outbound.
         uuid: Option<String>,
     },
-    /// Keep socket open after channel hangup
-    Linger { timeout: Option<u32> },
-    /// Cancel linger mode
+    /// Keep socket open after channel hangup.
+    Linger {
+        /// Linger timeout in seconds, or `None` for indefinite.
+        timeout: Option<u32>,
+    },
+    /// Cancel linger mode.
     NoLinger,
-    /// Resume dialplan execution on socket disconnect
+    /// Resume dialplan execution on socket disconnect.
     Resume,
-    /// Unsubscribe from specific events
-    NixEvent { events: String },
-    /// Unsubscribe from all events
+    /// Unsubscribe from specific events.
+    NixEvent {
+        /// Space-separated event names.
+        events: String,
+    },
+    /// Unsubscribe from all events.
     NoEvents,
-    /// Remove event filters
+    /// Remove event filters.
     FilterDelete {
+        /// Header name to remove filter from, or `"all"`.
         header: String,
+        /// Specific value to remove, or `None` for all values.
         value: Option<String>,
     },
-    /// Redirect session events to ESL (outbound mode)
-    DivertEvents { on: bool },
-    /// Read a channel variable (outbound mode)
-    GetVar { name: String },
-    /// Request channel data in outbound mode
+    /// Redirect session events to ESL (outbound mode).
+    DivertEvents {
+        /// `true` to enable, `false` to disable.
+        on: bool,
+    },
+    /// Read a channel variable (outbound mode).
+    GetVar {
+        /// Variable name.
+        name: String,
+    },
+    /// Request channel data in outbound mode.
     Connect,
 }
 
