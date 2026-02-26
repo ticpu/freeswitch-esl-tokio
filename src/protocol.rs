@@ -5,8 +5,9 @@ use crate::{
     command::EslResponse,
     constants::{
         CONTENT_TYPE_API_RESPONSE, CONTENT_TYPE_AUTH_REQUEST, CONTENT_TYPE_COMMAND_REPLY,
-        CONTENT_TYPE_TEXT_EVENT_JSON, CONTENT_TYPE_TEXT_EVENT_PLAIN, CONTENT_TYPE_TEXT_EVENT_XML,
-        HEADER_CONTENT_LENGTH, HEADER_CONTENT_TYPE, HEADER_TERMINATOR, MAX_MESSAGE_SIZE,
+        CONTENT_TYPE_LOG_DATA, CONTENT_TYPE_TEXT_EVENT_JSON, CONTENT_TYPE_TEXT_EVENT_PLAIN,
+        CONTENT_TYPE_TEXT_EVENT_XML, HEADER_CONTENT_LENGTH, HEADER_CONTENT_TYPE, HEADER_TERMINATOR,
+        MAX_MESSAGE_SIZE,
     },
     error::{EslError, EslResult},
     event::{EslEvent, EslEventType, EventFormat},
@@ -28,6 +29,8 @@ pub enum MessageType {
     Event,
     /// Disconnect notice
     Disconnect,
+    /// Connection rejected by ACL (text/rude-rejection)
+    RudeRejection,
     /// Unknown message type
     Unknown(String),
 }
@@ -42,8 +45,9 @@ impl MessageType {
             CONTENT_TYPE_TEXT_EVENT_PLAIN
             | CONTENT_TYPE_TEXT_EVENT_JSON
             | CONTENT_TYPE_TEXT_EVENT_XML
-            | "log/data" => MessageType::Event,
+            | CONTENT_TYPE_LOG_DATA => MessageType::Event,
             "text/disconnect-notice" => MessageType::Disconnect,
+            "text/rude-rejection" => MessageType::RudeRejection,
             _ => MessageType::Unknown(content_type.to_string()),
         }
     }
@@ -236,7 +240,12 @@ impl EslParser {
                 let value = percent_decode_str(raw_value)
                     .decode_utf8()
                     .map(|s| s.into_owned())
-                    .unwrap_or_else(|_| raw_value.to_string());
+                    .map_err(|e| {
+                        EslError::protocol_error(format!(
+                            "invalid UTF-8 in header '{}': {}",
+                            key, e
+                        ))
+                    })?;
                 headers.insert(key, value);
             } else {
                 return Err(EslError::InvalidHeader {
@@ -248,13 +257,42 @@ impl EslParser {
         Ok(headers)
     }
 
-    /// Parse event from message, handling different formats
+    /// Parse event from message, handling different formats.
+    ///
+    /// log/data messages use single-level framing (metadata in outer envelope,
+    /// raw log text as body) unlike normal events which use two-level framing.
     pub fn parse_event(&self, message: EslMessage, format: EventFormat) -> EslResult<EslEvent> {
+        if message
+            .headers
+            .get(HEADER_CONTENT_TYPE)
+            .map(|s| s.as_str())
+            == Some(CONTENT_TYPE_LOG_DATA)
+        {
+            return Self::parse_log_event(message);
+        }
+
         match format {
             EventFormat::Plain => self.parse_plain_event(message),
             EventFormat::Json => self.parse_json_event(message),
             EventFormat::Xml => self.parse_xml_event(message),
         }
+    }
+
+    /// Parse log/data message.
+    ///
+    /// FreeSWITCH log/data wire format uses single-level framing, unlike
+    /// normal events. Log metadata (Log-Level, Log-File, etc.) lives in the
+    /// outer envelope headers and the body is raw log text.
+    fn parse_log_event(message: EslMessage) -> EslResult<EslEvent> {
+        let mut event = EslEvent::new();
+        for (key, value) in &message.headers {
+            event.set_header(key.clone(), value.clone());
+        }
+        if let Some(body) = message.body {
+            event.set_body(body);
+        }
+        event.set_event_type(Some(EslEventType::Log));
+        Ok(event)
     }
 
     /// Parse plain text event
@@ -299,8 +337,17 @@ impl EslParser {
                 let value = percent_decode_str(raw_value)
                     .decode_utf8()
                     .map(|s| s.into_owned())
-                    .unwrap_or_else(|_| raw_value.to_string());
+                    .map_err(|e| {
+                        EslError::protocol_error(format!(
+                            "invalid UTF-8 in event header '{}': {}",
+                            key, e
+                        ))
+                    })?;
                 event.set_header(key, value);
+            } else {
+                return Err(EslError::InvalidHeader {
+                    header: line.to_string(),
+                });
             }
         }
 
@@ -335,19 +382,28 @@ impl EslParser {
 
         if let Some(obj) = json_value.as_object() {
             for (key, value) in obj {
+                // FreeSWITCH puts the event body under a "_body" key in JSON events
+                if key == "_body" {
+                    let body_str = match value {
+                        serde_json::Value::String(s) => s.clone(),
+                        _ => value.to_string(),
+                    };
+                    event.set_body(body_str);
+                    continue;
+                }
                 let value_str = match value {
                     serde_json::Value::String(s) => s.clone(),
                     _ => value.to_string(),
                 };
                 event.set_header(key.clone(), value_str);
             }
+        }
 
-            if let Some(event_name) = event
-                .header("Event-Name")
-                .map(|s| s.to_string())
-            {
-                event.set_event_type(EslEventType::parse_event_type(&event_name));
-            }
+        if let Some(event_name) = event
+            .header(EventHeader::EventName)
+            .map(|s| s.to_string())
+        {
+            event.set_event_type(EslEventType::parse_event_type(&event_name));
         }
 
         Ok(event)
@@ -889,6 +945,8 @@ mod tests {
     #[test]
     fn test_parse_headers_invalid_percent_sequence() {
         let parser = EslParser::new();
+        // %ZZ is an invalid percent encoding, but the bytes are still valid UTF-8
+        // so percent_decode passes them through unchanged
         let headers = parser
             .parse_headers("X-Bad: %ZZinvalid\nX-Good: clean")
             .unwrap();
@@ -898,7 +956,7 @@ mod tests {
                 .get("X-Bad")
                 .map(|s| s.as_str()),
             Some("%ZZinvalid"),
-            "Invalid percent sequence should fall back to raw value"
+            "Invalid percent sequence should pass through as-is (still valid UTF-8)"
         );
         assert_eq!(
             headers

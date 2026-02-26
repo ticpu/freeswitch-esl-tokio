@@ -5,7 +5,9 @@ use crate::{
     error::{EslError, EslResult},
     event::EslEvent,
     headers::EventHeader,
+    lookup::HeaderLookup,
 };
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt;
 
@@ -40,7 +42,7 @@ pub enum ReplyStatus {
 }
 
 /// Response from ESL command execution
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EslResponse {
     headers: HashMap<String, String>,
     body: Option<String>,
@@ -120,6 +122,18 @@ impl EslResponse {
             .map(|s| s.as_str())
     }
 
+    /// UUID of the event fired by `sendevent`.
+    ///
+    /// FreeSWITCH returns `+OK <event-uuid>` in the Reply-Text for
+    /// `sendevent` commands. Returns `None` if the reply doesn't
+    /// contain a UUID after `+OK `.
+    pub fn event_uuid(&self) -> Option<&str> {
+        self.reply_text()
+            .and_then(|t| t.strip_prefix("+OK "))
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+    }
+
     /// Convert to result based on success status.
     ///
     /// ```
@@ -147,6 +161,19 @@ impl EslResponse {
                 Err(EslError::UnexpectedReply { reply_text })
             }
         }
+    }
+}
+
+impl HeaderLookup for EslResponse {
+    fn header_str(&self, name: &str) -> Option<&str> {
+        self.headers
+            .get(name)
+            .map(|s| s.as_str())
+    }
+
+    fn variable_str(&self, name: &str) -> Option<&str> {
+        let key = format!("variable_{}", name);
+        self.header_str(&key)
     }
 }
 
@@ -537,6 +564,31 @@ impl EslCommand {
                 Ok(Self::format_simple_command("getvar", &[name]))
             }
             EslCommand::Connect => Ok(Self::format_simple_command("connect", &[])),
+        }
+    }
+
+    /// Return a log-safe version of the wire string.
+    ///
+    /// Replaces the password in `auth`/`userauth` commands with `[REDACTED]`
+    /// and strips the trailing `\n\n` terminator for readability.
+    pub fn redact_wire<'a>(&self, wire: &'a str) -> Cow<'a, str> {
+        match self {
+            EslCommand::Auth { .. } => Cow::Owned(
+                Self::format_simple_command("auth", &["[REDACTED]"])
+                    .strip_suffix(HEADER_TERMINATOR)
+                    .unwrap_or_default()
+                    .to_owned(),
+            ),
+            EslCommand::UserAuth { user, .. } => Cow::Owned(
+                Self::format_simple_command("userauth", &[&format!("{}:[REDACTED]", user)])
+                    .strip_suffix(HEADER_TERMINATOR)
+                    .unwrap_or_default()
+                    .to_owned(),
+            ),
+            _ => Cow::Borrowed(
+                wire.strip_suffix(HEADER_TERMINATOR)
+                    .unwrap_or(wire),
+            ),
         }
     }
 }

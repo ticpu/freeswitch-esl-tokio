@@ -92,6 +92,21 @@ pub trait HeaderLookup {
         self.header(EventHeader::CallerCallerIdName)
     }
 
+    /// `Caller-Destination-Number` header.
+    fn destination_number(&self) -> Option<&str> {
+        self.header(EventHeader::CallerDestinationNumber)
+    }
+
+    /// `Caller-Callee-ID-Number` header.
+    fn callee_id_number(&self) -> Option<&str> {
+        self.header(EventHeader::CallerCalleeIdNumber)
+    }
+
+    /// `Caller-Callee-ID-Name` header.
+    fn callee_id_name(&self) -> Option<&str> {
+        self.header(EventHeader::CallerCalleeIdName)
+    }
+
     /// `Hangup-Cause` header (e.g. `NORMAL_CLEARING`, `USER_BUSY`).
     fn hangup_cause(&self) -> Option<&str> {
         self.header(EventHeader::HangupCause)
@@ -260,6 +275,22 @@ mod tests {
     }
 
     #[test]
+    fn destination_number() {
+        let s = store_with(&[("Caller-Destination-Number", "1000")]);
+        assert_eq!(s.destination_number(), Some("1000"));
+    }
+
+    #[test]
+    fn callee_id() {
+        let s = store_with(&[
+            ("Caller-Callee-ID-Number", "2000"),
+            ("Caller-Callee-ID-Name", "Bob"),
+        ]);
+        assert_eq!(s.callee_id_number(), Some("2000"));
+        assert_eq!(s.callee_id_name(), Some("Bob"));
+    }
+
+    #[test]
     fn hangup_cause() {
         let s = store_with(&[("Hangup-Cause", "NORMAL_CLEARING")]);
         assert_eq!(s.hangup_cause(), Some("NORMAL_CLEARING"));
@@ -364,6 +395,9 @@ mod tests {
         assert_eq!(s.channel_name(), None);
         assert_eq!(s.caller_id_number(), None);
         assert_eq!(s.caller_id_name(), None);
+        assert_eq!(s.destination_number(), None);
+        assert_eq!(s.callee_id_number(), None);
+        assert_eq!(s.callee_id_name(), None);
         assert_eq!(s.event_subclass(), None);
         assert_eq!(s.job_uuid(), None);
     }

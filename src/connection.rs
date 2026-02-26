@@ -14,7 +14,10 @@ use tracing::{debug, info, trace, warn};
 
 use crate::{
     command::{EslCommand, EslResponse},
-    constants::{DEFAULT_TIMEOUT_MS, HEADER_CONTENT_TYPE, MAX_EVENT_QUEUE_SIZE, SOCKET_BUF_SIZE},
+    constants::{
+        CONTENT_TYPE_LOG_DATA, DEFAULT_TIMEOUT_MS, HEADER_CONTENT_TYPE, MAX_EVENT_QUEUE_SIZE,
+        SOCKET_BUF_SIZE,
+    },
     error::{EslError, EslResult},
     event::{EslEvent, EslEventType, EventFormat},
     protocol::{EslMessage, EslParser, MessageType},
@@ -110,6 +113,8 @@ const DEFAULT_COMMAND_TIMEOUT_MS: u64 = 5000;
 /// Shared state between EslClient and the reader task
 struct SharedState {
     pending_reply: Mutex<Option<oneshot::Sender<EslMessage>>>,
+    /// Connection status sender (shared so disconnect() can set ClientRequested)
+    status_tx: watch::Sender<ConnectionStatus>,
     /// Liveness timeout in milliseconds (0 = disabled)
     liveness_timeout_ms: AtomicU64,
     /// Command response timeout in milliseconds
@@ -128,6 +133,19 @@ struct SharedState {
 pub struct EslConnectOptions {
     /// Capacity of the mpsc channel delivering events. Default: 1000.
     pub event_queue_size: usize,
+}
+
+impl EslConnectOptions {
+    /// Create default options.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the event queue capacity.
+    pub fn with_event_queue_size(mut self, size: usize) -> Self {
+        self.event_queue_size = size;
+        self
+    }
 }
 
 impl Default for EslConnectOptions {
@@ -238,6 +256,13 @@ async fn authenticate(
     debug!("[AUTH] Waiting for auth request from FreeSWITCH");
     let message = recv_message(stream, parser, read_buffer).await?;
 
+    if message.message_type == MessageType::RudeRejection {
+        let reason = message
+            .body
+            .unwrap_or_else(|| "connection rejected by ACL".to_string());
+        return Err(EslError::AccessDenied { reason });
+    }
+
     if message.message_type != MessageType::AuthRequest {
         return Err(EslError::protocol_error("Expected auth request"));
     }
@@ -253,7 +278,7 @@ async fn authenticate(
     };
 
     let command_str = auth_cmd.to_wire_format()?;
-    debug!("Sending command: auth [REDACTED]");
+    debug!(">> {}", auth_cmd.redact_wire(&command_str));
     stream
         .write_all(command_str.as_bytes())
         .await
@@ -321,24 +346,20 @@ async fn reader_loop(
     reader: OwnedReadHalf,
     parser: EslParser,
     shared: Arc<SharedState>,
-    status_tx: watch::Sender<ConnectionStatus>,
     event_tx: mpsc::Sender<Result<EslEvent, EslError>>,
 ) {
-    let result = std::panic::AssertUnwindSafe(reader_loop_inner(
-        reader,
-        parser,
-        shared,
-        status_tx.clone(),
-        event_tx,
-    ));
+    let result =
+        std::panic::AssertUnwindSafe(reader_loop_inner(reader, parser, shared.clone(), event_tx));
     if futures_util::FutureExt::catch_unwind(result)
         .await
         .is_err()
     {
         tracing::error!("reader task panicked");
-        let _ = status_tx.send(ConnectionStatus::Disconnected(DisconnectReason::IoError(
-            "reader task panicked".to_string(),
-        )));
+        let _ = shared
+            .status_tx
+            .send(ConnectionStatus::Disconnected(DisconnectReason::IoError(
+                "reader task panicked".to_string(),
+            )));
     }
 }
 
@@ -346,7 +367,6 @@ async fn reader_loop_inner(
     mut reader: OwnedReadHalf,
     mut parser: EslParser,
     shared: Arc<SharedState>,
-    status_tx: watch::Sender<ConnectionStatus>,
     event_tx: mpsc::Sender<Result<EslEvent, EslError>>,
 ) {
     let mut read_buffer = [0u8; SOCKET_BUF_SIZE];
@@ -358,11 +378,19 @@ async fn reader_loop_inner(
             Ok(Some(message)) => {
                 match message.message_type {
                     MessageType::Event => {
-                        let format = message
+                        let ct = message
                             .headers
                             .get(HEADER_CONTENT_TYPE)
-                            .map(|ct| EventFormat::from_content_type(ct))
-                            .unwrap_or(EventFormat::Plain);
+                            .map(|s| s.as_str());
+
+                        // log/data uses single-level framing handled inside
+                        // parse_event; skip the format check for it.
+                        let format = if ct == Some(CONTENT_TYPE_LOG_DATA) {
+                            EventFormat::Plain
+                        } else {
+                            ct.map(EventFormat::from_content_type)
+                                .unwrap_or(EventFormat::Plain)
+                        };
 
                         let event_result = parser.parse_event(message, format);
                         if !dispatch_event(&event_tx, &shared, event_result) {
@@ -394,9 +422,23 @@ async fn reader_loop_inner(
                             continue;
                         }
                         info!("Received disconnect notice from server");
-                        let _ = status_tx.send(ConnectionStatus::Disconnected(
-                            DisconnectReason::ServerNotice,
-                        ));
+                        let _ = shared
+                            .status_tx
+                            .send(ConnectionStatus::Disconnected(
+                                DisconnectReason::ServerNotice,
+                            ));
+                        return;
+                    }
+                    MessageType::RudeRejection => {
+                        let reason = message
+                            .body
+                            .unwrap_or_else(|| "connection rejected by ACL".to_string());
+                        warn!("Rude rejection from server: {}", reason);
+                        let _ = shared
+                            .status_tx
+                            .send(ConnectionStatus::Disconnected(DisconnectReason::IoError(
+                                reason,
+                            )));
                         return;
                     }
                     MessageType::AuthRequest | MessageType::Unknown(_) => {
@@ -410,9 +452,11 @@ async fn reader_loop_inner(
             }
             Err(e) => {
                 warn!("Parser error: {}", e);
-                let _ = status_tx.send(ConnectionStatus::Disconnected(DisconnectReason::IoError(
-                    e.to_string(),
-                )));
+                let _ = shared
+                    .status_tx
+                    .send(ConnectionStatus::Disconnected(DisconnectReason::IoError(
+                        e.to_string(),
+                    )));
                 return;
             }
         }
@@ -423,26 +467,32 @@ async fn reader_loop_inner(
         match read_result {
             Ok(Ok(0)) => {
                 info!("Connection closed (EOF)");
-                let _ = status_tx.send(ConnectionStatus::Disconnected(
-                    DisconnectReason::ConnectionClosed,
-                ));
+                let _ = shared
+                    .status_tx
+                    .send(ConnectionStatus::Disconnected(
+                        DisconnectReason::ConnectionClosed,
+                    ));
                 return;
             }
             Ok(Ok(n)) => {
                 last_recv = Instant::now();
                 if let Err(e) = parser.add_data(&read_buffer[..n]) {
                     warn!("Buffer error: {}", e);
-                    let _ = status_tx.send(ConnectionStatus::Disconnected(
-                        DisconnectReason::IoError(e.to_string()),
-                    ));
+                    let _ = shared
+                        .status_tx
+                        .send(ConnectionStatus::Disconnected(DisconnectReason::IoError(
+                            e.to_string(),
+                        )));
                     return;
                 }
             }
             Ok(Err(e)) => {
                 warn!("Read error: {}", e);
-                let _ = status_tx.send(ConnectionStatus::Disconnected(DisconnectReason::IoError(
-                    e.to_string(),
-                )));
+                let _ = shared
+                    .status_tx
+                    .send(ConnectionStatus::Disconnected(DisconnectReason::IoError(
+                        e.to_string(),
+                    )));
                 return;
             }
             Err(_) => {
@@ -458,9 +508,11 @@ async fn reader_loop_inner(
                             elapsed.as_millis(),
                             threshold_ms
                         );
-                        let _ = status_tx.send(ConnectionStatus::Disconnected(
-                            DisconnectReason::HeartbeatExpired,
-                        ));
+                        let _ = shared
+                            .status_tx
+                            .send(ConnectionStatus::Disconnected(
+                                DisconnectReason::HeartbeatExpired,
+                            ));
                         return;
                     }
                 }
@@ -589,25 +641,21 @@ impl EslClient {
 
         let (read_half, write_half) = stream.into_split();
 
+        let (status_tx, status_rx) = watch::channel(ConnectionStatus::Connected);
+        let status_rx2 = status_tx.subscribe();
+
         let shared = Arc::new(SharedState {
             pending_reply: Mutex::new(None),
+            status_tx,
             liveness_timeout_ms: AtomicU64::new(0),
             command_timeout_ms: AtomicU64::new(DEFAULT_COMMAND_TIMEOUT_MS),
             event_overflow: AtomicBool::new(false),
             dropped_event_count: AtomicU64::new(0),
         });
 
-        let (status_tx, status_rx) = watch::channel(ConnectionStatus::Connected);
-        let status_rx2 = status_tx.subscribe();
         let (event_tx, event_rx) = mpsc::channel(queue_size);
 
-        tokio::spawn(reader_loop(
-            read_half,
-            parser,
-            shared.clone(),
-            status_tx,
-            event_tx,
-        ));
+        tokio::spawn(reader_loop(read_half, parser, shared.clone(), event_tx));
 
         let client = EslClient {
             writer: Arc::new(Mutex::new(write_half)),
@@ -634,13 +682,7 @@ impl EslClient {
         }
 
         let command_str = command.to_wire_format()?;
-        match &command {
-            EslCommand::Auth { .. } => debug!("Sending command: auth [REDACTED]"),
-            EslCommand::UserAuth { user, .. } => {
-                debug!("Sending command: userauth {}:[REDACTED]", user)
-            }
-            _ => debug!("Sending command: {}", command_str.trim()),
-        }
+        debug!(">> {}", command.redact_wire(&command_str));
 
         // Lock writer — serializes concurrent commands and holds through reply.
         let mut writer = self
@@ -1088,6 +1130,12 @@ impl EslClient {
     /// Disconnect from FreeSWITCH by shutting down the write half
     pub async fn disconnect(&self) -> EslResult<()> {
         info!("Client requested disconnect");
+        let _ = self
+            .shared
+            .status_tx
+            .send(ConnectionStatus::Disconnected(
+                DisconnectReason::ClientRequested,
+            ));
         let mut writer = self
             .writer
             .lock()

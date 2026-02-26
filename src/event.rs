@@ -47,11 +47,14 @@ impl FromStr for EventFormat {
     type Err = ParseEventFormatError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "plain" => Ok(Self::Plain),
-            "json" => Ok(Self::Json),
-            "xml" => Ok(Self::Xml),
-            _ => Err(ParseEventFormatError(s.to_string())),
+        if s.eq_ignore_ascii_case("plain") {
+            Ok(Self::Plain)
+        } else if s.eq_ignore_ascii_case("json") {
+            Ok(Self::Json)
+        } else if s.eq_ignore_ascii_case("xml") {
+            Ok(Self::Xml)
+        } else {
+            Err(ParseEventFormatError(s.to_string()))
         }
     }
 }
@@ -232,6 +235,124 @@ esl_event_types! {
     StartRecording => "START_RECORDING",
 }
 
+// -- Event group constants --------------------------------------------------
+//
+// Predefined slices for common subscription patterns. Pass directly to
+// `EslClient::subscribe_events()`.
+//
+// MAINTENANCE: when adding new `EslEventType` variants, check whether they
+// belong in any of these groups and update accordingly.
+
+impl EslEventType {
+    /// Every `CHANNEL_*` event type.
+    ///
+    /// Covers the full channel lifecycle: creation, state changes, execution,
+    /// bridging, hold, park, progress, originate, and destruction.
+    ///
+    /// ```rust
+    /// use freeswitch_esl_tokio::EslEventType;
+    /// assert!(EslEventType::CHANNEL_EVENTS.contains(&EslEventType::ChannelCreate));
+    /// assert!(EslEventType::CHANNEL_EVENTS.contains(&EslEventType::ChannelHangupComplete));
+    /// assert!(!EslEventType::CHANNEL_EVENTS.contains(&EslEventType::Dtmf));
+    /// ```
+    pub const CHANNEL_EVENTS: &[EslEventType] = &[
+        EslEventType::ChannelCreate,
+        EslEventType::ChannelDestroy,
+        EslEventType::ChannelState,
+        EslEventType::ChannelCallstate,
+        EslEventType::ChannelAnswer,
+        EslEventType::ChannelHangup,
+        EslEventType::ChannelHangupComplete,
+        EslEventType::ChannelExecute,
+        EslEventType::ChannelExecuteComplete,
+        EslEventType::ChannelHold,
+        EslEventType::ChannelUnhold,
+        EslEventType::ChannelBridge,
+        EslEventType::ChannelUnbridge,
+        EslEventType::ChannelProgress,
+        EslEventType::ChannelProgressMedia,
+        EslEventType::ChannelOutgoing,
+        EslEventType::ChannelPark,
+        EslEventType::ChannelUnpark,
+        EslEventType::ChannelApplication,
+        EslEventType::ChannelOriginate,
+        EslEventType::ChannelUuid,
+        EslEventType::ChannelData,
+    ];
+
+    /// Media-related events: playback, recording, media bugs, and detection.
+    ///
+    /// Useful for IVR applications that need to track media operations without
+    /// subscribing to the full channel lifecycle.
+    ///
+    /// ```rust
+    /// use freeswitch_esl_tokio::EslEventType;
+    /// assert!(EslEventType::MEDIA_EVENTS.contains(&EslEventType::PlaybackStart));
+    /// assert!(EslEventType::MEDIA_EVENTS.contains(&EslEventType::DetectedSpeech));
+    /// ```
+    pub const MEDIA_EVENTS: &[EslEventType] = &[
+        EslEventType::PlaybackStart,
+        EslEventType::PlaybackStop,
+        EslEventType::RecordStart,
+        EslEventType::RecordStop,
+        EslEventType::MediaBugStart,
+        EslEventType::MediaBugStop,
+        EslEventType::DetectedSpeech,
+        EslEventType::DetectedTone,
+    ];
+
+    /// Presence and messaging events.
+    ///
+    /// For applications that track user presence (BLF, buddy lists) or
+    /// message-waiting indicators (voicemail MWI).
+    ///
+    /// ```rust
+    /// use freeswitch_esl_tokio::EslEventType;
+    /// assert!(EslEventType::PRESENCE_EVENTS.contains(&EslEventType::PresenceIn));
+    /// assert!(EslEventType::PRESENCE_EVENTS.contains(&EslEventType::MessageWaiting));
+    /// ```
+    pub const PRESENCE_EVENTS: &[EslEventType] = &[
+        EslEventType::PresenceIn,
+        EslEventType::PresenceOut,
+        EslEventType::PresenceProbe,
+        EslEventType::MessageWaiting,
+        EslEventType::MessageQuery,
+        EslEventType::Roster,
+    ];
+
+    /// System lifecycle events.
+    ///
+    /// Server startup/shutdown, heartbeats, module loading, and XML reloads.
+    /// Useful for monitoring dashboards and operational tooling.
+    ///
+    /// ```rust
+    /// use freeswitch_esl_tokio::EslEventType;
+    /// assert!(EslEventType::SYSTEM_EVENTS.contains(&EslEventType::Heartbeat));
+    /// assert!(EslEventType::SYSTEM_EVENTS.contains(&EslEventType::Shutdown));
+    /// ```
+    pub const SYSTEM_EVENTS: &[EslEventType] = &[
+        EslEventType::Startup,
+        EslEventType::Shutdown,
+        EslEventType::ShutdownRequested,
+        EslEventType::Heartbeat,
+        EslEventType::SessionHeartbeat,
+        EslEventType::ModuleLoad,
+        EslEventType::ModuleUnload,
+        EslEventType::ReloadXml,
+    ];
+
+    /// Conference-related events.
+    ///
+    /// ```rust
+    /// use freeswitch_esl_tokio::EslEventType;
+    /// assert!(EslEventType::CONFERENCE_EVENTS.contains(&EslEventType::ConferenceData));
+    /// ```
+    pub const CONFERENCE_EVENTS: &[EslEventType] = &[
+        EslEventType::ConferenceDataQuery,
+        EslEventType::ConferenceData,
+    ];
+}
+
 /// Error returned when parsing an unknown event type string.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseEventTypeError(pub String);
@@ -295,7 +416,7 @@ impl FromStr for EslEventPriority {
 }
 
 /// ESL Event structure containing headers and optional body
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EslEvent {
     event_type: Option<EslEventType>,
     headers: HashMap<String, String>,
@@ -964,6 +1085,14 @@ mod tests {
         assert!("foo"
             .parse::<EventFormat>()
             .is_err());
+    }
+
+    #[test]
+    fn test_event_format_from_str_case_insensitive() {
+        assert_eq!("PLAIN".parse::<EventFormat>(), Ok(EventFormat::Plain));
+        assert_eq!("Json".parse::<EventFormat>(), Ok(EventFormat::Json));
+        assert_eq!("XML".parse::<EventFormat>(), Ok(EventFormat::Xml));
+        assert_eq!("Xml".parse::<EventFormat>(), Ok(EventFormat::Xml));
     }
 
     #[test]

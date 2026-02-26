@@ -107,6 +107,13 @@ pub enum EslError {
         header: String,
     },
 
+    /// Connection rejected by FreeSWITCH ACL (text/rude-rejection)
+    #[error("Access denied: {reason}")]
+    AccessDenied {
+        /// Message from the rejection notice.
+        reason: String,
+    },
+
     /// Connection closed by remote
     #[error("Connection closed by FreeSWITCH")]
     ConnectionClosed,
@@ -185,14 +192,17 @@ impl EslError {
 
     /// `true` if the TCP session is dead and the caller should reconnect.
     ///
-    /// Matches: `Io`, `NotConnected`, `ConnectionClosed`, `HeartbeatExpired`.
+    /// Matches: `Io`, `NotConnected`, `ConnectionClosed`, `AccessDenied`,
+    /// `HeartbeatExpired`, `ProtocolError`.
     pub fn is_connection_error(&self) -> bool {
         matches!(
             self,
             EslError::Io(_)
                 | EslError::NotConnected
                 | EslError::ConnectionClosed
+                | EslError::AccessDenied { .. }
                 | EslError::HeartbeatExpired { .. }
+                | EslError::ProtocolError { .. }
         )
     }
 }
