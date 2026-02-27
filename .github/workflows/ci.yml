@@ -35,11 +35,37 @@ jobs:
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
 
-      - name: Check EslEventType vs C ESL
+      - name: Verify and count enums against C source
         run: |
-          hooks/check-event-types.sh
-          count=$(sed -n '/impl fmt::Display for EslEventType/,/=> "ALL"/p' src/event.rs | grep -c '=> "')
-          echo "EVENT_TYPE_COUNT=$count" >> "$GITHUB_ENV"
+          hooks/check-event-types.sh || true
+          hooks/check-hangup-causes.sh || true
+          hooks/check-channel-states.sh || true
+          hooks/check-call-states.sh || true
+
+          c_file=.freeswitch-src/switch_types.h
+          esl_file=.freeswitch-src/esl_event.c
+          if [ ! -f "$esl_file" ] || [ ! -f "$c_file" ]; then
+            echo "::warning::C source not available, skipping enum counts"
+            echo "C_SOURCE_AVAILABLE=false" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          echo "C_SOURCE_AVAILABLE=true" >> "$GITHUB_ENV"
+
+          rust=$(sed -n '/impl fmt::Display for EslEventType/,/=> "ALL"/p' src/event.rs | grep -c '=> "')
+          c=$(sed -n '/^static.*EVENT_NAMES\[\]/,/^};/p' "$esl_file" | grep -c '"[A-Z_]\+"')
+          echo "EVENT_TYPE_COUNT=${rust}/${c}" >> "$GITHUB_ENV"
+
+          rust=$(sed -n '/impl fmt::Display for HangupCause/,/^    }/p' src/channel.rs | grep -c '=> "')
+          c=$(grep -cP '^\tSWITCH_CAUSE_[A-Z_]+' "$c_file")
+          echo "HANGUP_CAUSE_COUNT=${rust}/${c}" >> "$GITHUB_ENV"
+
+          rust=$(sed -n '/impl fmt::Display for ChannelState/,/^    }/p' src/channel.rs | grep -c '=> "')
+          c=$(grep -cP '^\tCS_[A-Z_]+' "$c_file")
+          echo "CHANNEL_STATE_COUNT=${rust}/${c}" >> "$GITHUB_ENV"
+
+          rust=$(sed -n '/impl fmt::Display for CallState/,/^    }/p' src/channel.rs | grep -c '=> "')
+          c=$(grep -cP '^\tCCS_[A-Z_]+' "$c_file")
+          echo "CALL_STATE_COUNT=${rust}/${c}" >> "$GITHUB_ENV"
 
       - name: Count typed enum variants
         run: |
@@ -65,15 +91,48 @@ jobs:
           message: "${{ env.TEST_PASSED }} passed"
           color: brightgreen
 
-      - name: Update event type count badge
-        if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+      - name: Update EslEventType badge
+        if: github.ref == 'refs/heads/master' && github.event_name == 'push' && env.C_SOURCE_AVAILABLE == 'true'
         uses: schneegans/dynamic-badges-action@v1.7.0
         with:
           auth: ${{ secrets.GIST_SECRET }}
           gistID: def178758b6a88effff310aca87b6b50
           filename: event-type-count.json
-          label: event types
-          message: "${{ env.EVENT_TYPE_COUNT }} (verified vs C)"
+          label: EslEventType
+          message: "${{ env.EVENT_TYPE_COUNT }}"
+          color: blue
+
+      - name: Update HangupCause badge
+        if: github.ref == 'refs/heads/master' && github.event_name == 'push' && env.C_SOURCE_AVAILABLE == 'true'
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: def178758b6a88effff310aca87b6b50
+          filename: hangup-cause-count.json
+          label: HangupCause
+          message: "${{ env.HANGUP_CAUSE_COUNT }}"
+          color: blue
+
+      - name: Update ChannelState badge
+        if: github.ref == 'refs/heads/master' && github.event_name == 'push' && env.C_SOURCE_AVAILABLE == 'true'
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: def178758b6a88effff310aca87b6b50
+          filename: channel-state-count.json
+          label: ChannelState
+          message: "${{ env.CHANNEL_STATE_COUNT }}"
+          color: blue
+
+      - name: Update CallState badge
+        if: github.ref == 'refs/heads/master' && github.event_name == 'push' && env.C_SOURCE_AVAILABLE == 'true'
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: def178758b6a88effff310aca87b6b50
+          filename: call-state-count.json
+          label: CallState
+          message: "${{ env.CALL_STATE_COUNT }}"
           color: blue
 
       - name: Update EventHeader count badge

@@ -42,4 +42,16 @@ if ! "$SCRIPT_DIR/check-hangup-causes.sh"; then
     exit 1
 fi
 
+echo "Checking ChannelState against switch_channel_state_t..."
+if ! "$SCRIPT_DIR/check-channel-states.sh"; then
+    echo "❌ ChannelState enum is out of sync with FreeSWITCH. Update src/channel.rs."
+    exit 1
+fi
+
+echo "Checking CallState against switch_channel_callstate_t..."
+if ! "$SCRIPT_DIR/check-call-states.sh"; then
+    echo "❌ CallState enum is out of sync with FreeSWITCH. Update src/channel.rs."
+    exit 1
+fi
+
 echo "✅ Pre-commit checks passed"

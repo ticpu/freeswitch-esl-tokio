@@ -1,14 +1,25 @@
 # freeswitch-esl-tokio
 
-[![CI](https://github.com/ticpu/freeswitch-esl-tokio/actions/workflows/ci.yml/badge.svg)](https://github.com/ticpu/freeswitch-esl-tokio/actions/workflows/ci.yml)
+[![CI](https://github.com/ticpu/freeswitch-esl-tokio/actions/workflows/ci.yml/badge.svg)][ci]
+[![Tests][tests-badge]][ci]
 [![crates.io](https://img.shields.io/crates/v/freeswitch-esl-tokio)](https://crates.io/crates/freeswitch-esl-tokio)
-[![docs.rs](https://img.shields.io/docsrs/freeswitch-esl-tokio)](https://docs.rs/freeswitch-esl-tokio)
+[![docs.rs](https://img.shields.io/docsrs/freeswitch-esl-tokio)][docs]
 
-[![Tests](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/test-count.json)](https://github.com/ticpu/freeswitch-esl-tokio/actions/workflows/ci.yml)
-[![Event Types](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/event-type-count.json)](https://github.com/ticpu/freeswitch-esl-tokio/actions/workflows/ci.yml)
-[![EventHeader](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/event-header-count.json)](https://docs.rs/freeswitch-esl-tokio)
-[![ChannelVariable](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/channel-var-count.json)](https://docs.rs/freeswitch-esl-tokio)
-[![HeaderLookup](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/header-lookup-count.json)](https://docs.rs/freeswitch-esl-tokio)
+| C-verified enums | Typed API |
+|---|---|
+| [![EslEventType][evt-badge]][ci] [![HangupCause][hc-badge]][ci] | [![EventHeader][eh-badge]][docs] [![ChannelVariable][cv-badge]][docs] |
+| [![ChannelState][cs-badge]][ci] [![CallState][ccs-badge]][ci] | [![HeaderLookup][hl-badge]][docs] |
+
+[ci]: https://github.com/ticpu/freeswitch-esl-tokio/actions/workflows/ci.yml
+[docs]: https://docs.rs/freeswitch-esl-tokio
+[tests-badge]: https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/test-count.json
+[evt-badge]: https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/event-type-count.json
+[hc-badge]: https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/hangup-cause-count.json
+[cs-badge]: https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/channel-state-count.json
+[ccs-badge]: https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/call-state-count.json
+[eh-badge]: https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/event-header-count.json
+[cv-badge]: https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/channel-var-count.json
+[hl-badge]: https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/header-lookup-count.json
 
 Async Rust client for FreeSWITCH
 [ESL](https://developer.signalwire.com/freeswitch/FreeSWITCH-Explained/Client-and-Developer-Interfaces/Event-Socket-Library/).
