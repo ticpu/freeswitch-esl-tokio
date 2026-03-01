@@ -53,11 +53,12 @@ async fn main() -> Result<(), EslError> {
     response.into_result()?;
 
     while let Some(Ok(event)) = events.recv().await {
-        match event.event_type() {
-            Some(EslEventType::ChannelCreate) => {
+        let Some(event_type) = event.event_type() else { continue };
+        match event_type {
+            EslEventType::ChannelCreate => {
                 println!("channel created: {}", event.channel_name().unwrap_or("?"));
             }
-            Some(EslEventType::ChannelDestroy) => {
+            EslEventType::ChannelDestroy => {
                 let cause = match event.hangup_cause() {
                     Ok(Some(c)) => c.to_string(),
                     _ => "unknown".into(),
@@ -66,7 +67,7 @@ async fn main() -> Result<(), EslError> {
                     event.channel_name().unwrap_or("?"), cause);
                 break;
             }
-            Some(EslEventType::BackgroundJob) => {
+            EslEventType::BackgroundJob => {
                 println!("bgapi result: {}", event.body().unwrap_or(""));
             }
             _ => {}
