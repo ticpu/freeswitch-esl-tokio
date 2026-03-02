@@ -120,49 +120,36 @@
 //! }
 //! ```
 
-#[macro_use]
-mod macros;
-
 pub mod app;
-pub mod channel;
-pub mod commands;
 pub mod connection;
 pub mod error;
-pub mod event;
-pub mod headers;
-pub mod lookup;
-pub mod variables;
 
 pub(crate) mod buffer;
 pub(crate) mod command;
 pub(crate) mod constants;
 pub(crate) mod protocol;
 
-pub use app::dptools::AppCommand;
-pub use channel::{
-    AnswerState, CallDirection, CallState, ChannelState, ChannelTimetable, HangupCause,
+// Re-export sub-modules from freeswitch-types for path-based access
+pub use freeswitch_types::{channel, commands, event, headers, lookup, variables};
+
+// Re-export domain types from freeswitch-types
+pub use freeswitch_types::{
+    AnswerState, Application, BridgeDialString, CallDirection, CallState, ChannelState,
+    ChannelTimetable, ChannelVariable, DialString, DialplanType, Endpoint, EslArray, EslEvent,
+    EslEventPriority, EslEventType, EventFormat, EventHeader, HangupCause, HeaderLookup,
+    MultipartBody, MultipartItem, Originate, OriginateError, OriginateTarget,
     ParseAnswerStateError, ParseCallDirectionError, ParseCallStateError, ParseChannelStateError,
-    ParseHangupCauseError, ParseTimetableError, TimetablePrefix,
+    ParseChannelVariableError, ParseEventFormatError, ParseEventHeaderError, ParseEventTypeError,
+    ParseHangupCauseError, ParsePriorityError, ParseSofiaVariableError, ParseTimetableError,
+    SofiaVariable, TimetablePrefix, UuidAnswer, UuidBridge, UuidDeflect, UuidGetVar, UuidHold,
+    UuidKill, UuidSendDtmf, UuidSetVar, UuidTransfer, VariableName, Variables, VariablesType,
+    DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT,
 };
+
+pub use app::dptools::AppCommand;
 pub use command::{CommandBuilder, EslCommand, EslResponse, ExecuteOptions, ReplyStatus};
-pub use commands::{
-    Application, BridgeDialString, DialString, DialplanType, Endpoint, Originate, OriginateError,
-    OriginateTarget, UuidAnswer, UuidBridge, UuidDeflect, UuidGetVar, UuidHold, UuidKill,
-    UuidSendDtmf, UuidSetVar, UuidTransfer, Variables, VariablesType,
-};
 pub use connection::{
     ConnectionMode, ConnectionStatus, DisconnectReason, EslClient, EslConnectOptions,
     EslEventStream,
 };
-pub use constants::DEFAULT_ESL_PORT;
 pub use error::{EslError, EslResult};
-pub use event::{
-    EslEvent, EslEventPriority, EslEventType, EventFormat, ParseEventFormatError,
-    ParseEventTypeError, ParsePriorityError,
-};
-pub use headers::{EventHeader, ParseEventHeaderError};
-pub use lookup::HeaderLookup;
-pub use variables::{
-    ChannelVariable, EslArray, MultipartBody, MultipartItem, ParseChannelVariableError,
-    VariableName,
-};

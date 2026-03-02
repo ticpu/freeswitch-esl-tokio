@@ -7,11 +7,14 @@
 #   1. First argument
 #   2. $FREESWITCH_SOURCE env var
 #   3. Fetched into .freeswitch-src/ from GitHub
+#
+# Output: last line is "CallState <rust_count>/<c_count>"
+# Exit: 0 on match, 1 on mismatch
 
 set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
-RUST_FILE="$REPO_ROOT/src/channel.rs"
+RUST_FILE="$REPO_ROOT/freeswitch-types/src/channel.rs"
 
 FS_SOURCE="${1:-${FREESWITCH_SOURCE:-}}"
 C_FILE=""
@@ -42,6 +45,9 @@ rust_names=$(sed -n '/impl fmt::Display for CallState/,/^    }/p' "$RUST_FILE" \
 	| grep -oP '=> "\K[A-Z_]+(?=")' \
 	| sort)
 
+rust_count=$(echo "$rust_names" | wc -l)
+c_count=$(echo "$c_names" | wc -l)
+
 missing_in_rust=$(comm -23 <(echo "$c_names") <(echo "$rust_names"))
 extra_in_rust=$(comm -13 <(echo "$c_names") <(echo "$rust_names"))
 
@@ -59,8 +65,6 @@ if [ -n "$extra_in_rust" ]; then
 	rc=1
 fi
 
-if [ $rc -eq 0 ]; then
-	echo "CallState matches switch_channel_callstate_t"
-fi
+echo "CallState ${rust_count}/${c_count}"
 
 exit $rc

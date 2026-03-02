@@ -4,26 +4,26 @@
 set -e
 
 echo "Running cargo fmt check..."
-if ! cargo fmt -- --check; then
-    echo "❌ Code is not formatted. Run 'cargo fmt' to fix."
+if ! cargo fmt --all -- --check; then
+    echo "❌ Code is not formatted. Run 'cargo fmt --all' to fix."
     exit 1
 fi
 
 echo "Running cargo clippy..."
-if ! cargo clippy --all-targets --message-format=short -- -D warnings; then
+if ! cargo clippy --workspace --all-targets --message-format=short -- -D warnings; then
     echo "❌ Clippy found warnings. Fix them before committing."
     exit 1
 fi
 
 echo "Checking documentation coverage..."
-if ! doc_output=$(RUSTDOCFLAGS="-D missing_docs -D rustdoc::broken_intra_doc_links" cargo doc --no-deps 2>&1); then
+if ! doc_output=$(RUSTDOCFLAGS="-D missing_docs -D rustdoc::broken_intra_doc_links" cargo doc --workspace --no-deps 2>&1); then
     echo "$doc_output" | grep '^error' | head -20
-    echo "❌ Documentation errors. Run: RUSTDOCFLAGS='-D missing_docs -D rustdoc::broken_intra_doc_links' cargo doc --no-deps"
+    echo "❌ Documentation errors. Run: RUSTDOCFLAGS='-D missing_docs -D rustdoc::broken_intra_doc_links' cargo doc --workspace --no-deps"
     exit 1
 fi
 
 echo "Running tests..."
-if ! test_output=$(cargo test 2>&1); then
+if ! test_output=$(cargo test --workspace 2>&1); then
     echo "$test_output" | tail
     echo "❌ Tests failed. Fix them before committing."
     exit 1
@@ -32,25 +32,25 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 echo "Checking EslEventType against C ESL..."
 if ! "$SCRIPT_DIR/check-event-types.sh"; then
-    echo "❌ EslEventType enum is out of sync with C ESL. Update src/event.rs."
+    echo "❌ EslEventType enum is out of sync with C ESL. Update freeswitch-types/src/event.rs."
     exit 1
 fi
 
 echo "Checking HangupCause against switch_call_cause_t..."
 if ! "$SCRIPT_DIR/check-hangup-causes.sh"; then
-    echo "❌ HangupCause enum is out of sync with FreeSWITCH. Update src/channel.rs."
+    echo "❌ HangupCause enum is out of sync with FreeSWITCH. Update freeswitch-types/src/channel.rs."
     exit 1
 fi
 
 echo "Checking ChannelState against switch_channel_state_t..."
 if ! "$SCRIPT_DIR/check-channel-states.sh"; then
-    echo "❌ ChannelState enum is out of sync with FreeSWITCH. Update src/channel.rs."
+    echo "❌ ChannelState enum is out of sync with FreeSWITCH. Update freeswitch-types/src/channel.rs."
     exit 1
 fi
 
 echo "Checking CallState against switch_channel_callstate_t..."
 if ! "$SCRIPT_DIR/check-call-states.sh"; then
-    echo "❌ CallState enum is out of sync with FreeSWITCH. Update src/channel.rs."
+    echo "❌ CallState enum is out of sync with FreeSWITCH. Update freeswitch-types/src/channel.rs."
     exit 1
 fi
 

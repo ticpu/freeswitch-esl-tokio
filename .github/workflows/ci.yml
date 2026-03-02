@@ -30,53 +30,42 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Check
-        run: cargo check --all-targets
+        run: cargo check --workspace --all-targets
 
       - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Verify and count enums against C source
         run: |
-          hooks/check-event-types.sh || true
-          hooks/check-hangup-causes.sh || true
-          hooks/check-channel-states.sh || true
-          hooks/check-call-states.sh || true
+          parse_count() { tail -1 | grep -oP '\d+/\d+'; }
 
-          c_file=.freeswitch-src/switch_types.h
-          esl_file=.freeswitch-src/esl_event.c
-          if [ ! -f "$esl_file" ] || [ ! -f "$c_file" ]; then
+          EVENT_TYPE_COUNT=$(hooks/check-event-types.sh 2>&1 | parse_count) || true
+          HANGUP_CAUSE_COUNT=$(hooks/check-hangup-causes.sh 2>&1 | parse_count) || true
+          CHANNEL_STATE_COUNT=$(hooks/check-channel-states.sh 2>&1 | parse_count) || true
+          CALL_STATE_COUNT=$(hooks/check-call-states.sh 2>&1 | parse_count) || true
+
+          if [ -z "$EVENT_TYPE_COUNT" ]; then
             echo "::warning::C source not available, skipping enum counts"
             echo "C_SOURCE_AVAILABLE=false" >> "$GITHUB_ENV"
             exit 0
           fi
           echo "C_SOURCE_AVAILABLE=true" >> "$GITHUB_ENV"
 
-          rust=$(sed -n '/impl fmt::Display for EslEventType/,/=> "ALL"/p' src/event.rs | grep -c '=> "')
-          c=$(sed -n '/^static.*EVENT_NAMES\[\]/,/^};/p' "$esl_file" | grep -c '"[A-Z_]\+"')
-          echo "EVENT_TYPE_COUNT=${rust}/${c}" >> "$GITHUB_ENV"
-
-          rust=$(sed -n '/impl fmt::Display for HangupCause/,/^    }/p' src/channel.rs | grep -c '=> "')
-          c=$(grep -cP '^\tSWITCH_CAUSE_[A-Z_]+' "$c_file")
-          echo "HANGUP_CAUSE_COUNT=${rust}/${c}" >> "$GITHUB_ENV"
-
-          rust=$(sed -n '/impl fmt::Display for ChannelState/,/^    }/p' src/channel.rs | grep -c '=> "')
-          c=$(grep -cP '^\tCS_[A-Z_]+' "$c_file")
-          echo "CHANNEL_STATE_COUNT=${rust}/${c}" >> "$GITHUB_ENV"
-
-          rust=$(sed -n '/impl fmt::Display for CallState/,/^    }/p' src/channel.rs | grep -c '=> "')
-          c=$(grep -cP '^\tCCS_[A-Z_]+' "$c_file")
-          echo "CALL_STATE_COUNT=${rust}/${c}" >> "$GITHUB_ENV"
+          echo "EVENT_TYPE_COUNT=${EVENT_TYPE_COUNT}" >> "$GITHUB_ENV"
+          echo "HANGUP_CAUSE_COUNT=${HANGUP_CAUSE_COUNT}" >> "$GITHUB_ENV"
+          echo "CHANNEL_STATE_COUNT=${CHANNEL_STATE_COUNT}" >> "$GITHUB_ENV"
+          echo "CALL_STATE_COUNT=${CALL_STATE_COUNT}" >> "$GITHUB_ENV"
 
       - name: Count typed enum variants
         run: |
-          echo "EVENT_HEADER_COUNT=$(grep -c '=> "' src/headers.rs)" >> "$GITHUB_ENV"
-          echo "CHANNEL_VAR_COUNT=$(grep -c '=> "' src/variables/core.rs)" >> "$GITHUB_ENV"
-          echo "HEADER_LOOKUP_COUNT=$(sed -n '/^pub trait HeaderLookup/,/^}/p' src/lookup.rs | grep -c '^ *fn ')" >> "$GITHUB_ENV"
+          echo "EVENT_HEADER_COUNT=$(grep -c '=> "' freeswitch-types/src/headers.rs)" >> "$GITHUB_ENV"
+          echo "CHANNEL_VAR_COUNT=$(grep -c '=> "' freeswitch-types/src/variables/core.rs)" >> "$GITHUB_ENV"
+          echo "HEADER_LOOKUP_COUNT=$(sed -n '/^pub trait HeaderLookup/,/^}/p' freeswitch-types/src/lookup.rs | grep -c '^ *fn ')" >> "$GITHUB_ENV"
 
       - name: Test
         run: |
           set -o pipefail
-          CARGO_TERM_COLOR=never cargo test 2>&1 | tee test-output.txt
+          CARGO_TERM_COLOR=never cargo test --workspace 2>&1 | tee test-output.txt
           passed=$(grep '^test result:' test-output.txt | sed 's/.*ok\. \([0-9]*\) passed.*/\1/' | paste -sd+ | bc)
           echo "TEST_PASSED=$passed" >> "$GITHUB_ENV"
 
@@ -169,4 +158,4 @@ jobs:
           color: blue
 
       - name: Build
-        run: cargo build --release
+        run: cargo build --workspace --release

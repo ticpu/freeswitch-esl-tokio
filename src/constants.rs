@@ -1,8 +1,5 @@
 //! Protocol constants and configuration values
 
-/// Default FreeSWITCH ESL port for inbound connections.
-pub const DEFAULT_ESL_PORT: u16 = 8021;
-
 /// Socket buffer size for reading from TCP stream (64KB) - standard TCP receive window
 pub const SOCKET_BUF_SIZE: usize = 65536;
 

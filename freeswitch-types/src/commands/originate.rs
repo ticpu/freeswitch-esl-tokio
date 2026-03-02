@@ -410,7 +410,7 @@ impl From<Vec<Application>> for OriginateTarget {
 /// Optional fields are set via consuming-self chaining methods:
 ///
 /// ```
-/// # use freeswitch_esl_tokio::commands::*;
+/// # use freeswitch_types::commands::*;
 /// let cmd = Originate::application(
 ///     Endpoint::Loopback(LoopbackEndpoint::new("9196").with_context("default")),
 ///     Application::simple("park"),

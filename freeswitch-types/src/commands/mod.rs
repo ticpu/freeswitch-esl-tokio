@@ -1,5 +1,7 @@
-//! Command string builders for [`api()`](crate::EslClient::api) and
-//! [`bgapi()`](crate::EslClient::bgapi).
+//! Command string builders for [`api()`] and [`bgapi()`].
+//!
+//! [`api()`]: https://docs.rs/freeswitch-esl-tokio/latest/freeswitch_esl_tokio/connection/struct.EslClient.html#method.api
+//! [`bgapi()`]: https://docs.rs/freeswitch-esl-tokio/latest/freeswitch_esl_tokio/connection/struct.EslClient.html#method.bgapi
 //!
 //! Each builder implements [`Display`](std::fmt::Display), producing the argument
 //! string for the corresponding FreeSWITCH API command.  The builders perform

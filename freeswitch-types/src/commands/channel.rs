@@ -159,8 +159,10 @@ impl fmt::Display for UuidKill {
 /// Get a channel variable: `uuid_getvar <uuid> <key>`.
 ///
 /// Note: FreeSWITCH returns the bare value (no `+OK` prefix), so
-/// [`EslResponse::reply_status()`](crate::EslResponse::reply_status) will be
-/// [`ReplyStatus::Other`](crate::ReplyStatus::Other).
+/// [`EslResponse::reply_status()`] will be [`ReplyStatus::Other`].
+///
+/// [`EslResponse::reply_status()`]: https://docs.rs/freeswitch-esl-tokio/latest/freeswitch_esl_tokio/struct.EslResponse.html#method.reply_status
+/// [`ReplyStatus::Other`]: https://docs.rs/freeswitch-esl-tokio/latest/freeswitch_esl_tokio/enum.ReplyStatus.html#variant.Other
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct UuidGetVar {

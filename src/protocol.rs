@@ -288,6 +288,11 @@ impl EslParser {
             EventFormat::Plain => self.parse_plain_event(message),
             EventFormat::Json => self.parse_json_event(message),
             EventFormat::Xml => self.parse_xml_event(message),
+            _ => {
+                return Err(EslError::ProtocolError {
+                    message: format!("unsupported event format: {format}"),
+                })
+            }
         }?;
 
         Ok(event)
@@ -1300,5 +1305,90 @@ mod tests {
     fn test_rude_rejection_message_type() {
         let mt = MessageType::from_content_type("text/rude-rejection");
         assert_eq!(mt, MessageType::RudeRejection);
+    }
+
+    #[test]
+    fn test_to_plain_format_round_trip() {
+        use crate::event::{EslEvent, EslEventType, EventFormat};
+        use std::collections::HashMap;
+
+        let mut original = EslEvent::with_type(EslEventType::Heartbeat);
+        original.set_header("Event-Name", "HEARTBEAT");
+        original.set_header("Core-UUID", "abc-123");
+        original.set_header("Up-Time", "0 years, 0 days, 1 hour");
+        original.set_header("Event-Info", "System Ready");
+
+        let plain1 = original.to_plain_format();
+
+        let msg1 = EslMessage::new(
+            MessageType::Event,
+            {
+                let mut h = HashMap::new();
+                h.insert("Content-Type".to_string(), "text/event-plain".to_string());
+                h
+            },
+            Some(plain1.clone()),
+        );
+        let parsed1 = EslParser::new()
+            .parse_event(msg1, EventFormat::Plain)
+            .unwrap();
+
+        assert_eq!(parsed1.event_type(), original.event_type());
+        assert_eq!(parsed1.headers(), original.headers());
+        assert_eq!(parsed1.body(), original.body());
+
+        let plain2 = parsed1.to_plain_format();
+        let msg2 = EslMessage::new(
+            MessageType::Event,
+            {
+                let mut h = HashMap::new();
+                h.insert("Content-Type".to_string(), "text/event-plain".to_string());
+                h
+            },
+            Some(plain2),
+        );
+        let parsed2 = EslParser::new()
+            .parse_event(msg2, EventFormat::Plain)
+            .unwrap();
+
+        assert_eq!(parsed2.event_type(), original.event_type());
+        assert_eq!(parsed2.headers(), original.headers());
+        assert_eq!(parsed2.body(), original.body());
+    }
+
+    #[test]
+    fn test_to_plain_format_round_trip_with_body() {
+        use crate::event::{EslEvent, EslEventType, EventFormat};
+        use std::collections::HashMap;
+
+        let body_text = "+OK Status\nLine 2\n";
+        let mut original = EslEvent::with_type(EslEventType::BackgroundJob);
+        original.set_header("Event-Name", "BACKGROUND_JOB");
+        original.set_header("Job-UUID", "job-789");
+        original.set_header(
+            "Content-Length".to_string(),
+            body_text
+                .len()
+                .to_string(),
+        );
+        original.set_body(body_text.to_string());
+
+        let plain = original.to_plain_format();
+        let msg = EslMessage::new(
+            MessageType::Event,
+            {
+                let mut h = HashMap::new();
+                h.insert("Content-Type".to_string(), "text/event-plain".to_string());
+                h
+            },
+            Some(plain),
+        );
+        let parsed = EslParser::new()
+            .parse_event(msg, EventFormat::Plain)
+            .unwrap();
+
+        assert_eq!(parsed.event_type(), original.event_type());
+        assert_eq!(parsed.headers(), original.headers());
+        assert_eq!(parsed.body(), original.body());
     }
 }

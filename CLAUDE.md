@@ -73,14 +73,14 @@ doc coverage, and EslEventType sync with C ESL.
 
 **When adding new `EslEventType` variants**, check whether they belong in any
 of the event group constants (`CHANNEL_EVENTS`, `MEDIA_EVENTS`,
-`PRESENCE_EVENTS`, `SYSTEM_EVENTS`, `CONFERENCE_EVENTS`) in `src/event.rs`
-and update them accordingly.
+`PRESENCE_EVENTS`, `SYSTEM_EVENTS`, `CONFERENCE_EVENTS`) in
+`freeswitch-types/src/event.rs` and update them accordingly.
 
 ```sh
-cargo fmt
-cargo check --message-format=short
-cargo clippy --fix --allow-dirty --message-format=short
-cargo test --lib
+cargo fmt --all
+cargo check --workspace --message-format=short
+cargo clippy --workspace --fix --allow-dirty --message-format=short
+cargo test --workspace --lib
 ```
 
 ## Release Workflow
@@ -219,42 +219,52 @@ Keep the boundary clean — `EslClient` sends strings and returns `EslResponse`.
 
 ## Source Layout
 
+This is a Cargo workspace with two crates:
+
 ```
-src/
-├── lib.rs                 # Public API re-exports
+Cargo.toml                 # Workspace root + freeswitch-esl-tokio [package]
+
+freeswitch-types/          # Domain types crate (no async deps)
+├── Cargo.toml
+└── src/
+    ├── lib.rs             # Re-exports, DEFAULT_ESL_PORT, DEFAULT_ESL_PASSWORD
+    ├── macros.rs          # define_header_enum! macro
+    ├── event.rs           # EslEvent, EslEventType (synced with C ESL EVENT_NAMES[])
+    ├── channel.rs         # ChannelState, CallState, AnswerState, CallDirection,
+    │                      # HangupCause, ChannelTimetable
+    ├── headers.rs         # EventHeader enum
+    ├── lookup.rs          # HeaderLookup trait — typed accessors for any key-value store
+    ├── commands/          # API command string builders (→ api()/bgapi())
+    │   ├── mod.rs         # Re-exports, originate_quote/unquote, originate_split()
+    │   ├── originate.rs   # Variables, Application, OriginateTarget, Originate
+    │   ├── endpoint/      # Endpoint types (DialString trait, Endpoint enum)
+    │   │   ├── mod.rs     # DialString trait, Endpoint enum, helpers
+    │   │   ├── sofia.rs   # SofiaEndpoint, SofiaGateway, SofiaContact
+    │   │   ├── loopback.rs # LoopbackEndpoint
+    │   │   ├── user.rs    # UserEndpoint
+    │   │   ├── audio.rs   # AudioEndpoint (portaudio/pulseaudio/alsa)
+    │   │   ├── group_call.rs # GroupCall
+    │   │   └── error.rs   # ErrorEndpoint
+    │   ├── channel.rs     # UuidAnswer, UuidBridge, UuidKill, UuidSetVar, ...
+    │   └── conference.rs  # ConferenceMute, ConferenceHold, ConferenceDtmf
+    └── variables/         # Channel variable format parsers and typed name enums
+        ├── mod.rs         # VariableName trait, re-exports
+        ├── core.rs        # ChannelVariable enum (core FreeSWITCH variables)
+        ├── sofia.rs       # SofiaVariable enum (mod_sofia / SIP variables)
+        ├── esl_array.rs   # ARRAY::item1|:item2 format
+        └── sip_multipart.rs # SIP multipart body extraction
+
+src/                       # freeswitch-esl-tokio (async ESL transport)
+├── lib.rs                 # Re-exports from freeswitch-types + transport API
 ├── connection.rs          # EslClient, EslEventStream, connect()/accept_outbound()/adopt_stream()
 ├── protocol.rs            # Wire format parser (framing, percent-decoding)
 ├── buffer.rs              # Streaming read buffer with Content-Length framing
 ├── command.rs             # EslCommand, CommandBuilder, EslResponse
-├── event.rs               # EslEvent, EslEventType (synced with C ESL EVENT_NAMES[])
 ├── error.rs               # EslError, DisconnectReason, error classification
-├── channel.rs             # ChannelState, CallState, AnswerState, CallDirection, ChannelTimetable
-├── headers.rs             # EventHeader enum
-├── lookup.rs              # HeaderLookup trait — typed accessors for any key-value store
 ├── constants.rs           # Wire format constants, timeouts, buffer sizes
-├── macros.rs              # define_header_enum! macro
-├── app/
-│   ├── mod.rs
-│   └── dptools.rs         # AppCommand — answer, hangup, bridge, playback, ...
-├── commands/              # API command string builders (→ api()/bgapi())
-│   ├── mod.rs             # Re-exports, originate_quote/unquote, originate_split()
-│   ├── originate.rs       # Variables, Application, OriginateTarget, Originate
-│   ├── endpoint/          # Endpoint types (DialString trait, Endpoint enum)
-│   │   ├── mod.rs         # DialString trait, Endpoint enum, helpers
-│   │   ├── sofia.rs       # SofiaEndpoint, SofiaGateway, SofiaContact
-│   │   ├── loopback.rs    # LoopbackEndpoint
-│   │   ├── user.rs        # UserEndpoint
-│   │   ├── audio.rs       # AudioEndpoint (portaudio/pulseaudio/alsa)
-│   │   ├── group_call.rs  # GroupCall
-│   │   └── error.rs       # ErrorEndpoint
-│   ├── channel.rs         # UuidAnswer, UuidBridge, UuidKill, UuidSetVar, ...
-│   └── conference.rs      # ConferenceMute, ConferenceHold, ConferenceDtmf
-└── variables/             # Channel variable format parsers and typed name enums
-    ├── mod.rs             # VariableName trait, re-exports
-    ├── core.rs            # ChannelVariable enum (core FreeSWITCH variables)
-    ├── sofia.rs           # SofiaVariable enum (mod_sofia / SIP variables)
-    ├── esl_array.rs       # ARRAY::item1|:item2 format
-    └── sip_multipart.rs   # SIP multipart body extraction
+└── app/
+    ├── mod.rs
+    └── dptools.rs         # AppCommand — answer, hangup, bridge, playback, ...
 
 tests/
 ├── integration_tests.rs   # Mock-server protocol tests

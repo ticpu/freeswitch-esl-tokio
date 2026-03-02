@@ -210,7 +210,6 @@ esl_event_types! {
     SendInfo => "SEND_INFO",
     RecvInfo => "RECV_INFO",
     RecvRtcpMessage => "RECV_RTCP_MESSAGE",
-    SendRtcpMessage => "SEND_RTCP_MESSAGE",
     CallSecure => "CALL_SECURE",
     Nat => "NAT",
     RecordStart => "RECORD_START",
@@ -253,7 +252,7 @@ impl EslEventType {
     /// bridging, hold, park, progress, originate, and destruction.
     ///
     /// ```rust
-    /// use freeswitch_esl_tokio::EslEventType;
+    /// use freeswitch_types::EslEventType;
     /// assert!(EslEventType::CHANNEL_EVENTS.contains(&EslEventType::ChannelCreate));
     /// assert!(EslEventType::CHANNEL_EVENTS.contains(&EslEventType::ChannelHangupComplete));
     /// assert!(!EslEventType::CHANNEL_EVENTS.contains(&EslEventType::Dtmf));
@@ -289,7 +288,7 @@ impl EslEventType {
     /// subscribing to the full channel lifecycle.
     ///
     /// ```rust
-    /// use freeswitch_esl_tokio::EslEventType;
+    /// use freeswitch_types::EslEventType;
     /// assert!(EslEventType::MEDIA_EVENTS.contains(&EslEventType::PlaybackStart));
     /// assert!(EslEventType::MEDIA_EVENTS.contains(&EslEventType::DetectedSpeech));
     /// ```
@@ -310,7 +309,7 @@ impl EslEventType {
     /// message-waiting indicators (voicemail MWI).
     ///
     /// ```rust
-    /// use freeswitch_esl_tokio::EslEventType;
+    /// use freeswitch_types::EslEventType;
     /// assert!(EslEventType::PRESENCE_EVENTS.contains(&EslEventType::PresenceIn));
     /// assert!(EslEventType::PRESENCE_EVENTS.contains(&EslEventType::MessageWaiting));
     /// ```
@@ -329,7 +328,7 @@ impl EslEventType {
     /// Useful for monitoring dashboards and operational tooling.
     ///
     /// ```rust
-    /// use freeswitch_esl_tokio::EslEventType;
+    /// use freeswitch_types::EslEventType;
     /// assert!(EslEventType::SYSTEM_EVENTS.contains(&EslEventType::Heartbeat));
     /// assert!(EslEventType::SYSTEM_EVENTS.contains(&EslEventType::Shutdown));
     /// ```
@@ -347,7 +346,7 @@ impl EslEventType {
     /// Conference-related events.
     ///
     /// ```rust
-    /// use freeswitch_esl_tokio::EslEventType;
+    /// use freeswitch_types::EslEventType;
     /// assert!(EslEventType::CONFERENCE_EVENTS.contains(&EslEventType::ConferenceData));
     /// ```
     pub const CONFERENCE_EVENTS: &[EslEventType] = &[
@@ -528,7 +527,7 @@ impl EslEvent {
     /// If it already has an `ARRAY::` prefix, appends the new value.
     ///
     /// ```
-    /// # use freeswitch_esl_tokio::EslEvent;
+    /// # use freeswitch_types::EslEvent;
     /// let mut event = EslEvent::new();
     /// event.push_header("X-Test", "first");
     /// event.push_header("X-Test", "second");
@@ -543,7 +542,7 @@ impl EslEvent {
     /// Same conversion rules as `push_header()`, but inserts at the front.
     ///
     /// ```
-    /// # use freeswitch_esl_tokio::EslEvent;
+    /// # use freeswitch_types::EslEvent;
     /// let mut event = EslEvent::new();
     /// event.set_header("X-Test", "ARRAY::b|:c");
     /// event.unshift_header("X-Test", "a");
@@ -780,89 +779,6 @@ mod tests {
 
         assert!(plain.contains("Content-Length: 11\n"));
         assert!(plain.ends_with("\n\n+OK result\n"));
-    }
-
-    #[test]
-    fn test_to_plain_format_round_trip() {
-        use crate::protocol::{EslMessage, EslParser, MessageType};
-
-        let mut original = EslEvent::with_type(EslEventType::Heartbeat);
-        original.set_header("Event-Name", "HEARTBEAT");
-        original.set_header("Core-UUID", "abc-123");
-        original.set_header("Up-Time", "0 years, 0 days, 1 hour");
-        original.set_header("Event-Info", "System Ready");
-
-        let plain1 = original.to_plain_format();
-
-        let msg1 = EslMessage::new(
-            MessageType::Event,
-            {
-                let mut h = HashMap::new();
-                h.insert("Content-Type".to_string(), "text/event-plain".to_string());
-                h
-            },
-            Some(plain1.clone()),
-        );
-        let parsed1 = EslParser::new()
-            .parse_event(msg1, crate::event::EventFormat::Plain)
-            .unwrap();
-
-        assert_eq!(parsed1.event_type, original.event_type);
-        assert_eq!(parsed1.headers, original.headers);
-        assert_eq!(parsed1.body, original.body);
-
-        let plain2 = parsed1.to_plain_format();
-        let msg2 = EslMessage::new(
-            MessageType::Event,
-            {
-                let mut h = HashMap::new();
-                h.insert("Content-Type".to_string(), "text/event-plain".to_string());
-                h
-            },
-            Some(plain2),
-        );
-        let parsed2 = EslParser::new()
-            .parse_event(msg2, crate::event::EventFormat::Plain)
-            .unwrap();
-
-        assert_eq!(parsed2.event_type, original.event_type);
-        assert_eq!(parsed2.headers, original.headers);
-        assert_eq!(parsed2.body, original.body);
-    }
-
-    #[test]
-    fn test_to_plain_format_round_trip_with_body() {
-        use crate::protocol::{EslMessage, EslParser, MessageType};
-
-        let body_text = "+OK Status\nLine 2\n";
-        let mut original = EslEvent::with_type(EslEventType::BackgroundJob);
-        original.set_header("Event-Name", "BACKGROUND_JOB");
-        original.set_header("Job-UUID", "job-789");
-        original.set_header(
-            "Content-Length".to_string(),
-            body_text
-                .len()
-                .to_string(),
-        );
-        original.set_body(body_text.to_string());
-
-        let plain = original.to_plain_format();
-        let msg = EslMessage::new(
-            MessageType::Event,
-            {
-                let mut h = HashMap::new();
-                h.insert("Content-Type".to_string(), "text/event-plain".to_string());
-                h
-            },
-            Some(plain),
-        );
-        let parsed = EslParser::new()
-            .parse_event(msg, crate::event::EventFormat::Plain)
-            .unwrap();
-
-        assert_eq!(parsed.event_type, original.event_type);
-        assert_eq!(parsed.headers, original.headers);
-        assert_eq!(parsed.body, original.body);
     }
 
     #[test]

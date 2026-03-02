@@ -385,8 +385,6 @@ pub enum HangupCause {
     InvalidIdentity = 823,
     /// Stale Date (STIR/SHAKEN).
     StaleDate = 824,
-    /// Reject all calls.
-    RejectAll = 825,
 }
 
 impl HangupCause {
@@ -479,7 +477,6 @@ impl HangupCause {
             822 => Some(Self::UnsupportedCertificate),
             823 => Some(Self::InvalidIdentity),
             824 => Some(Self::StaleDate),
-            825 => Some(Self::RejectAll),
             _ => None,
         }
     }
@@ -569,7 +566,6 @@ impl fmt::Display for HangupCause {
             Self::UnsupportedCertificate => "UNSUPPORTED_CERTIFICATE",
             Self::InvalidIdentity => "INVALID_IDENTITY",
             Self::StaleDate => "STALE_DATE",
-            Self::RejectAll => "REJECT_ALL",
         };
         f.write_str(name)
     }
@@ -665,7 +661,6 @@ impl FromStr for HangupCause {
                 "UNSUPPORTED_CERTIFICATE" => Self::UnsupportedCertificate,
                 "INVALID_IDENTITY" => Self::InvalidIdentity,
                 "STALE_DATE" => Self::StaleDate,
-                "REJECT_ALL" => Self::RejectAll,
                 _ => return Err(ParseHangupCauseError(s.to_string())),
             },
         )
@@ -807,7 +802,7 @@ impl ChannelTimetable {
     ///
     /// ```
     /// use std::collections::HashMap;
-    /// use freeswitch_esl_tokio::{ChannelTimetable, TimetablePrefix};
+    /// use freeswitch_types::{ChannelTimetable, TimetablePrefix};
     ///
     /// let mut headers: HashMap<String, String> = HashMap::new();
     /// headers.insert("Caller-Channel-Created-Time".into(), "1700000001000000".into());

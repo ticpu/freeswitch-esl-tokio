@@ -35,28 +35,33 @@ for no benefit over `Display`. Every FreeSWITCH API command is ultimately a stri
 
 ## Module Layout
 
+Command builders and domain types live in the `freeswitch-types` crate (no async
+deps). The ESL transport crate re-exports everything.
+
 ```
-src/
-├── command.rs              # ESL protocol: EslCommand, CommandBuilder, EslResponse (unchanged)
+freeswitch-types/src/
 ├── channel.rs              # ChannelState, CallState, AnswerState, CallDirection,
-│                           # ChannelTimetable, TimetablePrefix
-├── headers.rs              # EventHeader enum (26 variants) — typed event header names
+│                           # HangupCause, ChannelTimetable, TimetablePrefix
+├── headers.rs              # EventHeader enum — typed event header names
 ├── macros.rs               # define_header_enum! — generates Display/FromStr/as_str for header enums
-├── app/
-│   ├── mod.rs
-│   └── dptools.rs          # AppCommand (moved from command.rs) — answer, hangup, bridge, etc.
 ├── commands/               # API command string builders (→ api()/bgapi())
 │   ├── mod.rs              # Re-exports, originate_split() tokenizer
-│   ├── endpoint.rs         # Endpoint types, Variables, DialString trait
+│   ├── endpoint/           # Endpoint types, Variables, DialString trait
 │   ├── originate.rs        # Application, Originate, DialplanType
 │   ├── bridge.rs           # BridgeDialString (multi-endpoint dial strings)
 │   ├── channel.rs          # uuid_answer, uuid_bridge, uuid_kill, uuid_setvar, ...
 │   └── conference.rs       # conference mute/unmute/hold/dtmf
-├── variables/              # Channel variable format parsers
-│   ├── mod.rs
-│   ├── esl_array.rs        # ARRAY::item1|:item2 format
-│   ├── sip_multipart.rs    # SIP multipart body extraction
-│   └── channel_variable.rs # ChannelVariable enum (54 variants) — typed variable names
+└── variables/              # Channel variable format parsers
+    ├── mod.rs              # VariableName trait, re-exports
+    ├── core.rs             # ChannelVariable enum — typed variable names
+    ├── sofia.rs            # SofiaVariable enum — mod_sofia / SIP variables
+    ├── esl_array.rs        # ARRAY::item1|:item2 format
+    └── sip_multipart.rs    # SIP multipart body extraction
+
+src/
+├── command.rs              # ESL protocol: EslCommand, CommandBuilder, EslResponse
+└── app/
+    └── dptools.rs          # AppCommand — answer, hangup, bridge, playback, ...
 ```
 
 ### app/ vs commands/

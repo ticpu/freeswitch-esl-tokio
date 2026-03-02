@@ -348,11 +348,11 @@ client.api(&dtmf.to_string()).await?;
 ```
 
 > Output strings verified by unit tests in
-> [`commands/originate.rs`](src/commands/originate.rs),
-> [`commands/endpoint/`](src/commands/endpoint/),
-> [`commands/bridge.rs`](src/commands/bridge.rs),
-> [`commands/channel.rs`](src/commands/channel.rs), and
-> [`commands/conference.rs`](src/commands/conference.rs).
+> [`commands/originate.rs`](freeswitch-types/src/commands/originate.rs),
+> [`commands/endpoint/`](freeswitch-types/src/commands/endpoint/),
+> [`commands/bridge.rs`](freeswitch-types/src/commands/bridge.rs),
+> [`commands/channel.rs`](freeswitch-types/src/commands/channel.rs), and
+> [`commands/conference.rs`](freeswitch-types/src/commands/conference.rs).
 
 See [docs/command-builders.md](docs/command-builders.md) for the full builder
 architecture, all channel/conference command types, and escaping rules.
@@ -421,8 +421,8 @@ let body = MultipartBody::parse(raw_multipart).unwrap();
 let pidf = body.by_mime_type("application/pidf+xml");
 ```
 
-> Verified in [`variables/esl_array.rs`](src/variables/esl_array.rs) and
-> [`variables/sip_multipart.rs`](src/variables/sip_multipart.rs).
+> Verified in [`variables/esl_array.rs`](freeswitch-types/src/variables/esl_array.rs) and
+> [`variables/sip_multipart.rs`](freeswitch-types/src/variables/sip_multipart.rs).
 
 ## Typed event accessors
 
