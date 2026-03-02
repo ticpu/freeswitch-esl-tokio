@@ -117,9 +117,9 @@ macro_rules! esl_event_types {
         }
 
         impl EslEventType {
-            /// Parse event type from wire name (case-insensitive).
+            /// Parse event type from wire name (canonical case).
             pub fn parse_event_type(s: &str) -> Option<Self> {
-                match s.to_uppercase().as_str() {
+                match s {
                     $( $wire => Some(EslEventType::$variant), )+
                     $( $extra_wire => Some(EslEventType::$extra_variant), )*
                     _ => None,
@@ -210,6 +210,7 @@ esl_event_types! {
     SendInfo => "SEND_INFO",
     RecvInfo => "RECV_INFO",
     RecvRtcpMessage => "RECV_RTCP_MESSAGE",
+    SendRtcpMessage => "SEND_RTCP_MESSAGE",
     CallSecure => "CALL_SECURE",
     Nat => "NAT",
     RecordStart => "RECORD_START",
@@ -255,7 +256,6 @@ impl EslEventType {
     /// use freeswitch_types::EslEventType;
     /// assert!(EslEventType::CHANNEL_EVENTS.contains(&EslEventType::ChannelCreate));
     /// assert!(EslEventType::CHANNEL_EVENTS.contains(&EslEventType::ChannelHangupComplete));
-    /// assert!(!EslEventType::CHANNEL_EVENTS.contains(&EslEventType::Dtmf));
     /// ```
     pub const CHANNEL_EVENTS: &[EslEventType] = &[
         EslEventType::ChannelCreate,
@@ -282,6 +282,26 @@ impl EslEventType {
         EslEventType::ChannelData,
     ];
 
+    /// In-call events: DTMF, VAD speech detection, media security, and call updates.
+    ///
+    /// Events that fire during an established call, tied to RTP/media activity
+    /// rather than signaling state transitions.
+    ///
+    /// ```rust
+    /// use freeswitch_types::EslEventType;
+    /// assert!(EslEventType::IN_CALL_EVENTS.contains(&EslEventType::Dtmf));
+    /// assert!(EslEventType::IN_CALL_EVENTS.contains(&EslEventType::Talk));
+    /// ```
+    pub const IN_CALL_EVENTS: &[EslEventType] = &[
+        EslEventType::Dtmf,
+        EslEventType::Talk,
+        EslEventType::Notalk,
+        EslEventType::CallSecure,
+        EslEventType::CallUpdate,
+        EslEventType::RecvRtcpMessage,
+        EslEventType::SendRtcpMessage,
+    ];
+
     /// Media-related events: playback, recording, media bugs, and detection.
     ///
     /// Useful for IVR applications that need to track media operations without
@@ -297,6 +317,7 @@ impl EslEventType {
         EslEventType::PlaybackStop,
         EslEventType::RecordStart,
         EslEventType::RecordStop,
+        EslEventType::StartRecording,
         EslEventType::MediaBugStart,
         EslEventType::MediaBugStop,
         EslEventType::DetectedSpeech,
@@ -338,6 +359,7 @@ impl EslEventType {
         EslEventType::ShutdownRequested,
         EslEventType::Heartbeat,
         EslEventType::SessionHeartbeat,
+        EslEventType::SessionCrash,
         EslEventType::ModuleLoad,
         EslEventType::ModuleUnload,
         EslEventType::ReloadXml,
@@ -405,10 +427,7 @@ impl FromStr for EslEventPriority {
     type Err = ParsePriorityError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s
-            .to_uppercase()
-            .as_str()
-        {
+        match s {
             "NORMAL" => Ok(EslEventPriority::Normal),
             "LOW" => Ok(EslEventPriority::Low),
             "HIGH" => Ok(EslEventPriority::High),
@@ -659,10 +678,7 @@ mod tests {
             EslEventType::parse_event_type("NOTIFY_IN"),
             Some(EslEventType::NotifyIn)
         );
-        assert_eq!(
-            EslEventType::parse_event_type("notify_in"),
-            Some(EslEventType::NotifyIn)
-        );
+        assert_eq!(EslEventType::parse_event_type("notify_in"), None);
     }
 
     #[test]
@@ -716,10 +732,9 @@ mod tests {
             "CHANNEL_ANSWER".parse::<EslEventType>(),
             Ok(EslEventType::ChannelAnswer)
         );
-        assert_eq!(
-            "channel_answer".parse::<EslEventType>(),
-            Ok(EslEventType::ChannelAnswer)
-        );
+        assert!("channel_answer"
+            .parse::<EslEventType>()
+            .is_err());
         assert!("UNKNOWN_EVENT"
             .parse::<EslEventType>()
             .is_err());
@@ -831,16 +846,16 @@ mod tests {
     }
 
     #[test]
-    fn test_priority_from_str_case_insensitive() {
-        assert_eq!(
-            "normal".parse::<EslEventPriority>(),
-            Ok(EslEventPriority::Normal)
-        );
-        assert_eq!("Low".parse::<EslEventPriority>(), Ok(EslEventPriority::Low));
-        assert_eq!(
-            "hIgH".parse::<EslEventPriority>(),
-            Ok(EslEventPriority::High)
-        );
+    fn test_priority_from_str_rejects_wrong_case() {
+        assert!("normal"
+            .parse::<EslEventPriority>()
+            .is_err());
+        assert!("Low"
+            .parse::<EslEventPriority>()
+            .is_err());
+        assert!("hIgH"
+            .parse::<EslEventPriority>()
+            .is_err());
     }
 
     #[test]

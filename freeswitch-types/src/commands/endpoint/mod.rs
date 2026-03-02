@@ -392,10 +392,13 @@ mod tests {
 
     #[test]
     fn endpoint_from_str_error() {
-        let ep: Endpoint = "error/user_busy"
+        let ep: Endpoint = "error/USER_BUSY"
             .parse()
             .unwrap();
         assert!(matches!(ep, Endpoint::Error(_)));
+        assert!("error/user_busy"
+            .parse::<Endpoint>()
+            .is_err());
     }
 
     #[test]

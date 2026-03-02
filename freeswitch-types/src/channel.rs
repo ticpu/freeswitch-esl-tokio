@@ -93,10 +93,7 @@ impl FromStr for ChannelState {
     type Err = ParseChannelStateError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s
-            .to_uppercase()
-            .as_str()
-        {
+        match s {
             "CS_NEW" => Ok(Self::CsNew),
             "CS_INIT" => Ok(Self::CsInit),
             "CS_ROUTING" => Ok(Self::CsRouting),
@@ -165,10 +162,7 @@ impl FromStr for CallState {
     type Err = ParseCallStateError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s
-            .to_uppercase()
-            .as_str()
-        {
+        match s {
             "DOWN" => Ok(Self::Down),
             "DIALING" => Ok(Self::Dialing),
             "RINGING" => Ok(Self::Ringing),
@@ -222,10 +216,7 @@ impl FromStr for AnswerState {
     type Err = ParseAnswerStateError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s
-            .to_lowercase()
-            .as_str()
-        {
+        match s {
             "hangup" => Ok(Self::Hangup),
             "answered" => Ok(Self::Answered),
             "early" => Ok(Self::Early),
@@ -270,10 +261,7 @@ impl FromStr for CallDirection {
     type Err = ParseCallDirectionError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s
-            .to_lowercase()
-            .as_str()
-        {
+        match s {
             "inbound" => Ok(Self::Inbound),
             "outbound" => Ok(Self::Outbound),
             _ => Err(ParseCallDirectionError(s.to_string())),
@@ -385,6 +373,8 @@ pub enum HangupCause {
     InvalidIdentity = 823,
     /// Stale Date (STIR/SHAKEN).
     StaleDate = 824,
+    /// Reject all calls.
+    RejectAll = 825,
 }
 
 impl HangupCause {
@@ -477,6 +467,7 @@ impl HangupCause {
             822 => Some(Self::UnsupportedCertificate),
             823 => Some(Self::InvalidIdentity),
             824 => Some(Self::StaleDate),
+            825 => Some(Self::RejectAll),
             _ => None,
         }
     }
@@ -566,6 +557,7 @@ impl fmt::Display for HangupCause {
             Self::UnsupportedCertificate => "UNSUPPORTED_CERTIFICATE",
             Self::InvalidIdentity => "INVALID_IDENTITY",
             Self::StaleDate => "STALE_DATE",
+            Self::RejectAll => "REJECT_ALL",
         };
         f.write_str(name)
     }
@@ -575,95 +567,91 @@ impl FromStr for HangupCause {
     type Err = ParseHangupCauseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(
-            match s
-                .to_uppercase()
-                .as_str()
-            {
-                "NONE" => Self::None,
-                "UNALLOCATED_NUMBER" => Self::UnallocatedNumber,
-                "NO_ROUTE_TRANSIT_NET" => Self::NoRouteTransitNet,
-                "NO_ROUTE_DESTINATION" => Self::NoRouteDestination,
-                "CHANNEL_UNACCEPTABLE" => Self::ChannelUnacceptable,
-                "CALL_AWARDED_DELIVERED" => Self::CallAwardedDelivered,
-                "NORMAL_CLEARING" => Self::NormalClearing,
-                "USER_BUSY" => Self::UserBusy,
-                "NO_USER_RESPONSE" => Self::NoUserResponse,
-                "NO_ANSWER" => Self::NoAnswer,
-                "SUBSCRIBER_ABSENT" => Self::SubscriberAbsent,
-                "CALL_REJECTED" => Self::CallRejected,
-                "NUMBER_CHANGED" => Self::NumberChanged,
-                "REDIRECTION_TO_NEW_DESTINATION" => Self::RedirectionToNewDestination,
-                "EXCHANGE_ROUTING_ERROR" => Self::ExchangeRoutingError,
-                "DESTINATION_OUT_OF_ORDER" => Self::DestinationOutOfOrder,
-                "INVALID_NUMBER_FORMAT" => Self::InvalidNumberFormat,
-                "FACILITY_REJECTED" => Self::FacilityRejected,
-                "RESPONSE_TO_STATUS_ENQUIRY" => Self::ResponseToStatusEnquiry,
-                "NORMAL_UNSPECIFIED" => Self::NormalUnspecified,
-                "NORMAL_CIRCUIT_CONGESTION" => Self::NormalCircuitCongestion,
-                "NETWORK_OUT_OF_ORDER" => Self::NetworkOutOfOrder,
-                "NORMAL_TEMPORARY_FAILURE" => Self::NormalTemporaryFailure,
-                "SWITCH_CONGESTION" => Self::SwitchCongestion,
-                "ACCESS_INFO_DISCARDED" => Self::AccessInfoDiscarded,
-                "REQUESTED_CHAN_UNAVAIL" => Self::RequestedChanUnavail,
-                "PRE_EMPTED" => Self::PreEmpted,
-                "FACILITY_NOT_SUBSCRIBED" => Self::FacilityNotSubscribed,
-                "OUTGOING_CALL_BARRED" => Self::OutgoingCallBarred,
-                "INCOMING_CALL_BARRED" => Self::IncomingCallBarred,
-                "BEARERCAPABILITY_NOTAUTH" => Self::BearercapabilityNotauth,
-                "BEARERCAPABILITY_NOTAVAIL" => Self::BearercapabilityNotavail,
-                "SERVICE_UNAVAILABLE" => Self::ServiceUnavailable,
-                "BEARERCAPABILITY_NOTIMPL" => Self::BearercapabilityNotimpl,
-                "CHAN_NOT_IMPLEMENTED" => Self::ChanNotImplemented,
-                "FACILITY_NOT_IMPLEMENTED" => Self::FacilityNotImplemented,
-                "SERVICE_NOT_IMPLEMENTED" => Self::ServiceNotImplemented,
-                "INVALID_CALL_REFERENCE" => Self::InvalidCallReference,
-                "INCOMPATIBLE_DESTINATION" => Self::IncompatibleDestination,
-                "INVALID_MSG_UNSPECIFIED" => Self::InvalidMsgUnspecified,
-                "MANDATORY_IE_MISSING" => Self::MandatoryIeMissing,
-                "MESSAGE_TYPE_NONEXIST" => Self::MessageTypeNonexist,
-                "WRONG_MESSAGE" => Self::WrongMessage,
-                "IE_NONEXIST" => Self::IeNonexist,
-                "INVALID_IE_CONTENTS" => Self::InvalidIeContents,
-                "WRONG_CALL_STATE" => Self::WrongCallState,
-                "RECOVERY_ON_TIMER_EXPIRE" => Self::RecoveryOnTimerExpire,
-                "MANDATORY_IE_LENGTH_ERROR" => Self::MandatoryIeLengthError,
-                "PROTOCOL_ERROR" => Self::ProtocolError,
-                "INTERWORKING" => Self::Interworking,
-                "SUCCESS" => Self::Success,
-                "ORIGINATOR_CANCEL" => Self::OriginatorCancel,
-                "CRASH" => Self::Crash,
-                "SYSTEM_SHUTDOWN" => Self::SystemShutdown,
-                "LOSE_RACE" => Self::LoseRace,
-                "MANAGER_REQUEST" => Self::ManagerRequest,
-                "BLIND_TRANSFER" => Self::BlindTransfer,
-                "ATTENDED_TRANSFER" => Self::AttendedTransfer,
-                "ALLOTTED_TIMEOUT" => Self::AllottedTimeout,
-                "USER_CHALLENGE" => Self::UserChallenge,
-                "MEDIA_TIMEOUT" => Self::MediaTimeout,
-                "PICKED_OFF" => Self::PickedOff,
-                "USER_NOT_REGISTERED" => Self::UserNotRegistered,
-                "PROGRESS_TIMEOUT" => Self::ProgressTimeout,
-                "INVALID_GATEWAY" => Self::InvalidGateway,
-                "GATEWAY_DOWN" => Self::GatewayDown,
-                "INVALID_URL" => Self::InvalidUrl,
-                "INVALID_PROFILE" => Self::InvalidProfile,
-                "NO_PICKUP" => Self::NoPickup,
-                "SRTP_READ_ERROR" => Self::SrtpReadError,
-                "BOWOUT" => Self::Bowout,
-                "BUSY_EVERYWHERE" => Self::BusyEverywhere,
-                "DECLINE" => Self::Decline,
-                "DOES_NOT_EXIST_ANYWHERE" => Self::DoesNotExistAnywhere,
-                "NOT_ACCEPTABLE" => Self::NotAcceptable,
-                "UNWANTED" => Self::Unwanted,
-                "NO_IDENTITY" => Self::NoIdentity,
-                "BAD_IDENTITY_INFO" => Self::BadIdentityInfo,
-                "UNSUPPORTED_CERTIFICATE" => Self::UnsupportedCertificate,
-                "INVALID_IDENTITY" => Self::InvalidIdentity,
-                "STALE_DATE" => Self::StaleDate,
-                _ => return Err(ParseHangupCauseError(s.to_string())),
-            },
-        )
+        Ok(match s {
+            "NONE" => Self::None,
+            "UNALLOCATED_NUMBER" => Self::UnallocatedNumber,
+            "NO_ROUTE_TRANSIT_NET" => Self::NoRouteTransitNet,
+            "NO_ROUTE_DESTINATION" => Self::NoRouteDestination,
+            "CHANNEL_UNACCEPTABLE" => Self::ChannelUnacceptable,
+            "CALL_AWARDED_DELIVERED" => Self::CallAwardedDelivered,
+            "NORMAL_CLEARING" => Self::NormalClearing,
+            "USER_BUSY" => Self::UserBusy,
+            "NO_USER_RESPONSE" => Self::NoUserResponse,
+            "NO_ANSWER" => Self::NoAnswer,
+            "SUBSCRIBER_ABSENT" => Self::SubscriberAbsent,
+            "CALL_REJECTED" => Self::CallRejected,
+            "NUMBER_CHANGED" => Self::NumberChanged,
+            "REDIRECTION_TO_NEW_DESTINATION" => Self::RedirectionToNewDestination,
+            "EXCHANGE_ROUTING_ERROR" => Self::ExchangeRoutingError,
+            "DESTINATION_OUT_OF_ORDER" => Self::DestinationOutOfOrder,
+            "INVALID_NUMBER_FORMAT" => Self::InvalidNumberFormat,
+            "FACILITY_REJECTED" => Self::FacilityRejected,
+            "RESPONSE_TO_STATUS_ENQUIRY" => Self::ResponseToStatusEnquiry,
+            "NORMAL_UNSPECIFIED" => Self::NormalUnspecified,
+            "NORMAL_CIRCUIT_CONGESTION" => Self::NormalCircuitCongestion,
+            "NETWORK_OUT_OF_ORDER" => Self::NetworkOutOfOrder,
+            "NORMAL_TEMPORARY_FAILURE" => Self::NormalTemporaryFailure,
+            "SWITCH_CONGESTION" => Self::SwitchCongestion,
+            "ACCESS_INFO_DISCARDED" => Self::AccessInfoDiscarded,
+            "REQUESTED_CHAN_UNAVAIL" => Self::RequestedChanUnavail,
+            "PRE_EMPTED" => Self::PreEmpted,
+            "FACILITY_NOT_SUBSCRIBED" => Self::FacilityNotSubscribed,
+            "OUTGOING_CALL_BARRED" => Self::OutgoingCallBarred,
+            "INCOMING_CALL_BARRED" => Self::IncomingCallBarred,
+            "BEARERCAPABILITY_NOTAUTH" => Self::BearercapabilityNotauth,
+            "BEARERCAPABILITY_NOTAVAIL" => Self::BearercapabilityNotavail,
+            "SERVICE_UNAVAILABLE" => Self::ServiceUnavailable,
+            "BEARERCAPABILITY_NOTIMPL" => Self::BearercapabilityNotimpl,
+            "CHAN_NOT_IMPLEMENTED" => Self::ChanNotImplemented,
+            "FACILITY_NOT_IMPLEMENTED" => Self::FacilityNotImplemented,
+            "SERVICE_NOT_IMPLEMENTED" => Self::ServiceNotImplemented,
+            "INVALID_CALL_REFERENCE" => Self::InvalidCallReference,
+            "INCOMPATIBLE_DESTINATION" => Self::IncompatibleDestination,
+            "INVALID_MSG_UNSPECIFIED" => Self::InvalidMsgUnspecified,
+            "MANDATORY_IE_MISSING" => Self::MandatoryIeMissing,
+            "MESSAGE_TYPE_NONEXIST" => Self::MessageTypeNonexist,
+            "WRONG_MESSAGE" => Self::WrongMessage,
+            "IE_NONEXIST" => Self::IeNonexist,
+            "INVALID_IE_CONTENTS" => Self::InvalidIeContents,
+            "WRONG_CALL_STATE" => Self::WrongCallState,
+            "RECOVERY_ON_TIMER_EXPIRE" => Self::RecoveryOnTimerExpire,
+            "MANDATORY_IE_LENGTH_ERROR" => Self::MandatoryIeLengthError,
+            "PROTOCOL_ERROR" => Self::ProtocolError,
+            "INTERWORKING" => Self::Interworking,
+            "SUCCESS" => Self::Success,
+            "ORIGINATOR_CANCEL" => Self::OriginatorCancel,
+            "CRASH" => Self::Crash,
+            "SYSTEM_SHUTDOWN" => Self::SystemShutdown,
+            "LOSE_RACE" => Self::LoseRace,
+            "MANAGER_REQUEST" => Self::ManagerRequest,
+            "BLIND_TRANSFER" => Self::BlindTransfer,
+            "ATTENDED_TRANSFER" => Self::AttendedTransfer,
+            "ALLOTTED_TIMEOUT" => Self::AllottedTimeout,
+            "USER_CHALLENGE" => Self::UserChallenge,
+            "MEDIA_TIMEOUT" => Self::MediaTimeout,
+            "PICKED_OFF" => Self::PickedOff,
+            "USER_NOT_REGISTERED" => Self::UserNotRegistered,
+            "PROGRESS_TIMEOUT" => Self::ProgressTimeout,
+            "INVALID_GATEWAY" => Self::InvalidGateway,
+            "GATEWAY_DOWN" => Self::GatewayDown,
+            "INVALID_URL" => Self::InvalidUrl,
+            "INVALID_PROFILE" => Self::InvalidProfile,
+            "NO_PICKUP" => Self::NoPickup,
+            "SRTP_READ_ERROR" => Self::SrtpReadError,
+            "BOWOUT" => Self::Bowout,
+            "BUSY_EVERYWHERE" => Self::BusyEverywhere,
+            "DECLINE" => Self::Decline,
+            "DOES_NOT_EXIST_ANYWHERE" => Self::DoesNotExistAnywhere,
+            "NOT_ACCEPTABLE" => Self::NotAcceptable,
+            "UNWANTED" => Self::Unwanted,
+            "NO_IDENTITY" => Self::NoIdentity,
+            "BAD_IDENTITY_INFO" => Self::BadIdentityInfo,
+            "UNSUPPORTED_CERTIFICATE" => Self::UnsupportedCertificate,
+            "INVALID_IDENTITY" => Self::InvalidIdentity,
+            "STALE_DATE" => Self::StaleDate,
+            "REJECT_ALL" => Self::RejectAll,
+            _ => return Err(ParseHangupCauseError(s.to_string())),
+        })
     }
 }
 
@@ -906,12 +894,13 @@ mod tests {
     }
 
     #[test]
-    fn test_channel_state_from_str_case_insensitive() {
-        assert_eq!("cs_new".parse::<ChannelState>(), Ok(ChannelState::CsNew));
-        assert_eq!(
-            "Cs_Routing".parse::<ChannelState>(),
-            Ok(ChannelState::CsRouting)
-        );
+    fn test_channel_state_from_str_rejects_wrong_case() {
+        assert!("cs_new"
+            .parse::<ChannelState>()
+            .is_err());
+        assert!("Cs_Routing"
+            .parse::<ChannelState>()
+            .is_err());
     }
 
     #[test]
@@ -966,9 +955,13 @@ mod tests {
     }
 
     #[test]
-    fn test_call_state_from_str_case_insensitive() {
-        assert_eq!("down".parse::<CallState>(), Ok(CallState::Down));
-        assert_eq!("Active".parse::<CallState>(), Ok(CallState::Active));
+    fn test_call_state_from_str_rejects_wrong_case() {
+        assert!("down"
+            .parse::<CallState>()
+            .is_err());
+        assert!("Active"
+            .parse::<CallState>()
+            .is_err());
     }
 
     #[test]
@@ -997,9 +990,13 @@ mod tests {
     }
 
     #[test]
-    fn test_answer_state_from_str_case_insensitive() {
-        assert_eq!("HANGUP".parse::<AnswerState>(), Ok(AnswerState::Hangup));
-        assert_eq!("Answered".parse::<AnswerState>(), Ok(AnswerState::Answered));
+    fn test_answer_state_from_str_rejects_wrong_case() {
+        assert!("HANGUP"
+            .parse::<AnswerState>()
+            .is_err());
+        assert!("Answered"
+            .parse::<AnswerState>()
+            .is_err());
     }
 
     #[test]
@@ -1030,15 +1027,13 @@ mod tests {
     }
 
     #[test]
-    fn test_call_direction_from_str_case_insensitive() {
-        assert_eq!(
-            "INBOUND".parse::<CallDirection>(),
-            Ok(CallDirection::Inbound)
-        );
-        assert_eq!(
-            "Outbound".parse::<CallDirection>(),
-            Ok(CallDirection::Outbound)
-        );
+    fn test_call_direction_from_str_rejects_wrong_case() {
+        assert!("INBOUND"
+            .parse::<CallDirection>()
+            .is_err());
+        assert!("Outbound"
+            .parse::<CallDirection>()
+            .is_err());
     }
 
     #[test]
@@ -1078,19 +1073,13 @@ mod tests {
     }
 
     #[test]
-    fn hangup_cause_from_str_case_insensitive() {
-        assert_eq!(
-            "normal_clearing"
-                .parse::<HangupCause>()
-                .unwrap(),
-            HangupCause::NormalClearing
-        );
-        assert_eq!(
-            "User_Busy"
-                .parse::<HangupCause>()
-                .unwrap(),
-            HangupCause::UserBusy
-        );
+    fn hangup_cause_from_str_rejects_wrong_case() {
+        assert!("normal_clearing"
+            .parse::<HangupCause>()
+            .is_err());
+        assert!("User_Busy"
+            .parse::<HangupCause>()
+            .is_err());
     }
 
     #[test]

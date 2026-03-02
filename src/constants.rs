@@ -3,12 +3,12 @@
 /// Socket buffer size for reading from TCP stream (64KB) - standard TCP receive window
 pub const SOCKET_BUF_SIZE: usize = 65536;
 
-/// Buffer allocation size (64KB) - used for both initial allocation and growth increments
-/// Handles 99% of ESL messages without reallocation
+/// Buffer allocation size (64KB) - used for both initial allocation and growth increments.
+/// Sized to handle most ESL messages without reallocation.
 pub const BUF_CHUNK: usize = 64 * 1024;
 
-/// Maximum single message size (8MB) - validates Content-Length header
-/// No legitimate ESL message should exceed this (largest is sofia status ~1-2MB)
+/// Maximum single message size (8MB) - validates Content-Length header.
+/// Safety limit for protocol sanity; large responses (e.g. sofia status) fit well within this.
 pub const MAX_MESSAGE_SIZE: usize = 8 * 1024 * 1024;
 
 /// Maximum total buffer size (16MB) - safety limit to prevent runaway memory

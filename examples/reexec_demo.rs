@@ -6,7 +6,7 @@
 //! 3. Adopt: reconstruct a new EslClient from the same fd
 //! 4. Verify events still flow on the adopted connection
 //!
-//! Requires FreeSWITCH ESL on localhost:8021 (password ClueCon).
+//! Requires FreeSWITCH ESL. Configure via ESL_HOST, ESL_PORT, ESL_PASSWORD env vars.
 //!
 //! Usage: cargo run --example reexec_demo
 
@@ -21,6 +21,7 @@ mod demo {
     pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
         tracing_subscriber::fmt::init();
 
+        let host = std::env::var("ESL_HOST").unwrap_or_else(|_| "localhost".to_string());
         let port: u16 = std::env::var("ESL_PORT")
             .ok()
             .and_then(|s| {
@@ -28,20 +29,21 @@ mod demo {
                     .ok()
             })
             .unwrap_or(DEFAULT_ESL_PORT);
+        let password =
+            std::env::var("ESL_PASSWORD").unwrap_or_else(|_| DEFAULT_ESL_PASSWORD.to_string());
 
         // Phase 1: connect and subscribe
-        let (client, mut events) =
-            match EslClient::connect("localhost", port, DEFAULT_ESL_PASSWORD).await {
-                Ok(pair) => {
-                    info!("Connected to FreeSWITCH on port {}", port);
-                    pair
-                }
-                Err(EslError::Io(e)) if e.kind() == std::io::ErrorKind::ConnectionRefused => {
-                    error!("FreeSWITCH not running on localhost:{}", port);
-                    return Err(e.into());
-                }
-                Err(e) => return Err(e.into()),
-            };
+        let (client, mut events) = match EslClient::connect(&host, port, &password).await {
+            Ok(pair) => {
+                info!("Connected to FreeSWITCH on port {}", port);
+                pair
+            }
+            Err(EslError::Io(e)) if e.kind() == std::io::ErrorKind::ConnectionRefused => {
+                error!("FreeSWITCH not running on localhost:{}", port);
+                return Err(e.into());
+            }
+            Err(e) => return Err(e.into()),
+        };
 
         client
             .subscribe_events(EventFormat::Plain, &[EslEventType::Heartbeat])

@@ -62,11 +62,10 @@ mod tests {
     }
 
     #[test]
-    fn error_endpoint_from_str_case_insensitive() {
-        let ep: ErrorEndpoint = "error/user_busy"
-            .parse()
-            .unwrap();
-        assert_eq!(ep.cause, HangupCause::UserBusy);
+    fn error_endpoint_from_str_rejects_wrong_case() {
+        assert!("error/user_busy"
+            .parse::<ErrorEndpoint>()
+            .is_err());
     }
 
     #[test]

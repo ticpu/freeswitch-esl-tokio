@@ -15,10 +15,7 @@ async fn test_event_types() {
         EslEventType::parse_event_type("CHANNEL_ANSWER"),
         Some(EslEventType::ChannelAnswer)
     );
-    assert_eq!(
-        EslEventType::parse_event_type("channel_answer"),
-        Some(EslEventType::ChannelAnswer)
-    );
+    assert_eq!(EslEventType::parse_event_type("channel_answer"), None);
     assert_eq!(
         EslEventType::parse_event_type("DTMF"),
         Some(EslEventType::Dtmf)

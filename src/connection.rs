@@ -353,12 +353,10 @@ async fn authenticate(
     let response = response_msg.into_response();
 
     if !response.is_success() {
-        return Err(EslError::auth_failed(
-            response
-                .reply_text()
-                .unwrap_or("Authentication failed")
-                .to_string(),
-        ));
+        return Err(match response.reply_text() {
+            Some(text) => EslError::auth_failed(text.to_string()),
+            None => EslError::protocol_error("auth response missing Reply-Text header"),
+        });
     }
 
     debug!("Authentication successful");
@@ -1349,10 +1347,10 @@ impl EslClient {
         let response = self
             .send_command(cmd)
             .await?;
-        Ok(response
+        response
             .reply_text()
-            .unwrap_or("")
-            .to_string())
+            .map(|s| s.to_string())
+            .ok_or_else(|| EslError::protocol_error("getvar response missing Reply-Text header"))
     }
 
     /// Enable FreeSWITCH log forwarding at the given level.

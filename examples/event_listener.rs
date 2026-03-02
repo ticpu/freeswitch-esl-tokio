@@ -15,21 +15,31 @@ use tracing::{debug, error, info};
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
-    let (client, mut events) =
-        match EslClient::connect("localhost", DEFAULT_ESL_PORT, DEFAULT_ESL_PASSWORD).await {
-            Ok(pair) => {
-                info!("Successfully connected to FreeSWITCH");
-                pair
-            }
-            Err(EslError::Io(e)) if e.kind() == std::io::ErrorKind::ConnectionRefused => {
-                error!("Failed to connect to FreeSWITCH - is it running on localhost:8021?");
-                return Err(e.into());
-            }
-            Err(e) => {
-                error!("Failed to connect: {}", e);
-                return Err(e.into());
-            }
-        };
+    let host = std::env::var("ESL_HOST").unwrap_or_else(|_| "localhost".to_string());
+    let port: u16 = std::env::var("ESL_PORT")
+        .ok()
+        .and_then(|p| {
+            p.parse()
+                .ok()
+        })
+        .unwrap_or(DEFAULT_ESL_PORT);
+    let password =
+        std::env::var("ESL_PASSWORD").unwrap_or_else(|_| DEFAULT_ESL_PASSWORD.to_string());
+
+    let (client, mut events) = match EslClient::connect(&host, port, &password).await {
+        Ok(pair) => {
+            info!("Successfully connected to FreeSWITCH");
+            pair
+        }
+        Err(EslError::Io(e)) if e.kind() == std::io::ErrorKind::ConnectionRefused => {
+            error!("Failed to connect to FreeSWITCH (ESL_HOST/ESL_PORT to override)");
+            return Err(e.into());
+        }
+        Err(e) => {
+            error!("Failed to connect: {}", e);
+            return Err(e.into());
+        }
+    };
 
     info!("Subscribing to events...");
     client
@@ -172,7 +182,7 @@ fn process_event(
             if let Some(job_uuid) = event.job_uuid() {
                 info!("Background job completed: {}", job_uuid);
                 if let Some(body) = event.body() {
-                    debug!("Job result: {}", body.trim());
+                    debug!("Job result: {}", body);
                 }
             }
         }

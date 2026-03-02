@@ -8,8 +8,8 @@
 //! Part 2: connects to FreeSWITCH, places a test call via bgapi, and reports
 //! the BACKGROUND_JOB result and channel lifecycle events.
 //!
-//! Usage: RUST_LOG=info cargo run --example originate_examples [-- [host[:port]] [password]]
-//!   Defaults: localhost:8021, ClueCon
+//! Usage: RUST_LOG=info cargo run --example originate_examples
+//!   Configure via ESL_HOST, ESL_PORT, ESL_PASSWORD env vars (defaults from constants).
 
 use freeswitch_esl_tokio::commands::endpoint::GroupCallOrder;
 use freeswitch_esl_tokio::commands::{
@@ -298,30 +298,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Part 2: live call via bgapi
     // -----------------------------------------------------------------------
 
-    let args: Vec<String> = std::env::args().collect();
-    let (host, port) = match args
-        .get(1)
-        .map(|s| s.as_str())
-    {
-        Some(h) if h.contains(':') => {
-            let (h, p) = h
-                .split_once(':')
-                .unwrap(); // safe: contains(':') checked above
-            (
-                h.to_string(),
-                p.parse::<u16>()
-                    .expect("invalid port"),
-            )
-        }
-        Some(h) => (h.to_string(), DEFAULT_ESL_PORT),
-        None => ("localhost".to_string(), DEFAULT_ESL_PORT),
-    };
-    let password = args
-        .get(2)
-        .map(|s| s.as_str())
-        .unwrap_or(DEFAULT_ESL_PASSWORD);
+    let host = std::env::var("ESL_HOST").unwrap_or_else(|_| "localhost".to_string());
+    let port: u16 = std::env::var("ESL_PORT")
+        .ok()
+        .and_then(|p| {
+            p.parse()
+                .ok()
+        })
+        .unwrap_or(DEFAULT_ESL_PORT);
+    let password =
+        std::env::var("ESL_PASSWORD").unwrap_or_else(|_| DEFAULT_ESL_PASSWORD.to_string());
 
-    let (client, mut events) = match EslClient::connect(&host, port, password).await {
+    let (client, mut events) = match EslClient::connect(&host, port, &password).await {
         Ok(pair) => {
             info!("connected to {}:{}", host, port);
             pair

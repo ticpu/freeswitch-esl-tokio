@@ -16,7 +16,8 @@
 //!   cargo run --example event_filter -- -u admin@default -p secret -e ALL
 
 use freeswitch_esl_tokio::{
-    EslClient, EslError, EslEventType, EventFormat, EventHeader, HeaderLookup, DEFAULT_ESL_PASSWORD,
+    EslClient, EslError, EslEventType, EventFormat, EventHeader, HeaderLookup,
+    DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT,
 };
 
 fn print_usage() {
@@ -85,10 +86,17 @@ struct Args {
 impl Default for Args {
     fn default() -> Self {
         Self {
-            host: "localhost".to_string(),
-            port: 8021,
+            host: std::env::var("ESL_HOST").unwrap_or_else(|_| "localhost".to_string()),
+            port: std::env::var("ESL_PORT")
+                .ok()
+                .and_then(|p| {
+                    p.parse()
+                        .ok()
+                })
+                .unwrap_or(DEFAULT_ESL_PORT),
             user: None,
-            password: DEFAULT_ESL_PASSWORD.to_string(),
+            password: std::env::var("ESL_PASSWORD")
+                .unwrap_or_else(|_| DEFAULT_ESL_PASSWORD.to_string()),
             events: vec!["CHANNEL_CREATE".to_string()],
             filter_header: None,
             filter_value: None,

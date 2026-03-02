@@ -140,7 +140,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // Step 6b: linger (without timeout — not all FS versions support linger <seconds>)
+    // Step 6b: linger (without timeout, not all FS versions support linger <seconds>)
     match client
         .linger(None)
         .await
@@ -170,7 +170,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // Step 7: Receive events — the call is already in echo mode so create/answer
+    // Step 7: Receive events. The call is already in echo mode so create/answer
     // events already fired. We expect to see hangup when 9199 auto-hangs up (~8s).
     let mut event_count = 0u32;
     let mut got_hangup = false;

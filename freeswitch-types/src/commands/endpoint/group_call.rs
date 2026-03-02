@@ -44,17 +44,12 @@ impl FromStr for GroupCallOrder {
     type Err = ParseGroupCallOrderError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(
-            match s
-                .to_uppercase()
-                .as_str()
-            {
-                "A" => Self::All,
-                "E" => Self::Enterprise,
-                "F" => Self::First,
-                _ => return Err(ParseGroupCallOrderError(s.to_string())),
-            },
-        )
+        match s {
+            "A" => Ok(Self::All),
+            "E" => Ok(Self::Enterprise),
+            "F" => Ok(Self::First),
+            _ => Err(ParseGroupCallOrderError(s.to_string())),
+        }
     }
 }
 
@@ -209,7 +204,7 @@ mod tests {
             GroupCallOrder::All
         );
         assert_eq!(
-            "e".parse::<GroupCallOrder>()
+            "E".parse::<GroupCallOrder>()
                 .unwrap(),
             GroupCallOrder::Enterprise
         );
@@ -218,6 +213,9 @@ mod tests {
                 .unwrap(),
             GroupCallOrder::First
         );
+        assert!("e"
+            .parse::<GroupCallOrder>()
+            .is_err());
         assert!("X"
             .parse::<GroupCallOrder>()
             .is_err());

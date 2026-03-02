@@ -1,8 +1,11 @@
 /// Generates a non-exhaustive enum mapping Rust variants to wire-format strings.
 ///
 /// Produces: enum definition + `as_str()` + `Display` + `AsRef<str>` + `FromStr`.
+/// `FromStr` uses `eq_ignore_ascii_case` — appropriate for user-facing catalog
+/// types (header names, variable names) where input may come from config files.
+/// Wire protocol state types use hand-written strict `FromStr` instead.
 /// The error type must be defined separately (matching existing crate patterns like
-/// `ParseEventTypeError`, `ParseChannelStateError`).
+/// `ParseEventHeaderError`, `ParseChannelVariableError`).
 ///
 /// # Example
 ///

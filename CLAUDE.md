@@ -1,3 +1,10 @@
+## Editing This File
+
+**CLAUDE.md edits should be the first change in any batch** that includes
+policy updates. This file is part of the cached prompt context; changing it
+invalidates the cache and costs money. Group all CLAUDE.md changes into one
+early edit to minimize cache misses.
+
 ## Project Type
 
 This is a **library-first** crate. There is an examples/ folder buildable binaries
@@ -5,14 +12,22 @@ This is a **library-first** crate. There is an examples/ folder buildable binari
 
 ## `#[non_exhaustive]` Policy
 
-All public enums and public structs with public fields have `#[non_exhaustive]`.
-When adding a new public struct or enum, **always** add `#[non_exhaustive]`.
+All public enums and public structs **with public fields** have
+`#[non_exhaustive]`. Structs with all-private fields do **not** need
+`#[non_exhaustive]` — privacy already prevents external construction and
+destructuring, and omitting the attribute lets internal code benefit from
+exhaustive compiler checks.
+
+**Exception:** single-field error newtypes (`pub struct ParseFooError(pub String)`)
+are exempt. These will never grow additional fields, and adding `#[non_exhaustive]`
+would break destructuring (`let ParseFooError(msg) = err`) for zero practical
+semver benefit.
 
 Because `#[non_exhaustive]` prevents struct literal construction from external
-crates (including `examples/`), every public struct must have a constructor
-(`new()` or named constructors). Optional fields use builder methods
-(`with_foo()`). **Always run `cargo build --examples`** after adding or
-modifying public structs to verify external construction still works.
+crates (including `examples/`), every `#[non_exhaustive]` struct must have a
+constructor (`new()` or named constructors). Optional fields use builder
+methods (`with_foo()`). **Always run `cargo build --examples`** after adding
+or modifying public structs to verify external construction still works.
 
 ## API Boundary Rules
 
@@ -38,9 +53,15 @@ modifying public structs to verify external construction still works.
   a collection of `Copy` types (e.g. `EslEventType`), use
   `impl IntoIterator<Item = impl Borrow<T>>` so callers can pass `&[T]`,
   `Vec<T>`, arrays, `HashSet<T>`, or `&const_slice`.
-- **Case-insensitive `FromStr`.** All `FromStr` impls for wire format types
-  (`DialplanType`, `EventFormat`, `EslEventType`, etc.) use
-  `eq_ignore_ascii_case`. `Display` emits the canonical form.
+- **`FromStr` casing rules.** Wire protocol types parsed from FreeSWITCH
+  headers (`ChannelState`, `CallState`, `AnswerState`, `CallDirection`,
+  `HangupCause`, `EslEventType`, `EslEventPriority`) use **strict canonical
+  case matching**. If FreeSWITCH sends unexpected casing, that's a protocol
+  anomaly that should surface as a parse error, not be silently accepted.
+  User-facing config types (`DialplanType`, `EventFormat`) use
+  `eq_ignore_ascii_case` since they may come from config files or CLI input.
+  SIP header values follow SIP conventions (case-insensitive where RFC says so).
+  `Display` always emits the canonical form.
 - **`HeaderLookup` on response types.** Any type with ESL headers should
   implement `HeaderLookup` for typed accessor access. `EslResponse` and
   `EslEvent` both implement it.
@@ -348,6 +369,12 @@ never used this library before.
 - **Explain unwrap() calls.** If `unwrap()` is safe, say why in a comment
   (e.g. "BACKGROUND_JOB always has a body; most other event types don't").
   If it's not safe, use `?` or handle the `None`.
+
+### Connection parameters via environment variables
+
+Examples use `ESL_HOST`, `ESL_PORT`, `ESL_PASSWORD` environment variables
+with defaults from `DEFAULT_ESL_PORT` and `DEFAULT_ESL_PASSWORD` constants.
+No clap dependency in examples.
 
 ### Keep examples in sync with API changes
 

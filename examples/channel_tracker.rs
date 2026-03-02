@@ -408,30 +408,18 @@ async fn request_dump(client: &EslClient, tracker: &mut ChannelTracker, uuid: &s
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
-    let args: Vec<String> = std::env::args().collect();
-    let (host, port) = match args
-        .get(1)
-        .map(|s| s.as_str())
-    {
-        Some(hp) if hp.contains(':') => {
-            let (h, p) = hp
-                .split_once(':')
-                .unwrap();
-            (
-                h.to_string(),
-                p.parse::<u16>()
-                    .expect("invalid port"),
-            )
-        }
-        Some(h) => (h.to_string(), DEFAULT_ESL_PORT),
-        None => ("localhost".to_string(), DEFAULT_ESL_PORT),
-    };
-    let password = args
-        .get(2)
-        .map(|s| s.as_str())
-        .unwrap_or(DEFAULT_ESL_PASSWORD);
+    let host = std::env::var("ESL_HOST").unwrap_or_else(|_| "localhost".to_string());
+    let port: u16 = std::env::var("ESL_PORT")
+        .ok()
+        .and_then(|p| {
+            p.parse()
+                .ok()
+        })
+        .unwrap_or(DEFAULT_ESL_PORT);
+    let password =
+        std::env::var("ESL_PASSWORD").unwrap_or_else(|_| DEFAULT_ESL_PASSWORD.to_string());
 
-    let (client, mut events) = match EslClient::connect(&host, port, password).await {
+    let (client, mut events) = match EslClient::connect(&host, port, &password).await {
         Ok(pair) => {
             info!("Connected to FreeSWITCH at {}:{}", host, port);
             pair
