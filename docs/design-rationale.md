@@ -175,3 +175,198 @@ and `FromStr` with no dependency on `EslClient`. They produce strings,
 - Unit testing without a FreeSWITCH connection
 - Round-trip testing (`parse` ↔ `to_string`)
 - Reuse in contexts beyond this library (logging, debugging, CLI tools)
+
+### Why serde on command builders
+
+The serde derives on `Originate`, `Endpoint`, `Variables`, and
+`BridgeDialString` exist because production callers need **config-driven
+command construction**. A deployment's originate command — which gateway,
+which SIP headers, which timeout — varies between environments and should
+live in a YAML config file, not hardcoded in Rust.
+
+The concrete driver was an NG911 abandoned-call callback daemon which
+previously hardcoded deployment-specific SIP headers in a
+`build_originate_command()` function. After adding serde to the command
+builders, the entire originate command became a YAML block with `${placeholder}`
+template substitution:
+
+```yaml
+originate:
+  command:
+    endpoint:
+      sofia:
+        profile: internal
+        destination: "${contact}"
+        variables:
+          sip_h_X-Incident-Id: "${incident_id}"
+    applications:
+    - name: park
+```
+
+This is the pattern: **the library provides typed builders with serde, the
+caller deserializes from config and calls `.to_string()` at originate time**.
+No FreeSWITCH-specific knowledge is needed in the config layer.
+
+## Why freeswitch-types is a separate crate
+
+The domain types crate (`freeswitch-types`) has **zero async dependencies** —
+no tokio, no futures. This split exists because the types are useful without
+a network connection:
+
+- CLI tools that parse and validate originate strings
+- Config parsers that deserialize `Originate` from YAML
+- Logging and debugging tools that format dial strings
+- Other ESL transport implementations (sync, other runtimes)
+
+Pulling in `freeswitch-esl-tokio` for types alone would force tokio as a
+transitive dependency — unacceptable for a config parser or a static analysis
+tool. The split keeps the dependency boundary clean: `freeswitch-types` is
+pure data, `freeswitch-esl-tokio` is transport.
+
+## Wire security: newline injection prevention
+
+ESL is a text protocol where `\n\n` terminates a command. Any user-provided
+string that reaches the wire without validation can inject arbitrary ESL
+commands. For example, `api("status\n\nevent plain ALL")` would execute
+`status` then silently subscribe to all events.
+
+This was discovered during the pre-v1.0 security review. The fix:
+`to_wire_format()` validates all user-supplied fields (command strings,
+header names/values, passwords, app names/args) and returns
+`EslError::ProtocolError` if `\n` or `\r` is present. The validation
+happens at the wire boundary, not at construction time, because command
+builders are `Display` types (infallible formatting) and the wire format
+is the only place where newlines are dangerous.
+
+The same principle applies to `CommandBuilder::header()` and `body()` —
+they reject newlines in both names and values.
+
+## Credential safety
+
+ESL authentication sends passwords in cleartext over TCP. Two protections
+prevent accidental exposure in logs:
+
+1. **Manual `Debug` on `EslCommand`** — the derived `Debug` would print
+   `Auth { password: "ClueCon" }` in any debug log. The manual impl redacts
+   the password field.
+
+2. **`redact_wire()` for wire logging** — debug-level wire logging uses
+   `redact_wire()` which replaces the password in `auth` and `userauth`
+   commands and strips the `\n\n` terminator for cleaner output.
+
+These exist because production ESL daemons run with debug logging enabled
+during incident investigation. A sysadmin grepping logs should not find
+ESL passwords.
+
+## Sequential command serialization
+
+ESL is a strictly sequential protocol: one command in flight, one reply.
+There are no request IDs, no multiplexing, no out-of-order replies. The
+server processes commands in the order received and responds in the same
+order.
+
+The writer half is behind `Arc<Mutex>`, and the lock is held through the
+entire send-and-wait-for-reply cycle — not just through the write. This was
+a deliberate fix for a race condition found in the pre-v1.0 review: if the
+lock was released after writing (before the reply arrived), two concurrent
+`send_command()` calls could interleave, and the second caller's
+`pending_reply` oneshot would overwrite the first's, causing misrouted
+replies.
+
+The simpler approach (hold the lock longer) was chosen over a queue-based
+design because ESL doesn't support pipelining anyway — a command queue would
+add complexity with no throughput benefit.
+
+## Error classification: auth vs transient
+
+`EslError` carries three classification helpers:
+
+- `is_connection_error()` — TCP session is dead, must reconnect
+- `is_recoverable()` — connection is still usable, retry the command
+- `is_auth_error()` — permanent configuration error, do not retry
+
+The `is_auth_error()` helper was added after observing production ESL daemons
+(fs-eventd, noans-worker) spinning in infinite reconnect loops on auth failure
+— retrying every 500ms with exponential backoff to 30s, forever. The fix was
+a pattern: auth failure exits with code 78 (`EX_CONFIG`), and systemd's
+`RestartPreventExitStatus=78` keeps it down. Transient failures (connection
+lost, timeout) exit with code 1, and systemd restarts normally.
+
+The library's job is to classify the error accurately. The caller's job is to
+decide what to do with it. This is why the library never reconnects
+automatically — it can't know whether a failure is permanent or transient in
+the caller's context.
+
+## Re-exec support: why it exists
+
+Production ESL daemons like fs-eventd maintain a persistent TCP connection to
+FreeSWITCH and track live channel state (active calls, channel variables,
+timetables). A normal service restart loses the connection and all tracked
+state. The state can be rebuilt from `show channels as json`, but events
+during the reconnection gap are lost — missed hangups, missed creates, stale
+channels in the tracking map.
+
+The re-exec mechanism (`teardown_for_reexec()` + `adopt_stream()`) preserves
+the TCP socket file descriptor across `exec()`, so the new binary image
+inherits the already-authenticated, already-subscribed ESL connection. No
+events are lost because the kernel TCP receive buffer holds data during the
+brief exec window.
+
+The drain protocol is the critical detail: the reader loop must stop at a
+clean message boundary. ESL's two-part framing means that if the parser is
+mid-body (headers consumed, waiting for body bytes), the residual would be
+a partial body without headers — corrupt and unusable. The drain logic
+continues reading until the parser returns to `WaitingForHeaders` state,
+then returns the residual bytes for the new process to pre-seed its parser.
+
+See [docs/reexec.md](docs/reexec.md) for the full API and drain protocol.
+
+## HeaderLookup trait: why a trait, not methods on EslEvent
+
+Production ESL daemons don't keep `EslEvent` objects around. fs-eventd's
+channel tracker stores headers in a flat `HashMap<String, String>` and
+accumulates them from multiple events over a channel's lifetime. The
+`HeaderLookup` trait provides typed accessor methods (`channel_state()`,
+`call_direction()`, `hangup_cause()`, etc.) that work on any type
+implementing two methods: `header_str(&str) -> Option<&str>` and
+`variable_str(&str) -> Option<&str>`.
+
+This means the same accessors work on:
+
+- `EslEvent` — direct event from the wire
+- `EslResponse` — connect_session response with channel data
+- `TrackedChannel` — accumulated state in a HashMap
+- Any custom type the caller defines
+
+The alternative — putting accessors only on `EslEvent` — would force callers
+to either keep `EslEvent` objects alive or reimplement the accessors on their
+own types. The trait makes the typed API composable.
+
+## NEventSocket comparison: specific lessons
+
+NEventSocket (.NET) is the most mature high-level ESL client and the
+primary reference for what a "complete" ESL library looks like. The Rust
+library deliberately diverges in three areas, each driven by a specific
+failure mode observed or reviewed:
+
+**Content-Type validation.** NEventSocket accepts messages without
+Content-Type silently. A corrupted Content-Length that causes protocol
+desync produces garbage messages with no error signal — the stream
+continues with corrupt data. In telephony, a desynced connection produces
+wrong call control decisions (hanging up the wrong call, bridging to the
+wrong destination). This library requires Content-Type on every message;
+its absence is a protocol error.
+
+**Buffer size limits.** NEventSocket pre-allocates whatever Content-Length
+claims with no upper bound. A malformed or malicious Content-Length can
+cause unbounded memory allocation. This library enforces 8MB per message
+and 16MB total buffer. These limits are generous for any legitimate ESL
+traffic (the largest normal messages are `show channels` responses with
+thousands of active calls).
+
+**Parse error propagation.** NEventSocket catches parse exceptions with an
+empty handler and continues. This masks protocol desync — the stream
+produces garbage silently. This library propagates all parse errors to the
+caller via `EslResult`. The caller can classify them (`is_connection_error()`
+vs `is_recoverable()`) and decide whether to disconnect and reconnect from
+a known-good state.

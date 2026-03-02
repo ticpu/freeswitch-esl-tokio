@@ -45,46 +45,27 @@ or modifying public structs to verify external construction still works.
 
 ## Method Signature Conventions
 
-- **`impl Into<String>` for string setters.** Functions that store a string
-  should accept `impl Into<String>` so callers can pass `&str` or `String`.
-- **`Duration` for timeouts.** Never use raw `u32` seconds. Consistent with
-  `set_liveness_timeout()` / `set_command_timeout()`.
-- **`impl IntoIterator` with `Borrow` for Copy types.** When a method accepts
-  a collection of `Copy` types (e.g. `EslEventType`), use
-  `impl IntoIterator<Item = impl Borrow<T>>` so callers can pass `&[T]`,
-  `Vec<T>`, arrays, `HashSet<T>`, or `&const_slice`.
-- **`FromStr` casing rules.** Wire protocol types parsed from FreeSWITCH
-  headers (`ChannelState`, `CallState`, `AnswerState`, `CallDirection`,
-  `HangupCause`, `EslEventType`, `EslEventPriority`) use **strict canonical
-  case matching**. If FreeSWITCH sends unexpected casing, that's a protocol
-  anomaly that should surface as a parse error, not be silently accepted.
-  User-facing config types (`DialplanType`, `EventFormat`) use
-  `eq_ignore_ascii_case` since they may come from config files or CLI input.
-  SIP header values follow SIP conventions (case-insensitive where RFC says so).
-  `Display` always emits the canonical form.
-- **`HeaderLookup` on response types.** Any type with ESL headers should
-  implement `HeaderLookup` for typed accessor access. `EslResponse` and
-  `EslEvent` both implement it.
-- **`From<Concrete> for Enum`.** Endpoint variant enums should have `From`
-  impls for each concrete type (e.g. `From<SofiaEndpoint> for Endpoint`).
-- **Typed + raw method pairs.** When an `EslClient` method accepts a typed
-  enum (`EventHeader`, `EslEventType`), provide a `_raw(&str)` companion for
-  headers/events not yet in the enum. Pattern: `filter()` / `filter_raw()`,
-  `subscribe_events()` / `subscribe_events_raw()`.
-- **Options structs for optional wire headers.** When a command has optional
-  protocol headers (e.g. `event-lock`, `async`, `loops` for `sendmsg execute`),
-  use an `Options` struct with builder methods rather than adding parameters.
-  Keep the base method simple; add `_with_options()` variant.
+- **`FromStr` casing rules.** Wire protocol types use **strict canonical case**.
+  User-facing config types use `eq_ignore_ascii_case`. `Display` always emits
+  the canonical form.
+- **Typed + raw method pairs.** `filter()` / `filter_raw()`,
+  `subscribe_events()` / `subscribe_events_raw()`. Always provide the `_raw`
+  escape hatch for values not yet in the enum.
+- **Options structs for optional wire headers.** Keep the base method simple;
+  add `_with_options()` variant. Never grow parameter lists.
 - **Preserve wire context in error/status enums.** Disconnect notices, auth
-  responses, and other protocol messages may carry useful context (headers,
-  body). Always preserve it for the caller rather than discarding.
-- **Crate root re-exports: core and dptools only.** Only re-export types from
-  `lib.rs` that belong to FreeSWITCH core or dptools (channel state, events,
-  originate, endpoints, `Uuid*` commands, `BridgeDialString`). Module-specific
-  types like conference commands (`ConferenceMute`, `MuteAction`) stay in their
-  submodule (`commands::conference`) and are not re-exported from the crate root.
-  Similarly, Sofia-specific types (`SofiaVariable`, `SofiaEndpoint`, etc.) stay
-  in `variables::sofia` / `commands::endpoint::sofia`.
+  responses carry useful context — never discard it.
+- **Crate root re-exports: core and dptools only.** Module-specific types
+  (conference, sofia) stay in their submodules.
+
+Follow existing patterns in the codebase for `impl Into<String>`, `Duration`,
+`impl IntoIterator<Item = impl Borrow<T>>`, `HeaderLookup`, `From<Concrete>`.
+
+## FreeSWITCH Sources
+
+The FreeSWITCH C source tree is at `$FREESWITCH_SOURCE`. If the env var
+is not set, ask the user for the path. Use it to verify wire protocol
+behavior, event header handling, and SIP/ESL internals.
 
 ## Build & Test Workflow
 
@@ -104,55 +85,16 @@ cargo clippy --workspace --fix --allow-dirty --message-format=short
 cargo test --workspace --lib
 ```
 
+When FreeSWITCH ESL is available on `127.0.0.1:8022`, also run live tests:
+`ss -tlnp sport = :8022` to check, then `cargo test --test live_freeswitch -- --ignored`.
+
 ## Release Workflow
 
-This is a two-crate workspace. `freeswitch-esl-tokio` depends on
-`freeswitch-types`, so **types must be published first**.
+Grep README.md for `## Release` for the full step-by-step checklist.
 
-### Pre-release checks
-
-```sh
-cargo fmt --all
-cargo clippy --workspace --release -- -D warnings
-cargo test --workspace --release
-cargo build --workspace --release
-cargo semver-checks check-release -p freeswitch-types
-cargo semver-checks check-release -p freeswitch-esl-tokio
-cargo publish --dry-run -p freeswitch-types
-```
-
-### Publish order
-
-1. Bump `freeswitch-types` version in `freeswitch-types/Cargo.toml`
-2. Update the `freeswitch-types` version requirement in root `Cargo.toml`
-   (`[dependencies]` section) to match
-3. Bump `freeswitch-esl-tokio` version in root `Cargo.toml` `[package]`
-4. Commit, tag, push:
-
-```sh
-git tag -as freeswitch-types-vX.Y.Z -m "freeswitch-types vX.Y.Z
-
-- Brief changelog entry"
-git tag -as vX.Y.Z -m "vX.Y.Z
-
-- Brief changelog entry"
-git push --tags
-```
-
-5. Wait for CI to pass
-6. Publish types first, then ESL:
-
-```sh
-cargo publish -p freeswitch-types
-cargo publish -p freeswitch-esl-tokio
-```
-
-**Never `cargo publish` without completing these steps first:**
-
-1. Create signed annotated tags (`git tag -as`)
-2. Push the tags (`git push --tags`)
-3. Wait for CI to pass on the tagged commit
-4. Only then `cargo publish` (types first, then ESL)
+Key invariants: **types crate publishes first** (`freeswitch-types` before
+`freeswitch-esl-tokio`). Signed annotated tags (`git tag -as`) must exist
+and CI must pass before `cargo publish`. Never publish without tags pushed.
 
 ## Documentation Style
 
@@ -168,11 +110,16 @@ whole story, a brief one-liner suffices.
 markdown files or comments — these go stale when variants are added. Use dynamic
 badges (CI-generated) in README or just omit the count.
 
-## Logging Accuracy
+## Logging and Credential Safety
 
 Logged wire data must be accurate. Never use `.trim()` on wire content for
 cosmetic reasons — it can eat meaningful whitespace. Strip only known protocol
 suffixes by name (e.g. `strip_suffix(HEADER_TERMINATOR)`).
+
+Types carrying secrets (passwords, auth tokens) need manual `Debug` impls
+that redact sensitive fields. Wire logging uses `redact_wire()` to replace
+passwords in `auth`/`userauth` commands. ESL sends passwords in cleartext
+over TCP — debug logs in production must never expose them.
 
 ## Library Code Rules
 
@@ -180,6 +127,12 @@ suffixes by name (e.g. `strip_suffix(HEADER_TERMINATOR)`).
 a library crate — panics crash the caller's application. Return `Result` or
 `Option` instead. The only exception is logic errors that truly cannot happen
 (document why with a comment), and even then prefer `debug_assert!`.
+
+**Wire security: validate user strings.** ESL is a text protocol where
+`\n\n` terminates a command. Any user-provided string reaching the wire
+without validation can inject arbitrary ESL commands. `to_wire_format()`
+validates all user-supplied fields and rejects `\n`/`\r`. See
+[docs/design-rationale.md](docs/design-rationale.md) for the full story.
 
 ## Correctness Over Recovery
 
@@ -200,129 +153,18 @@ it becomes indistinguishable from a missing header.
 
 ## Design Principles
 
-### Single responsibility — no coupling to `EslEvent`
+See [docs/design-rationale.md](docs/design-rationale.md) for the full
+motivation and production lessons behind these decisions.
 
-Data types and parsers must not depend on `EslEvent` when a generic interface
-suffices. If a function only needs `header(&str) -> Option<&str>`, accept a
-closure or trait — not `&EslEvent`. This lets callers use the same logic with
-`HashMap`, `BTreeMap`, or any other key-value store without going through
-`EslEvent`.
-
-Concrete example: `ChannelTimetable::from_lookup(prefix, |k| map.get(k).map(…))`
-works with any data source. `from_event()` is a convenience wrapper, not the
-primary API.
-
-### Transport layer (connection, protocol, event)
-
-- **Split reader/writer**: Background reader task + channel-based event delivery.
-  `EslClient` is Clone+Send for commands; `EslEventStream` for events.
-- **Liveness detection**: Any inbound TCP traffic resets the timer. HEARTBEAT
-  subscription ensures idle-connection traffic. `set_liveness_timeout()` to enable.
-- **Command timeout**: Default 5s timeout on all commands. `set_command_timeout()`.
-  Cleans up pending reply slot on timeout so subsequent commands aren't blocked.
-- **No automatic reconnection**: The library detects disconnection via
-  `ConnectionStatus`/`DisconnectReason`. The caller controls reconnection strategy.
-- **Error classification**: `is_connection_error()` / `is_recoverable()` let callers
-  decide handling without matching every variant.
-- **Correct wire format**: Events use two-part framing (outer envelope + body).
-  Header values are percent-decoded. Event format determined from Content-Type.
-- **Re-exec support** (`#[cfg(unix)]`): `teardown_for_reexec()` gracefully stops
-  the reader loop at a message boundary, returns the raw fd and residual parser
-  bytes. `adopt_stream()` constructs an EslClient from an already-authenticated
-  stream. See [docs/reexec.md](docs/reexec.md).
-
-### Command builders (commands/, app/, variables/)
-
-- **Pure `Display`/`FromStr`**: No transport coupling. Builders produce strings,
-  `EslClient` calls `.to_string()`. Enables round-trip unit testing without ESL.
-- **`app/`** = sendmsg-based dptools (answer, hangup, bridge, etc.)
-- **`commands/`** = API command strings for `api()`/`bgapi()` (originate, uuid_*, conference)
-- **`variables/`** = typed variable name enums (`ChannelVariable`, `SofiaVariable`,
-  `VariableName` trait) and format parsers (ARRAY::, SIP multipart)
-- **Foundation for extension**: Application-specific crates (NGCS, X-Call-Info, SIP
-  URI) can depend on these base types without reimplementing escaping or parsing.
-
-### Architectural boundary: core vs wrapper
-
-This crate (`freeswitch-esl-tokio`) is **transport only**: wire format, framing,
-event delivery, and raw `api()`/`bgapi()`. It does not parse API response bodies
-into typed structs.
-
-A future **wrapper crate** will own the typed command-and-response layer:
-
-- Depends on this crate for transport and on `commands/` for command builders
-- Provides typed methods (`client.status()`, `client.sofia_status()`,
-  `client.show_channels()`) that send the command and parse the response
-- Each method returns a parsed struct (`StatusResponse`, `SofiaProfile`, etc.)
-- Uses XML output variants where available for reliable parsing
-- Can pull in heavier deps (regex, serde) without bloating the core
-
-**Do not add response parsing or high-level command methods to `EslClient`.**
-Keep the boundary clean — `EslClient` sends strings and returns `EslResponse`.
-
-## Source Layout
-
-This is a Cargo workspace with two crates:
-
-```
-Cargo.toml                 # Workspace root + freeswitch-esl-tokio [package]
-
-freeswitch-types/          # Domain types crate (no async deps)
-├── Cargo.toml
-└── src/
-    ├── lib.rs             # Re-exports, DEFAULT_ESL_PORT, DEFAULT_ESL_PASSWORD
-    ├── macros.rs          # define_header_enum! macro
-    ├── event.rs           # EslEvent, EslEventType (synced with C ESL EVENT_NAMES[])
-    ├── channel.rs         # ChannelState, CallState, AnswerState, CallDirection,
-    │                      # HangupCause, ChannelTimetable
-    ├── headers.rs         # EventHeader enum
-    ├── lookup.rs          # HeaderLookup trait — typed accessors for any key-value store
-    ├── commands/          # API command string builders (→ api()/bgapi())
-    │   ├── mod.rs         # Re-exports, originate_quote/unquote, originate_split()
-    │   ├── originate.rs   # Variables, Application, OriginateTarget, Originate
-    │   ├── endpoint/      # Endpoint types (DialString trait, Endpoint enum)
-    │   │   ├── mod.rs     # DialString trait, Endpoint enum, helpers
-    │   │   ├── sofia.rs   # SofiaEndpoint, SofiaGateway, SofiaContact
-    │   │   ├── loopback.rs # LoopbackEndpoint
-    │   │   ├── user.rs    # UserEndpoint
-    │   │   ├── audio.rs   # AudioEndpoint (portaudio/pulseaudio/alsa)
-    │   │   ├── group_call.rs # GroupCall
-    │   │   └── error.rs   # ErrorEndpoint
-    │   ├── channel.rs     # UuidAnswer, UuidBridge, UuidKill, UuidSetVar, ...
-    │   └── conference.rs  # ConferenceMute, ConferenceHold, ConferenceDtmf
-    └── variables/         # Channel variable format parsers and typed name enums
-        ├── mod.rs         # VariableName trait, re-exports
-        ├── core.rs        # ChannelVariable enum (core FreeSWITCH variables)
-        ├── sofia.rs       # SofiaVariable enum (mod_sofia / SIP variables)
-        ├── esl_array.rs   # ARRAY::item1|:item2 format
-        └── sip_multipart.rs # SIP multipart body extraction
-
-src/                       # freeswitch-esl-tokio (async ESL transport)
-├── lib.rs                 # Re-exports from freeswitch-types + transport API
-├── connection.rs          # EslClient, EslEventStream, connect()/accept_outbound()/adopt_stream()
-├── protocol.rs            # Wire format parser (framing, percent-decoding)
-├── buffer.rs              # Streaming read buffer with Content-Length framing
-├── command.rs             # EslCommand, CommandBuilder, EslResponse
-├── error.rs               # EslError, DisconnectReason, error classification
-├── constants.rs           # Wire format constants, timeouts, buffer sizes
-└── app/
-    ├── mod.rs
-    └── dptools.rs         # AppCommand — answer, hangup, bridge, playback, ...
-
-tests/
-├── integration_tests.rs   # Mock-server protocol tests
-├── connection_tests.rs    # Connection lifecycle, timeouts, liveness
-├── live_freeswitch.rs     # Real ESL tests (ignored without FreeSWITCH)
-└── mock_server.rs         # Test harness simulating ESL server
-
-examples/
-├── channel_tracker.rs     # Channel lifecycle monitoring with typed accessors
-├── event_listener.rs      # Subscribe and print events
-├── event_filter.rs        # Event filtering demo
-├── inbound_client.rs      # Basic inbound ESL client
-├── outbound_server.rs     # Outbound ESL server
-└── outbound_test.rs       # Outbound mode integration test
-```
+- **No coupling to `EslEvent`**: accept closures or `HeaderLookup` trait,
+  not `&EslEvent`. Callers store headers in `HashMap`, not `EslEvent`.
+- **Transport only**: `EslClient` sends strings, returns `EslResponse`.
+  No response parsing. Future wrapper crate owns typed command-and-response.
+- **Command builders are `Display`/`FromStr`**: no transport dependency.
+  Round-trip testable without a FreeSWITCH connection.
+- **No automatic reconnection**: the library classifies errors
+  (`is_connection_error()` / `is_recoverable()` / `is_auth_error()`),
+  the caller decides what to do.
 
 ## Outbound ESL Mode
 
@@ -334,80 +176,20 @@ See [docs/outbound-esl-quirks.md](docs/outbound-esl-quirks.md) for details.
   via `originate_quote()`/`originate_unquote()` in `commands/mod.rs`
 - `cargo run --example outbound_test` exercises outbound against real FS on port 8022
 
-## Live Integration Tests
-
-When FreeSWITCH ESL is available on `127.0.0.1:8022` (password `ClueCon`),
-run the live tests after unit tests pass:
-
-```sh
-cargo test --test live_freeswitch -- --ignored
-```
-
-These tests exercise real ESL connections: auth, api commands, event
-subscription, sendevent with priority/array headers, and round-trip
-custom event delivery.
-
-To check if FreeSWITCH is listening: `ss -tlnp sport = :8022`
-
-**Always run live tests before committing** when FreeSWITCH is available.
-Check with `ss -tlnp sport = :8022` — if listening, run them. If not
-available, skip but note it in the commit process.
-
 ## Examples — Write for the New User
 
 Examples are the first thing a new user reads. Write them for someone who has
 never used this library before.
 
-- **Comment the "why", not the "what".** A beginner can read `client.api("status")`
-  but can't guess that `body()` is `None` for some commands, or that `recv()`
-  returning `None` means disconnection.
-- **Show return types** when they aren't obvious from context. Add
-  `// Option<&str>` or `// Option<CallDirection>` inline so the reader doesn't
-  have to look up docs to follow the example.
-- **No em-dashes (—) in source code.** Use commas, periods, or reword.
-  Em-dashes are fine in markdown prose.
-- **Explain unwrap() calls.** If `unwrap()` is safe, say why in a comment
-  (e.g. "BACKGROUND_JOB always has a body; most other event types don't").
-  If it's not safe, use `?` or handle the `None`.
-
-### Connection parameters via environment variables
-
-Examples use `ESL_HOST`, `ESL_PORT`, `ESL_PASSWORD` environment variables
-with defaults from `DEFAULT_ESL_PORT` and `DEFAULT_ESL_PASSWORD` constants.
-No clap dependency in examples.
-
-### Keep examples in sync with API changes
-
-When adding or changing public API (new traits, new enum variants, renamed
-methods), **always update examples/ to use the new API**. Examples are the
-primary documentation for new users. Stale examples that use deprecated or
-removed patterns are worse than no examples at all. Build all examples
-(`cargo build --examples`) as part of every change that touches public API.
-
-### Typed API, not C ESL patterns
-
-- **`HeaderLookup` trait** is the primary typed header API. Import `HeaderLookup`
-  when writing generic code or implementing it on custom types (like
-  `TrackedChannel` in `channel_tracker.rs`).
-- **`header(EventHeader)`** only accepts typed enum variants — the compiler
-  enforces this. For custom headers without a variant, use `header_str("X-Custom")`.
-- **`variable(impl VariableName)`** accepts `ChannelVariable`, `SofiaVariable`,
-  or any type implementing `VariableName`. For custom variables without an enum
-  variant, use `variable_str("custom_var")`.
-- Use typed accessors (`event.caller_id_number()`, `event.hangup_cause()`,
-  `event.call_direction()`, `event.channel_state()`) — never raw
-  `event.header_str("Caller-Caller-ID-Number")` for headers that have accessors.
-- Use `EslEventType`'s `Display` impl — never hardcode event name strings
-  like `"CREATE"` or `"HANGUP"` when you have the enum value.
-- Don't store fields that are already in the data you're accumulating. If
-  headers are merged into a map, derive typed state on access (`parse().ok()`)
-  rather than maintaining parallel fields to keep in sync.
-- The C ESL ecosystem is entirely string-based. LLMs default to that pattern.
-  Review generated example code specifically for this anti-pattern.
-- Never suggest raw `starts_with("+OK")` / `starts_with("-ERR")` string parsing
-  on responses. Use the typed API: `response.is_success()`, `response.into_result()`,
-  `response.reply_status()`. If a typed accessor doesn't exist for a use case,
-  that's a missing feature to implement — not a reason to fall back to string matching.
+- **Comment the "why", not the "what".** Explain non-obvious return types inline.
+- **No em-dashes (—) in source code.** Fine in markdown prose.
+- **Explain unwrap() calls** — if safe, say why in a comment.
+- Examples use `ESL_HOST`/`ESL_PORT`/`ESL_PASSWORD` env vars with defaults.
+- **Keep examples in sync** — build all examples after public API changes.
+- **Use the typed API, not C ESL string patterns.** Use `HeaderLookup` trait,
+  typed accessors, `EslEventType::Display`, `response.into_result()`. Never
+  raw `header_str()` for headers with accessors, never `starts_with("+OK")`.
+  LLMs default to the C ESL string-based pattern — review for this anti-pattern.
 
 ## Development Methodology — TDD
 
