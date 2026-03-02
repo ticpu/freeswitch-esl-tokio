@@ -85,31 +85,53 @@ cargo test --workspace --lib
 
 ## Release Workflow
 
-Before tagging a release:
+This is a two-crate workspace. `freeswitch-esl-tokio` depends on
+`freeswitch-types`, so **types must be published first**.
+
+### Pre-release checks
 
 ```sh
-cargo semver-checks check-release
-cargo clippy --release -- -D warnings
-cargo test --release
-cargo build --release
+cargo fmt --all
+cargo clippy --workspace --release -- -D warnings
+cargo test --workspace --release
+cargo build --workspace --release
+cargo semver-checks check-release -p freeswitch-types
+cargo semver-checks check-release -p freeswitch-esl-tokio
+cargo publish --dry-run -p freeswitch-types
 ```
 
-Tag with a signed annotated tag. Include a brief changelog in the tag message:
+### Publish order
+
+1. Bump `freeswitch-types` version in `freeswitch-types/Cargo.toml`
+2. Update the `freeswitch-types` version requirement in root `Cargo.toml`
+   (`[dependencies]` section) to match
+3. Bump `freeswitch-esl-tokio` version in root `Cargo.toml` `[package]`
+4. Commit, tag, push:
 
 ```sh
-git tag -as v0.X.0 -m "v0.X.0
+git tag -as freeswitch-types-vX.Y.Z -m "freeswitch-types vX.Y.Z
 
-- Brief changelog entry
-- Another change"
+- Brief changelog entry"
+git tag -as vX.Y.Z -m "vX.Y.Z
+
+- Brief changelog entry"
 git push --tags
+```
+
+5. Wait for CI to pass
+6. Publish types first, then ESL:
+
+```sh
+cargo publish -p freeswitch-types
+cargo publish -p freeswitch-esl-tokio
 ```
 
 **Never `cargo publish` without completing these steps first:**
 
-1. Create a signed annotated tag (`git tag -as`)
-2. Push the tag (`git push --tags`)
+1. Create signed annotated tags (`git tag -as`)
+2. Push the tags (`git push --tags`)
 3. Wait for CI to pass on the tagged commit
-4. Only then `cargo publish`
+4. Only then `cargo publish` (types first, then ESL)
 
 ## Documentation Style
 

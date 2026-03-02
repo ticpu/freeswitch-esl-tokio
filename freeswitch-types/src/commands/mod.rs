@@ -21,12 +21,12 @@ pub use channel::{
 };
 pub use conference::{ConferenceDtmf, ConferenceHold, ConferenceMute, HoldAction, MuteAction};
 pub use endpoint::{
-    AudioEndpoint, DialString, ErrorEndpoint, GroupCall, LoopbackEndpoint, SofiaContact,
-    SofiaEndpoint, SofiaGateway, UserEndpoint,
+    AudioEndpoint, DialString, ErrorEndpoint, GroupCall, GroupCallOrder, LoopbackEndpoint,
+    ParseGroupCallOrderError, SofiaContact, SofiaEndpoint, SofiaGateway, UserEndpoint,
 };
 pub use originate::{
-    Application, DialplanType, Endpoint, Originate, OriginateError, OriginateTarget, Variables,
-    VariablesType,
+    Application, DialplanType, Endpoint, Originate, OriginateError, OriginateTarget,
+    ParseDialplanTypeError, Variables, VariablesType,
 };
 
 /// Find the index of the closing bracket matching the opener at position 0.

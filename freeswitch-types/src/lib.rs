@@ -30,9 +30,10 @@ pub use channel::{
     ParseHangupCauseError, ParseTimetableError, TimetablePrefix,
 };
 pub use commands::{
-    Application, BridgeDialString, DialString, DialplanType, Endpoint, Originate, OriginateError,
-    OriginateTarget, UuidAnswer, UuidBridge, UuidDeflect, UuidGetVar, UuidHold, UuidKill,
-    UuidSendDtmf, UuidSetVar, UuidTransfer, Variables, VariablesType,
+    Application, BridgeDialString, DialString, DialplanType, Endpoint, GroupCallOrder, Originate,
+    OriginateError, OriginateTarget, ParseDialplanTypeError, ParseGroupCallOrderError, UuidAnswer,
+    UuidBridge, UuidDeflect, UuidGetVar, UuidHold, UuidKill, UuidSendDtmf, UuidSetVar,
+    UuidTransfer, Variables, VariablesType,
 };
 pub use event::{
     EslEvent, EslEventPriority, EslEventType, EventFormat, ParseEventFormatError,

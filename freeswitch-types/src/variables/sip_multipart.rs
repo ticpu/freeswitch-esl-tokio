@@ -49,6 +49,18 @@ impl MultipartBody {
         &self.0
     }
 
+    /// Number of parts.
+    pub fn len(&self) -> usize {
+        self.0
+            .len()
+    }
+
+    /// Whether the body contains no parts.
+    pub fn is_empty(&self) -> bool {
+        self.0
+            .is_empty()
+    }
+
     /// Collect body data for all parts matching the given MIME type.
     pub fn by_mime_type(&self, mime: &str) -> Vec<&str> {
         self.0
@@ -59,6 +71,26 @@ impl MultipartBody {
                     .as_str()
             })
             .collect()
+    }
+}
+
+impl IntoIterator for MultipartBody {
+    type Item = MultipartItem;
+    type IntoIter = std::vec::IntoIter<MultipartItem>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0
+            .into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a MultipartBody {
+    type Item = &'a MultipartItem;
+    type IntoIter = std::slice::Iter<'a, MultipartItem>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0
+            .iter()
     }
 }
 

@@ -251,7 +251,6 @@ mod tests {
             ChannelVariable::CallerIdName,
             ChannelVariable::BridgeUuid,
             ChannelVariable::OriginationCallerIdNumber,
-            // New v2.0 variants
             ChannelVariable::CallUuid,
             ChannelVariable::IsOutbound,
             ChannelVariable::BridgeHangupCause,

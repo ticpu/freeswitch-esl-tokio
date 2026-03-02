@@ -16,6 +16,8 @@ use freeswitch_esl_tokio::commands::{
     AudioEndpoint, ErrorEndpoint, GroupCall, LoopbackEndpoint, SofiaContact, SofiaEndpoint,
     SofiaGateway, UserEndpoint,
 };
+use std::time::Duration;
+
 use freeswitch_esl_tokio::{
     Application, DialplanType, Endpoint, EslClient, EslError, EslEventType, EventFormat,
     EventHeader, HeaderLookup, Originate, Variables, VariablesType, DEFAULT_ESL_PASSWORD,
@@ -38,7 +40,7 @@ fn print_endpoint_examples() {
     )
     .cid_name("Alice")
     .cid_num("5551234")
-    .timeout(30);
+    .timeout(Duration::from_secs(30));
     // originate sofia/internal/1000@10.0.0.1 1000 XML default Alice 5551234 30
     println!("{}", cmd);
 
@@ -54,7 +56,7 @@ fn print_endpoint_examples() {
         Endpoint::SofiaGateway(SofiaGateway::new("my_provider", "18005551234")),
         Application::simple("park"),
     )
-    .timeout(60);
+    .timeout(Duration::from_secs(60));
     // originate sofia/gateway/my_provider/18005551234 &park() XML undef undef 60
     println!("{}", cmd);
 
@@ -92,7 +94,7 @@ fn print_endpoint_examples() {
         Endpoint::SofiaContact(SofiaContact::new("bob", "pbx.example.com").with_profile("*")),
         Application::simple("park"),
     )
-    .timeout(20);
+    .timeout(Duration::from_secs(20));
     // originate ${sofia_contact(*/bob@pbx.example.com)} &park() XML undef undef 20
     println!("{}", cmd);
 
@@ -267,7 +269,7 @@ fn print_endpoint_examples() {
             }
         },
         "application": {"name": "park"},
-        "timeout": 30
+        "timeout_secs": 30
     }"#;
     match serde_json::from_str::<Originate>(json) {
         Ok(cmd) => println!("from JSON: {}", cmd),
@@ -355,7 +357,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .cid_name("ESL Test")
     .cid_num("0000000000")
-    .timeout(10);
+    .timeout(Duration::from_secs(10));
 
     println!("\n=== Live call via bgapi ===");
     println!("originate: {}", cmd);

@@ -13,7 +13,7 @@ Pure `Display`/`FromStr` types with no transport coupling. They produce and pars
 strings. `EslClient` just calls `.to_string()`.
 
 ```rust
-let cmd = Originate::application(endpoint, app).timeout(30);
+let cmd = Originate::application(endpoint, app).timeout(Duration::from_secs(30));
 client.bgapi(&cmd.to_string()).await?;
 
 let parsed: Originate = cmd.to_string().parse()?;

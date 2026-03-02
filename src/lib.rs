@@ -77,6 +77,7 @@
 //! Typed builders for common API commands — no raw string assembly needed:
 //!
 //! ```rust
+//! use std::time::Duration;
 //! use freeswitch_esl_tokio::{Originate, Endpoint, Application};
 //! use freeswitch_esl_tokio::commands::SofiaGateway;
 //!
@@ -86,7 +87,7 @@
 //! )
 //! .cid_name("Outbound Call")
 //! .cid_num("5551234")
-//! .timeout(30);
+//! .timeout(Duration::from_secs(30));
 //!
 //! // Use with client.api(&cmd.to_string()) or client.bgapi(&cmd.to_string())
 //! assert!(cmd.to_string().contains("sofia/gateway/my_provider/18005551234"));
@@ -138,13 +139,14 @@ pub use freeswitch_types::{channel, commands, event, headers, lookup, variables}
 pub use freeswitch_types::{
     AnswerState, Application, BridgeDialString, CallDirection, CallState, ChannelState,
     ChannelTimetable, ChannelVariable, DialString, DialplanType, Endpoint, EslArray, EslEvent,
-    EslEventPriority, EslEventType, EventFormat, EventHeader, HangupCause, HeaderLookup,
-    MultipartBody, MultipartItem, Originate, OriginateError, OriginateTarget,
+    EslEventPriority, EslEventType, EventFormat, EventHeader, GroupCallOrder, HangupCause,
+    HeaderLookup, MultipartBody, MultipartItem, Originate, OriginateError, OriginateTarget,
     ParseAnswerStateError, ParseCallDirectionError, ParseCallStateError, ParseChannelStateError,
-    ParseChannelVariableError, ParseEventFormatError, ParseEventHeaderError, ParseEventTypeError,
-    ParseHangupCauseError, ParsePriorityError, ParseSofiaVariableError, ParseTimetableError,
-    SofiaVariable, TimetablePrefix, UuidAnswer, UuidBridge, UuidDeflect, UuidGetVar, UuidHold,
-    UuidKill, UuidSendDtmf, UuidSetVar, UuidTransfer, VariableName, Variables, VariablesType,
+    ParseChannelVariableError, ParseDialplanTypeError, ParseEventFormatError,
+    ParseEventHeaderError, ParseEventTypeError, ParseGroupCallOrderError, ParseHangupCauseError,
+    ParsePriorityError, ParseSofiaVariableError, ParseTimetableError, SofiaVariable,
+    TimetablePrefix, UuidAnswer, UuidBridge, UuidDeflect, UuidGetVar, UuidHold, UuidKill,
+    UuidSendDtmf, UuidSetVar, UuidTransfer, VariableName, Variables, VariablesType,
     DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT,
 };
 

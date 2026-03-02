@@ -3,6 +3,7 @@
 
 use std::fmt;
 use std::str::FromStr;
+use std::time::Duration;
 
 use indexmap::IndexMap;
 use serde::de::Deserializer;
@@ -130,11 +131,17 @@ impl Variables {
         }
     }
 
-    /// Create from an existing ordered map.
-    pub fn with_vars(vars_type: VariablesType, vars: IndexMap<String, String>) -> Self {
+    /// Create from an existing set of key-value pairs.
+    pub fn with_vars(
+        vars_type: VariablesType,
+        vars: impl IntoIterator<Item = (impl Into<String>, impl Into<String>)>,
+    ) -> Self {
         Self {
             vars_type,
-            inner: vars,
+            inner: vars
+                .into_iter()
+                .map(|(k, v)| (k.into(), v.into()))
+                .collect(),
         }
     }
 
@@ -410,6 +417,7 @@ impl From<Vec<Application>> for OriginateTarget {
 /// Optional fields are set via consuming-self chaining methods:
 ///
 /// ```
+/// # use std::time::Duration;
 /// # use freeswitch_types::commands::*;
 /// let cmd = Originate::application(
 ///     Endpoint::Loopback(LoopbackEndpoint::new("9196").with_context("default")),
@@ -417,7 +425,7 @@ impl From<Vec<Application>> for OriginateTarget {
 /// )
 /// .cid_name("Alice")
 /// .cid_num("5551234")
-/// .timeout(30);
+/// .timeout(Duration::from_secs(30));
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Originate {
@@ -427,7 +435,7 @@ pub struct Originate {
     context: Option<String>,
     cid_name: Option<String>,
     cid_num: Option<String>,
-    timeout: Option<u32>,
+    timeout: Option<Duration>,
 }
 
 /// Intermediate type for serde, mirroring the old public-field layout.
@@ -445,7 +453,7 @@ struct OriginateRaw {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     cid_num: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    timeout: Option<u32>,
+    timeout_secs: Option<u64>,
 }
 
 impl TryFrom<OriginateRaw> for Originate {
@@ -469,7 +477,9 @@ impl TryFrom<OriginateRaw> for Originate {
             context: raw.context,
             cid_name: raw.cid_name,
             cid_num: raw.cid_num,
-            timeout: raw.timeout,
+            timeout: raw
+                .timeout_secs
+                .map(Duration::from_secs),
         })
     }
 }
@@ -483,7 +493,9 @@ impl From<Originate> for OriginateRaw {
             context: o.context,
             cid_name: o.cid_name,
             cid_num: o.cid_num,
-            timeout: o.timeout,
+            timeout_secs: o
+                .timeout
+                .map(|d| d.as_secs()),
         }
     }
 }
@@ -581,9 +593,9 @@ impl Originate {
         self
     }
 
-    /// Set the originate timeout in seconds.
-    pub fn timeout(mut self, seconds: u32) -> Self {
-        self.timeout = Some(seconds);
+    /// Set the originate timeout.
+    pub fn timeout(mut self, duration: Duration) -> Self {
+        self.timeout = Some(duration);
         self
     }
 
@@ -626,9 +638,15 @@ impl Originate {
             .as_deref()
     }
 
-    /// The timeout in seconds, if set.
-    pub fn timeout_seconds(&self) -> Option<u32> {
+    /// The timeout as a `Duration`, if set.
+    pub fn timeout_duration(&self) -> Option<Duration> {
         self.timeout
+    }
+
+    /// The timeout in whole seconds, if set.
+    pub fn timeout_seconds(&self) -> Option<u64> {
+        self.timeout
+            .map(|d| d.as_secs())
     }
 }
 
@@ -707,8 +725,8 @@ impl fmt::Display for Originate {
                 .unwrap_or(UNDEF);
             write!(f, " {}", originate_quote(num))?;
         }
-        if let Some(timeout) = self.timeout {
-            write!(f, " {}", timeout)?;
+        if let Some(ref timeout) = self.timeout {
+            write!(f, " {}", timeout.as_secs())?;
         }
         Ok(())
     }
@@ -777,11 +795,11 @@ impl FromStr for Originate {
             None
         };
         let timeout = if !args.is_empty() {
-            Some(
+            Some(Duration::from_secs(
                 args.remove(0)
-                    .parse::<u32>()
+                    .parse::<u64>()
                     .map_err(|e| OriginateError::ParseError(format!("invalid timeout: {}", e)))?,
-            )
+            ))
         } else {
             None
         };
@@ -1372,7 +1390,7 @@ mod tests {
             .context("default")
             .cid_name("Test")
             .cid_num("5551234")
-            .timeout(30);
+            .timeout(Duration::from_secs(30));
         let json = serde_json::to_string(&orig).unwrap();
         assert!(json.contains("\"application\""));
         let parsed: Originate = serde_json::from_str(&json).unwrap();
@@ -1524,7 +1542,8 @@ mod tests {
     #[test]
     fn originate_timeout_only_fills_positional_gaps() {
         let ep = Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("test"));
-        let cmd = Originate::application(ep, Application::simple("park")).timeout(30);
+        let cmd = Originate::application(ep, Application::simple("park"))
+            .timeout(Duration::from_secs(30));
         // timeout is arg 7; dialplan/context/cid must be filled so FS
         // doesn't interpret "30" as the dialplan name
         assert_eq!(
@@ -1594,7 +1613,7 @@ mod tests {
             .context("public")
             .cid_name("Test Caller")
             .cid_num("5551234")
-            .timeout(60);
+            .timeout(Duration::from_secs(60));
         let json = serde_json::to_string(&orig).unwrap();
         let parsed: Originate = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, orig);
@@ -1617,7 +1636,7 @@ mod tests {
         .context("default")
         .cid_name("IVR")
         .cid_num("0000")
-        .timeout(45);
+        .timeout(Duration::from_secs(45));
         let json = serde_json::to_string(&orig).unwrap();
         let parsed: Originate = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, orig);
@@ -1710,7 +1729,7 @@ mod tests {
             .context("default")
             .cid_name("Alice")
             .cid_num("5551234")
-            .timeout(30);
+            .timeout(Duration::from_secs(30));
 
         assert!(matches!(cmd.target(), OriginateTarget::Extension(ref e) if e == "1000"));
         assert_eq!(cmd.dialplan_type(), Some(&DialplanType::Xml));

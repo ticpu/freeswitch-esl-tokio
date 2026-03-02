@@ -621,7 +621,7 @@ async fn live_originate_timeout_fills_positional_gaps() {
         Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("test")),
         Application::simple("park"),
     )
-    .timeout(5);
+    .timeout(Duration::from_secs(5));
 
     let uuid = bgapi_originate_ok(&client, &mut events, &cmd).await;
     kill_channel(&client, &uuid).await;

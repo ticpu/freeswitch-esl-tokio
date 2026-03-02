@@ -27,6 +27,7 @@ Typed endpoints, typed events, serde support, split reader/writer, liveness
 detection.
 
 ```rust
+use std::time::Duration;
 use freeswitch_esl_tokio::*;
 use freeswitch_esl_tokio::commands::*;
 
@@ -47,7 +48,7 @@ async fn main() -> Result<(), EslError> {
             Some("/usr/share/freeswitch/sounds/en/us/callie/ivr/ivr-welcome.wav"),
         ),
     )
-    .timeout(30);
+    .timeout(Duration::from_secs(30));
 
     let response = client.bgapi(&cmd.to_string()).await?;
     response.into_result()?;
@@ -371,7 +372,7 @@ and bridge commands can be driven entirely from config files:
     }
   },
   "application": {"name": "park"},
-  "timeout": 30
+  "timeout_secs": 30
 }
 ```
 
