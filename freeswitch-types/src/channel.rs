@@ -677,7 +677,7 @@ impl FromStr for HangupCause {
 /// Extracted from ESL event headers using a prefix (typically `"Caller"`
 /// or `"Other-Leg"`). The wire header format is `{prefix}-{suffix}`,
 /// e.g. `Caller-Channel-Created-Time`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct ChannelTimetable {
     /// When the caller profile was created.
@@ -709,7 +709,7 @@ pub struct ChannelTimetable {
 /// FreeSWITCH emits timetable headers as `{prefix}-Channel-Created-Time`, etc.
 /// The prefix varies by context — `Caller` for the primary leg, `Other-Leg`
 /// for the bridged party, `Channel` in outbound ESL mode, etc.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum TimetablePrefix {
     /// Primary call leg (`Caller-*`).

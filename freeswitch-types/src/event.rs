@@ -496,7 +496,7 @@ impl EslEvent {
     }
 
     /// Remove a header, returning its value if it existed.
-    pub fn del_header(&mut self, name: impl AsRef<str>) -> Option<String> {
+    pub fn remove_header(&mut self, name: impl AsRef<str>) -> Option<String> {
         self.headers
             .remove(name.as_ref())
     }
@@ -726,19 +726,19 @@ mod tests {
     }
 
     #[test]
-    fn test_del_header() {
+    fn test_remove_header() {
         let mut event = EslEvent::new();
         event.set_header("Foo", "bar");
         event.set_header("Baz", "qux");
 
-        let removed = event.del_header("Foo");
+        let removed = event.remove_header("Foo");
         assert_eq!(removed, Some("bar".to_string()));
         assert!(event
             .header_str("Foo")
             .is_none());
         assert_eq!(event.header_str("Baz"), Some("qux"));
 
-        let removed_again = event.del_header("Foo");
+        let removed_again = event.remove_header("Foo");
         assert_eq!(removed_again, None);
     }
 

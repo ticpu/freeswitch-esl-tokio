@@ -96,6 +96,13 @@ impl VariablesType {
 ///
 /// Values containing commas are escaped with `\,`, single quotes with `\'`,
 /// and values with spaces are wrapped in single quotes.
+///
+/// # Serde format
+///
+/// [`Default`](VariablesType::Default) scope serializes as a flat JSON map:
+/// `{"key": "value", ...}`. Non-default scopes serialize as
+/// `{"scope": "Enterprise", "vars": {"key": "value"}}`.
+/// Deserialization accepts both formats; a flat map implies `Default` scope.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Variables {
     vars_type: VariablesType,
@@ -149,6 +156,12 @@ impl Variables {
     pub fn insert(&mut self, key: impl Into<String>, value: impl Into<String>) {
         self.inner
             .insert(key.into(), value.into());
+    }
+
+    /// Remove a variable by name, returning its value if it existed.
+    pub fn remove(&mut self, key: &str) -> Option<String> {
+        self.inner
+            .shift_remove(key)
     }
 
     /// Look up a variable by name.

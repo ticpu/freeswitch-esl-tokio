@@ -1,6 +1,6 @@
 //! Shared trait for typed header lookups from any key-value store.
 //!
-//! [`HeaderLookup`] provides ~17 convenience accessors (typed channel state,
+//! [`HeaderLookup`] provides convenience accessors (typed channel state,
 //! call direction, timetable extraction, etc.) to any type that can look up
 //! headers and variables by name. Implement the two required methods and get
 //! everything else for free.
