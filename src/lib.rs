@@ -14,11 +14,11 @@
 //! ## Inbound Connection
 //!
 //! ```rust,no_run
-//! use freeswitch_esl_tokio::{EslClient, EslError};
+//! use freeswitch_esl_tokio::{EslClient, EslError, DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT};
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), EslError> {
-//!     let (client, mut events) = EslClient::connect("localhost", 8021, "ClueCon").await?;
+//!     let (client, mut events) = EslClient::connect("localhost", DEFAULT_ESL_PORT, DEFAULT_ESL_PASSWORD).await?;
 //!
 //!     let response = client.api("status").await?;
 //!     println!("Status: {}", response.body().unwrap_or("No body"));
@@ -98,11 +98,13 @@
 //! ## Event Subscription
 //!
 //! ```rust,no_run
-//! use freeswitch_esl_tokio::{EslClient, EslEventType, EventFormat, HeaderLookup};
+//! use freeswitch_esl_tokio::{
+//!     EslClient, EslEventType, EventFormat, HeaderLookup, DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT,
+//! };
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     let (client, mut events) = EslClient::connect("localhost", 8021, "ClueCon").await?;
+//!     let (client, mut events) = EslClient::connect("localhost", DEFAULT_ESL_PORT, DEFAULT_ESL_PASSWORD).await?;
 //!
 //!     client.subscribe_events(EventFormat::Plain, &[
 //!         EslEventType::ChannelAnswer,

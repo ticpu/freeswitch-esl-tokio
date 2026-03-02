@@ -4,28 +4,28 @@
 //!
 //! Usage: cargo run --example inbound_client
 
-use freeswitch_esl_tokio::{EslClient, EslError, DEFAULT_ESL_PORT};
+use freeswitch_esl_tokio::{EslClient, EslError, DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT};
 use tracing::{error, info};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
-    let (client, _events) = match EslClient::connect("localhost", DEFAULT_ESL_PORT, "ClueCon").await
-    {
-        Ok(pair) => {
-            info!("Successfully connected to FreeSWITCH");
-            pair
-        }
-        Err(EslError::Io(e)) if e.kind() == std::io::ErrorKind::ConnectionRefused => {
-            error!("Failed to connect to FreeSWITCH - is it running on localhost:8021?");
-            return Err(e.into());
-        }
-        Err(e) => {
-            error!("Failed to connect: {}", e);
-            return Err(e.into());
-        }
-    };
+    let (client, _events) =
+        match EslClient::connect("localhost", DEFAULT_ESL_PORT, DEFAULT_ESL_PASSWORD).await {
+            Ok(pair) => {
+                info!("Successfully connected to FreeSWITCH");
+                pair
+            }
+            Err(EslError::Io(e)) if e.kind() == std::io::ErrorKind::ConnectionRefused => {
+                error!("Failed to connect to FreeSWITCH - is it running on localhost:8021?");
+                return Err(e.into());
+            }
+            Err(e) => {
+                error!("Failed to connect: {}", e);
+                return Err(e.into());
+            }
+        };
 
     info!("Executing API commands...");
 

@@ -5,7 +5,8 @@
 //! Usage: cargo run --example event_listener
 
 use freeswitch_esl_tokio::{
-    EslClient, EslError, EslEventType, EventFormat, EventHeader, HeaderLookup, DEFAULT_ESL_PORT,
+    EslClient, EslError, EslEventType, EventFormat, EventHeader, HeaderLookup,
+    DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT,
 };
 use std::collections::HashMap;
 use tracing::{debug, error, info};
@@ -15,7 +16,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
     let (client, mut events) =
-        match EslClient::connect("localhost", DEFAULT_ESL_PORT, "ClueCon").await {
+        match EslClient::connect("localhost", DEFAULT_ESL_PORT, DEFAULT_ESL_PASSWORD).await {
             Ok(pair) => {
                 info!("Successfully connected to FreeSWITCH");
                 pair

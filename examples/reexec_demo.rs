@@ -12,7 +12,9 @@
 
 #[cfg(unix)]
 mod demo {
-    use freeswitch_esl_tokio::{EslClient, EslError, EslEventType, EventFormat, DEFAULT_ESL_PORT};
+    use freeswitch_esl_tokio::{
+        EslClient, EslError, EslEventType, EventFormat, DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT,
+    };
     use std::os::unix::io::FromRawFd;
     use tracing::{error, info};
 
@@ -28,17 +30,18 @@ mod demo {
             .unwrap_or(DEFAULT_ESL_PORT);
 
         // Phase 1: connect and subscribe
-        let (client, mut events) = match EslClient::connect("localhost", port, "ClueCon").await {
-            Ok(pair) => {
-                info!("Connected to FreeSWITCH on port {}", port);
-                pair
-            }
-            Err(EslError::Io(e)) if e.kind() == std::io::ErrorKind::ConnectionRefused => {
-                error!("FreeSWITCH not running on localhost:{}", port);
-                return Err(e.into());
-            }
-            Err(e) => return Err(e.into()),
-        };
+        let (client, mut events) =
+            match EslClient::connect("localhost", port, DEFAULT_ESL_PASSWORD).await {
+                Ok(pair) => {
+                    info!("Connected to FreeSWITCH on port {}", port);
+                    pair
+                }
+                Err(EslError::Io(e)) if e.kind() == std::io::ErrorKind::ConnectionRefused => {
+                    error!("FreeSWITCH not running on localhost:{}", port);
+                    return Err(e.into());
+                }
+                Err(e) => return Err(e.into()),
+            };
 
         client
             .subscribe_events(EventFormat::Plain, &[EslEventType::Heartbeat])

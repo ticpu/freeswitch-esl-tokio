@@ -24,7 +24,7 @@ use std::fmt::Display;
 
 use freeswitch_esl_tokio::{
     CallState, EslClient, EslError, EslEvent, EslEventType, EventFormat, EventHeader, HeaderLookup,
-    DEFAULT_ESL_PORT,
+    DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT,
 };
 use percent_encoding::percent_decode_str;
 use tracing::{debug, error, info, warn};
@@ -429,7 +429,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let password = args
         .get(2)
         .map(|s| s.as_str())
-        .unwrap_or("ClueCon");
+        .unwrap_or(DEFAULT_ESL_PASSWORD);
 
     let (client, mut events) = match EslClient::connect(&host, port, password).await {
         Ok(pair) => {

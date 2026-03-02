@@ -4,7 +4,7 @@ mod mock_server;
 
 use freeswitch_esl_tokio::{
     ConnectionStatus, DisconnectReason, EslClient, EslConnectOptions, EslError, EslEvent,
-    EslEventStream, EslEventType, EventFormat, EventHeader, HeaderLookup,
+    EslEventStream, EslEventType, EventFormat, EventHeader, HeaderLookup, DEFAULT_ESL_PASSWORD,
 };
 use mock_server::{
     setup_connected_pair, setup_connected_pair_with_options, MockClient, MockEslServer,
@@ -22,7 +22,7 @@ async fn recv_event(events: &mut EslEventStream) -> EslEvent {
 
 #[tokio::test]
 async fn test_connect_and_authenticate() {
-    let (_, client, _events) = setup_connected_pair("ClueCon").await;
+    let (_, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
     assert!(client.is_connected());
 }
 
@@ -45,7 +45,7 @@ async fn test_auth_failure() {
 
 #[tokio::test]
 async fn test_recv_event_plain() {
-    let (mut mock, client, mut events) = setup_connected_pair("ClueCon").await;
+    let (mut mock, client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     // Subscribe to events (mock just replies OK)
     let subscribe_task = tokio::spawn({
@@ -85,7 +85,7 @@ async fn test_recv_event_plain() {
 
 #[tokio::test]
 async fn test_concurrent_command_and_events() {
-    let (mut mock, client, mut events) = setup_connected_pair("ClueCon").await;
+    let (mut mock, client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     // Send an event from mock first (before any command)
     let mut headers = HashMap::new();
@@ -124,7 +124,7 @@ async fn test_concurrent_command_and_events() {
 
 #[tokio::test]
 async fn test_disconnect_notice() {
-    let (mut mock, _client, mut events) = setup_connected_pair("ClueCon").await;
+    let (mut mock, _client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     mock.send_disconnect_notice("Disconnected, goodbye.\nSee you later.\n")
         .await;
@@ -144,7 +144,7 @@ async fn test_disconnect_notice() {
 
 #[tokio::test]
 async fn test_tcp_disconnect() {
-    let (mock, _client, mut events) = setup_connected_pair("ClueCon").await;
+    let (mock, _client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     // Drop the mock's TCP connection
     mock.drop_connection()
@@ -165,7 +165,7 @@ async fn test_tcp_disconnect() {
 
 #[tokio::test]
 async fn test_command_after_disconnect() {
-    let (mock, client, mut events) = setup_connected_pair("ClueCon").await;
+    let (mock, client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     mock.drop_connection()
         .await;
@@ -186,7 +186,7 @@ async fn test_command_after_disconnect() {
 
 #[tokio::test]
 async fn test_liveness_expired() {
-    let (_mock, client, mut events) = setup_connected_pair("ClueCon").await;
+    let (_mock, client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     // Set a very short liveness timeout
     client.set_liveness_timeout(Duration::from_secs(1));
@@ -207,7 +207,7 @@ async fn test_liveness_expired() {
 
 #[tokio::test]
 async fn test_liveness_reset_by_traffic() {
-    let (mut mock, client, mut events) = setup_connected_pair("ClueCon").await;
+    let (mut mock, client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     // Set liveness timeout to 3s
     client.set_liveness_timeout(Duration::from_secs(3));
@@ -257,7 +257,7 @@ async fn test_liveness_reset_by_traffic() {
 
 #[tokio::test]
 async fn test_stall_detected() {
-    let (_mock, client, mut events) = setup_connected_pair("ClueCon").await;
+    let (_mock, client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     // Set short timeout — auth traffic already happened, then nothing
     client.set_liveness_timeout(Duration::from_secs(1));
@@ -275,7 +275,7 @@ async fn test_stall_detected() {
 
 #[tokio::test]
 async fn test_client_clone() {
-    let (mut mock, client, _events) = setup_connected_pair("ClueCon").await;
+    let (mut mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     let client2 = client.clone();
 
@@ -320,7 +320,7 @@ async fn test_client_clone() {
 
 #[tokio::test]
 async fn test_heartbeat_event_headers() {
-    let (mut mock, _client, mut events) = setup_connected_pair("ClueCon").await;
+    let (mut mock, _client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     mock.send_heartbeat()
         .await;
@@ -340,7 +340,7 @@ async fn test_heartbeat_event_headers() {
 
 #[tokio::test]
 async fn test_url_decoded_headers() {
-    let (mut mock, _client, mut events) = setup_connected_pair("ClueCon").await;
+    let (mut mock, _client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     let mut headers = HashMap::new();
     headers.insert("Caller-Caller-ID-Name".to_string(), "John Doe".to_string());
@@ -366,7 +366,7 @@ async fn test_url_decoded_headers() {
 
 #[tokio::test]
 async fn test_command_timeout() {
-    let (_mock, client, _events) = setup_connected_pair("ClueCon").await;
+    let (_mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     // Set a very short command timeout
     client.set_command_timeout(Duration::from_millis(200));
@@ -385,12 +385,12 @@ async fn test_command_timeout() {
 
 #[tokio::test]
 async fn test_command_timeout_default() {
-    let (_mock, _client, _events) = setup_connected_pair("ClueCon").await;
+    let (_mock, _client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     // Default timeout should be 5 seconds — verify a command still works
     // by having the mock reply within that window
     // (This test just verifies the default doesn't break normal flow)
-    let (mut mock, client2, _events2) = setup_connected_pair("ClueCon").await;
+    let (mut mock, client2, _events2) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     let api_task = tokio::spawn(async move {
         client2
@@ -412,7 +412,7 @@ async fn test_command_timeout_default() {
 
 #[tokio::test]
 async fn test_command_timeout_cleanup() {
-    let (mut mock, client, _events) = setup_connected_pair("ClueCon").await;
+    let (mut mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     // Set short timeout
     client.set_command_timeout(Duration::from_millis(200));
@@ -451,7 +451,7 @@ async fn test_command_timeout_cleanup() {
 
 #[tokio::test]
 async fn test_sendevent_command() {
-    let (mut mock, client, _events) = setup_connected_pair("ClueCon").await;
+    let (mut mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     let mut event = EslEvent::with_type(EslEventType::Custom);
     event.set_header("Event-Name".to_string(), "CUSTOM".to_string());
@@ -483,7 +483,7 @@ async fn test_sendevent_command() {
 
 #[tokio::test]
 async fn test_myevents_command() {
-    let (mut mock, client, _events) = setup_connected_pair("ClueCon").await;
+    let (mut mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     let task = tokio::spawn({
         let client = client.clone();
@@ -508,7 +508,7 @@ async fn test_myevents_command() {
 
 #[tokio::test]
 async fn test_myevents_uuid_command() {
-    let (mut mock, client, _events) = setup_connected_pair("ClueCon").await;
+    let (mut mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     let task = tokio::spawn({
         let client = client.clone();
@@ -533,7 +533,7 @@ async fn test_myevents_uuid_command() {
 
 #[tokio::test]
 async fn test_linger_command() {
-    let (mut mock, client, _events) = setup_connected_pair("ClueCon").await;
+    let (mut mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     let task = tokio::spawn({
         let client = client.clone();
@@ -558,7 +558,7 @@ async fn test_linger_command() {
 
 #[tokio::test]
 async fn test_linger_timeout_command() {
-    let (mut mock, client, _events) = setup_connected_pair("ClueCon").await;
+    let (mut mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     let task = tokio::spawn({
         let client = client.clone();
@@ -583,7 +583,7 @@ async fn test_linger_timeout_command() {
 
 #[tokio::test]
 async fn test_nolinger_command() {
-    let (mut mock, client, _events) = setup_connected_pair("ClueCon").await;
+    let (mut mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     let task = tokio::spawn({
         let client = client.clone();
@@ -608,7 +608,7 @@ async fn test_nolinger_command() {
 
 #[tokio::test]
 async fn test_resume_command() {
-    let (mut mock, client, _events) = setup_connected_pair("ClueCon").await;
+    let (mut mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     let task = tokio::spawn({
         let client = client.clone();
@@ -633,7 +633,7 @@ async fn test_resume_command() {
 
 #[tokio::test]
 async fn test_nixevent_command() {
-    let (mut mock, client, _events) = setup_connected_pair("ClueCon").await;
+    let (mut mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     let task = tokio::spawn({
         let client = client.clone();
@@ -658,7 +658,7 @@ async fn test_nixevent_command() {
 
 #[tokio::test]
 async fn test_noevents_command() {
-    let (mut mock, client, _events) = setup_connected_pair("ClueCon").await;
+    let (mut mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     let task = tokio::spawn({
         let client = client.clone();
@@ -683,7 +683,7 @@ async fn test_noevents_command() {
 
 #[tokio::test]
 async fn test_filter_delete_command() {
-    let (mut mock, client, _events) = setup_connected_pair("ClueCon").await;
+    let (mut mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     let task = tokio::spawn({
         let client = client.clone();
@@ -708,7 +708,7 @@ async fn test_filter_delete_command() {
 
 #[tokio::test]
 async fn test_divert_events_command() {
-    let (mut mock, client, _events) = setup_connected_pair("ClueCon").await;
+    let (mut mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     let task = tokio::spawn({
         let client = client.clone();
@@ -733,7 +733,7 @@ async fn test_divert_events_command() {
 
 #[tokio::test]
 async fn test_getvar_command() {
-    let (mut mock, client, _events) = setup_connected_pair("ClueCon").await;
+    let (mut mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     let task = tokio::spawn({
         let client = client.clone();
@@ -828,7 +828,7 @@ async fn test_outbound_connect_session() {
 
 #[tokio::test]
 async fn test_concurrent_api_commands() {
-    let (mut mock, client, _events) = setup_connected_pair("ClueCon").await;
+    let (mut mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     // Launch two api() calls concurrently from different tasks
     let client1 = client.clone();
@@ -887,7 +887,7 @@ async fn test_concurrent_api_commands() {
 async fn test_event_overflow_queue_full() {
     let options = EslConnectOptions::new().with_event_queue_size(2);
     let (mut mock, client, mut events) =
-        setup_connected_pair_with_options("ClueCon", options).await;
+        setup_connected_pair_with_options(DEFAULT_ESL_PASSWORD, options).await;
 
     // Fill the queue (capacity 2) then overflow it.
     for i in 0..5 {
@@ -944,7 +944,7 @@ async fn test_event_overflow_queue_full() {
 async fn test_event_queue_size_zero_clamped() {
     let options = EslConnectOptions::new().with_event_queue_size(0);
     let (mut mock, _client, mut events) =
-        setup_connected_pair_with_options("ClueCon", options).await;
+        setup_connected_pair_with_options(DEFAULT_ESL_PASSWORD, options).await;
 
     // Should still work: size 0 is clamped to 1
     let mut headers = HashMap::new();
@@ -964,7 +964,7 @@ mod reexec {
 
     #[tokio::test]
     async fn teardown_returns_valid_fd_and_residual() {
-        let (_mock, client, _events) = setup_connected_pair("ClueCon").await;
+        let (_mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
         let result = client
             .teardown_for_reexec()
@@ -990,7 +990,7 @@ mod reexec {
 
     #[tokio::test]
     async fn teardown_with_buffered_event_delivers_then_stops() {
-        let (mut mock, client, mut events) = setup_connected_pair("ClueCon").await;
+        let (mut mock, client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
         // Send an event then immediately teardown.
         // The event should be delivered before teardown completes.
@@ -1018,7 +1018,7 @@ mod reexec {
 
     #[tokio::test]
     async fn teardown_twice_fails() {
-        let (_mock, client, _events) = setup_connected_pair("ClueCon").await;
+        let (_mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
         let first = client
             .teardown_for_reexec()
@@ -1043,7 +1043,7 @@ mod reexec {
 
     #[tokio::test]
     async fn teardown_with_pending_command_fails() {
-        let (mut mock, client, _events) = setup_connected_pair("ClueCon").await;
+        let (mut mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
         // Start a command but don't reply from mock
         let client2 = client.clone();
@@ -1198,7 +1198,7 @@ mod reexec {
 
 #[tokio::test]
 async fn bgapi_returns_job_uuid_from_reply() {
-    let (mut mock, client, _events) = setup_connected_pair("ClueCon").await;
+    let (mut mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     let api_task = tokio::spawn({
         let client = client.clone();
@@ -1228,7 +1228,7 @@ async fn bgapi_returns_job_uuid_from_reply() {
 
 #[tokio::test]
 async fn bgapi_background_job_event_delivered() {
-    let (mut mock, client, mut events) = setup_connected_pair("ClueCon").await;
+    let (mut mock, client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
     let job_uuid = "aabb1122-bgapi-test";
 
     let api_task = tokio::spawn({
@@ -1267,7 +1267,7 @@ async fn bgapi_background_job_event_delivered() {
 
 #[tokio::test]
 async fn bgapi_multiple_jobs_correlated() {
-    let (mut mock, client, mut events) = setup_connected_pair("ClueCon").await;
+    let (mut mock, client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     let uuids = ["job-uuid-001", "job-uuid-002", "job-uuid-003"];
     let bodies = ["+OK status\n", "+OK version\n", "+OK hostname\n"];
@@ -1325,7 +1325,7 @@ async fn bgapi_multiple_jobs_correlated() {
 
 #[tokio::test]
 async fn rude_rejection_returns_access_denied() {
-    let (mut mock, client, mut events) = setup_connected_pair("ClueCon").await;
+    let (mut mock, client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
     mock.send_raw("Content-Type: text/rude-rejection\n\n")
         .await;

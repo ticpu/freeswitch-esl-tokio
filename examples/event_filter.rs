@@ -16,7 +16,7 @@
 //!   cargo run --example event_filter -- -u admin@default -p secret -e ALL
 
 use freeswitch_esl_tokio::{
-    EslClient, EslError, EslEventType, EventFormat, EventHeader, HeaderLookup,
+    EslClient, EslError, EslEventType, EventFormat, EventHeader, HeaderLookup, DEFAULT_ESL_PASSWORD,
 };
 
 fn print_usage() {
@@ -88,7 +88,7 @@ impl Default for Args {
             host: "localhost".to_string(),
             port: 8021,
             user: None,
-            password: "ClueCon".to_string(),
+            password: DEFAULT_ESL_PASSWORD.to_string(),
             events: vec!["CHANNEL_CREATE".to_string()],
             filter_header: None,
             filter_value: None,

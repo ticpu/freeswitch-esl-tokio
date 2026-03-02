@@ -7,7 +7,7 @@ use freeswitch_esl_tokio::commands::{LoopbackEndpoint, UuidGetVar, UuidKill, Uui
 use freeswitch_esl_tokio::{
     Application, ConnectionStatus, DialplanType, DisconnectReason, Endpoint, EslClient,
     EslConnectOptions, EslError, EslEvent, EslEventPriority, EslEventType, EventFormat,
-    EventHeader, HeaderLookup, Originate, ReplyStatus,
+    EventHeader, HeaderLookup, Originate, ReplyStatus, DEFAULT_ESL_PASSWORD,
 };
 use std::time::Duration;
 use tokio::sync::Semaphore;
@@ -15,7 +15,7 @@ use tokio::time::Instant;
 
 const ESL_HOST: &str = "127.0.0.1";
 const ESL_PORT: u16 = 8022;
-const ESL_PASSWORD: &str = "ClueCon";
+const ESL_PASSWORD: &str = DEFAULT_ESL_PASSWORD;
 const MAX_CONCURRENT_CONNECTIONS: usize = 5;
 
 static CONN_SEMAPHORE: Semaphore = Semaphore::const_new(MAX_CONCURRENT_CONNECTIONS);

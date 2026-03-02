@@ -8,13 +8,13 @@
 
 use freeswitch_esl_tokio::commands::endpoint::LoopbackEndpoint;
 use freeswitch_esl_tokio::commands::originate::{Application, Endpoint, Originate};
-use freeswitch_esl_tokio::{EslClient, EslEventType, EventFormat};
+use freeswitch_esl_tokio::{EslClient, EslEventType, EventFormat, DEFAULT_ESL_PASSWORD};
 use std::time::Duration;
 use tokio::net::TcpListener;
 
 const ESL_HOST: &str = "127.0.0.1";
 const ESL_PORT: u16 = 8022;
-const ESL_PASSWORD: &str = "ClueCon";
+const ESL_PASSWORD: &str = DEFAULT_ESL_PASSWORD;
 const STEP_TIMEOUT: Duration = Duration::from_secs(15);
 
 fn step_ok(name: &str) {
