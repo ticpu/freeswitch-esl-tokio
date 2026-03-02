@@ -58,7 +58,7 @@ fn event_types_to_string<T: Borrow<EslEventType>>(events: impl IntoIterator<Item
         .into_iter()
         .map(|e| {
             e.borrow()
-                .to_string()
+                .as_str()
         })
         .collect::<Vec<_>>()
         .join(" ")

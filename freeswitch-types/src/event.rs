@@ -74,7 +74,7 @@ impl fmt::Display for ParseEventFormatError {
 
 impl std::error::Error for ParseEventFormatError {}
 
-/// Generates `EslEventType` enum with `Display`, `FromStr`, and `parse_event_type`.
+/// Generates `EslEventType` enum with `Display`, `FromStr`, `as_str`, and `parse_event_type`.
 macro_rules! esl_event_types {
     (
         $(
@@ -108,15 +108,19 @@ macro_rules! esl_event_types {
 
         impl fmt::Display for EslEventType {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                let name = match self {
-                    $( EslEventType::$variant => $wire, )+
-                    $( EslEventType::$extra_variant => $extra_wire, )*
-                };
-                f.write_str(name)
+                f.write_str(self.as_str())
             }
         }
 
         impl EslEventType {
+            /// Returns the canonical wire name as a static string slice.
+            pub const fn as_str(&self) -> &'static str {
+                match self {
+                    $( EslEventType::$variant => $wire, )+
+                    $( EslEventType::$extra_variant => $extra_wire, )*
+                }
+            }
+
             /// Parse event type from wire name (canonical case).
             pub fn parse_event_type(s: &str) -> Option<Self> {
                 match s {
