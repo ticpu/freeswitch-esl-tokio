@@ -1,5 +1,7 @@
 //! Typed channel variable names from FreeSWITCH core.
 
+use serde::{Deserialize, Serialize};
+
 /// Error returned when parsing an unrecognized channel variable name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseChannelVariableError(pub String);

@@ -494,7 +494,7 @@ impl EslParser {
                     }
                 }
                 Ok(XmlEvent::Eof) => break,
-                Err(e) => return Err(EslError::XmlError(e)),
+                Err(e) => return Err(e.into()),
                 _ => {}
             }
         }

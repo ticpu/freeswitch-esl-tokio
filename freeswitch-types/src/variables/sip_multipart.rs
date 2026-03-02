@@ -1,7 +1,9 @@
+use serde::{Deserialize, Serialize};
+
 use super::EslArray;
 
 /// A single part from a SIP multipart body
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct MultipartItem {
     /// MIME type (e.g. `application/sdp`).
@@ -23,7 +25,7 @@ impl MultipartItem {
 /// Parses `variable_sip_multipart` ARRAY:: format.
 ///
 /// Each ARRAY element is `"mime/type:body_data"`, split on the first `:`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MultipartBody(Vec<MultipartItem>);
 
 impl MultipartBody {

@@ -28,7 +28,7 @@ macro_rules! define_header_enum {
         }
     ) => {
         $(#[$enum_meta])*
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
         #[non_exhaustive]
         #[allow(missing_docs)]
         $vis enum $Name {

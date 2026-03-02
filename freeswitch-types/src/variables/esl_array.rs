@@ -1,10 +1,11 @@
+use serde::{Deserialize, Serialize};
 use std::fmt;
 
 const ARRAY_HEADER: &str = "ARRAY::";
 const ARRAY_SEPARATOR: &str = "|:";
 
 /// Parses FreeSWITCH `ARRAY::item1|:item2|:item3` format
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EslArray(Vec<String>);
 
 impl EslArray {

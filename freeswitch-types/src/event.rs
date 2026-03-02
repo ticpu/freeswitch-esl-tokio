@@ -10,7 +10,7 @@ use std::fmt;
 use std::str::FromStr;
 
 /// Event format types supported by FreeSWITCH ESL
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum EventFormat {
     /// Plain text format (default)

@@ -188,6 +188,11 @@ impl Variables {
         self.vars_type
     }
 
+    /// Change the variable scope.
+    pub fn set_scope(&mut self, scope: VariablesType) {
+        self.vars_type = scope;
+    }
+
     /// Iterate over key-value pairs in insertion order.
     pub fn iter(&self) -> impl Iterator<Item = (&String, &String)> {
         self.inner
@@ -606,7 +611,8 @@ impl Originate {
         self
     }
 
-    /// Set the originate timeout.
+    /// Set the originate timeout. Sub-second precision is truncated to whole
+    /// seconds on the wire and in serde round-trips.
     pub fn timeout(mut self, duration: Duration) -> Self {
         self.timeout = Some(duration);
         self

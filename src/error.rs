@@ -74,11 +74,11 @@ pub enum EslError {
 
     /// JSON parsing error
     #[error("JSON parsing error: {0}")]
-    JsonError(#[from] serde_json::Error),
+    JsonError(String),
 
-    /// XML parsing error  
+    /// XML parsing error
     #[error("XML parsing error: {0}")]
-    XmlError(#[from] quick_xml::Error),
+    XmlError(String),
 
     /// UTF-8 conversion error
     #[error("UTF-8 conversion error: {0}")]
@@ -154,6 +154,18 @@ pub enum EslError {
         /// What went wrong during teardown.
         reason: String,
     },
+}
+
+impl From<serde_json::Error> for EslError {
+    fn from(e: serde_json::Error) -> Self {
+        Self::JsonError(e.to_string())
+    }
+}
+
+impl From<quick_xml::Error> for EslError {
+    fn from(e: quick_xml::Error) -> Self {
+        Self::XmlError(e.to_string())
+    }
 }
 
 impl EslError {

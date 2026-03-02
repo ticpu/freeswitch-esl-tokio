@@ -1,5 +1,7 @@
 //! Typed event header names for FreeSWITCH ESL events.
 
+use serde::{Deserialize, Serialize};
+
 /// Error returned when parsing an unrecognized event header name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseEventHeaderError(pub String);
