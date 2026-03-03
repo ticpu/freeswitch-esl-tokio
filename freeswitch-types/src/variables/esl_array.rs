@@ -159,4 +159,31 @@ mod tests {
         assert_eq!(arr.items(), &["first", "middle", "last"]);
         assert_eq!(arr.to_string(), "ARRAY::first|:middle|:last");
     }
+
+    #[test]
+    fn parse_sip_uris_with_colons() {
+        let input = "ARRAY::sip:alice@atlanta.example.com|:sip:bob@biloxi.example.com";
+        let arr = EslArray::parse(input).unwrap();
+        assert_eq!(
+            arr.items(),
+            &[
+                "sip:alice@atlanta.example.com",
+                "sip:bob@biloxi.example.com"
+            ]
+        );
+        assert_eq!(arr.to_string(), input);
+    }
+
+    #[test]
+    fn parse_sip_uris_with_angle_brackets_and_params() {
+        let input = "ARRAY::<sip:+15551234567@gw.example.com;user=phone>|:<tel:+15559876543>";
+        let arr = EslArray::parse(input).unwrap();
+        assert_eq!(arr.len(), 2);
+        assert_eq!(
+            arr.items()[0],
+            "<sip:+15551234567@gw.example.com;user=phone>"
+        );
+        assert_eq!(arr.items()[1], "<tel:+15559876543>");
+        assert_eq!(arr.to_string(), input);
+    }
 }

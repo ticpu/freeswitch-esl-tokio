@@ -54,4 +54,10 @@ if ! "$SCRIPT_DIR/check-call-states.sh"; then
     exit 1
 fi
 
+echo "Checking SipInviteHeader against sofia.c..."
+if ! "$SCRIPT_DIR/check-sip-invite-headers.sh"; then
+    echo "❌ SipInviteHeader enum is out of sync with FreeSWITCH. Update freeswitch-types/src/variables/sip_invite.rs."
+    exit 1
+fi
+
 echo "✅ Pre-commit checks passed"

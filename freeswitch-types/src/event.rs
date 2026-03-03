@@ -1075,6 +1075,92 @@ mod tests {
         );
     }
 
+    // --- Repeating SIP header tests ---
+
+    #[test]
+    fn test_sip_p_asserted_identity_comma_separated() {
+        let mut event = EslEvent::new();
+        // RFC 3325: P-Asserted-Identity can carry two identities (one sip:, one tel:)
+        // FreeSWITCH stores the comma-separated value as a single channel variable
+        event.set_header(
+            "variable_sip_P-Asserted-Identity",
+            "<sip:alice@atlanta.example.com>, <tel:+15551234567>",
+        );
+
+        assert_eq!(
+            event.variable_str("sip_P-Asserted-Identity"),
+            Some("<sip:alice@atlanta.example.com>, <tel:+15551234567>")
+        );
+    }
+
+    #[test]
+    fn test_sip_p_asserted_identity_array_format() {
+        let mut event = EslEvent::new();
+        // When FreeSWITCH stores repeated SIP headers via ARRAY format
+        event.push_header(
+            "variable_sip_P-Asserted-Identity",
+            "<sip:alice@atlanta.example.com>",
+        );
+        event.push_header("variable_sip_P-Asserted-Identity", "<tel:+15551234567>");
+
+        let raw = event
+            .header_str("variable_sip_P-Asserted-Identity")
+            .unwrap();
+        assert_eq!(
+            raw,
+            "ARRAY::<sip:alice@atlanta.example.com>|:<tel:+15551234567>"
+        );
+
+        let arr = crate::variables::EslArray::parse(raw).unwrap();
+        assert_eq!(arr.len(), 2);
+        assert_eq!(arr.items()[0], "<sip:alice@atlanta.example.com>");
+        assert_eq!(arr.items()[1], "<tel:+15551234567>");
+    }
+
+    #[test]
+    fn test_sip_header_with_colons_in_uri() {
+        let mut event = EslEvent::new();
+        // SIP URIs contain colons (sip:, sips:) which must not confuse ARRAY parsing
+        event.push_header(
+            "variable_sip_h_Diversion",
+            "<sip:+15551234567@gw.example.com;reason=unconditional>",
+        );
+        event.push_header(
+            "variable_sip_h_Diversion",
+            "<sips:+15559876543@secure.example.com;reason=no-answer;counter=3>",
+        );
+
+        let raw = event
+            .header_str("variable_sip_h_Diversion")
+            .unwrap();
+        let arr = crate::variables::EslArray::parse(raw).unwrap();
+        assert_eq!(arr.len(), 2);
+        assert_eq!(
+            arr.items()[0],
+            "<sip:+15551234567@gw.example.com;reason=unconditional>"
+        );
+        assert_eq!(
+            arr.items()[1],
+            "<sips:+15559876543@secure.example.com;reason=no-answer;counter=3>"
+        );
+    }
+
+    #[test]
+    fn test_sip_p_asserted_identity_plain_format_round_trip() {
+        let mut event = EslEvent::with_type(EslEventType::ChannelCreate);
+        event.set_header("Event-Name", "CHANNEL_CREATE");
+        event.set_header(
+            "variable_sip_P-Asserted-Identity",
+            "<sip:alice@atlanta.example.com>, <tel:+15551234567>",
+        );
+
+        let plain = event.to_plain_format();
+        // The comma-separated value should be percent-encoded on the wire
+        assert!(plain.contains("variable_sip_P-Asserted-Identity:"));
+        // Angle brackets and comma should be encoded
+        assert!(!plain.contains("<sip:alice"));
+    }
+
     #[test]
     fn test_event_typed_accessors_invalid_values() {
         let mut event = EslEvent::new();

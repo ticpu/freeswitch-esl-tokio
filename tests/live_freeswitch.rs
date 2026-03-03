@@ -486,6 +486,168 @@ async fn live_channel_timetable_on_create() {
     );
 }
 
+// --- L11: Repeating SIP header round-trip tests ---
+
+#[tokio::test]
+#[ignore]
+async fn live_sendevent_comma_separated_sip_header() {
+    let (client, mut events, _permit) = connect().await;
+
+    let subclass = format!("esl_test::pai_csv_{}", std::process::id());
+
+    client
+        .subscribe_events_raw(EventFormat::Plain, &format!("CUSTOM {}", subclass))
+        .await
+        .unwrap();
+
+    let mut event = EslEvent::with_type(EslEventType::Custom);
+    event.set_header("Event-Name", "CUSTOM");
+    event.set_header("Event-Subclass", subclass.clone());
+    // RFC 3325 comma-separated format: two identities in one header value
+    event.set_header(
+        "variable_sip_P-Asserted-Identity",
+        "<sip:alice@atlanta.example.com>, <tel:+15551234567>",
+    );
+
+    client
+        .sendevent(event)
+        .await
+        .unwrap();
+
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    while tokio::time::Instant::now() < deadline {
+        match tokio::time::timeout_at(deadline, events.recv()).await {
+            Ok(Some(Ok(evt))) => {
+                if evt.header(EventHeader::EventSubclass) == Some(subclass.as_str()) {
+                    assert_eq!(
+                        evt.variable_str("sip_P-Asserted-Identity"),
+                        Some("<sip:alice@atlanta.example.com>, <tel:+15551234567>"),
+                        "comma-separated P-Asserted-Identity should survive round-trip"
+                    );
+                    return;
+                }
+            }
+            Ok(Some(Err(e))) => panic!("event error: {}", e),
+            Ok(None) => panic!("event stream closed"),
+            Err(_) => break,
+        }
+    }
+    panic!("did not receive custom event with subclass {}", subclass);
+}
+
+#[tokio::test]
+#[ignore]
+async fn live_sendevent_array_sip_header() {
+    use freeswitch_types::EslArray;
+
+    let (client, mut events, _permit) = connect().await;
+
+    let subclass = format!("esl_test::pai_arr_{}", std::process::id());
+
+    client
+        .subscribe_events_raw(EventFormat::Plain, &format!("CUSTOM {}", subclass))
+        .await
+        .unwrap();
+
+    let mut event = EslEvent::with_type(EslEventType::Custom);
+    event.set_header("Event-Name", "CUSTOM");
+    event.set_header("Event-Subclass", subclass.clone());
+    // ARRAY format: repeating SIP header stored as separate values
+    event.push_header(
+        "variable_sip_P-Asserted-Identity",
+        "<sip:alice@atlanta.example.com>",
+    );
+    event.push_header("variable_sip_P-Asserted-Identity", "<tel:+15551234567>");
+
+    client
+        .sendevent(event)
+        .await
+        .unwrap();
+
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    while tokio::time::Instant::now() < deadline {
+        match tokio::time::timeout_at(deadline, events.recv()).await {
+            Ok(Some(Ok(evt))) => {
+                if evt.header(EventHeader::EventSubclass) == Some(subclass.as_str()) {
+                    let raw = evt
+                        .variable_str("sip_P-Asserted-Identity")
+                        .expect("P-Asserted-Identity should be present");
+                    let arr = EslArray::parse(raw).expect("should parse as ARRAY");
+                    assert_eq!(arr.len(), 2, "expected 2 identities in ARRAY");
+                    assert_eq!(arr.items()[0], "<sip:alice@atlanta.example.com>");
+                    assert_eq!(arr.items()[1], "<tel:+15551234567>");
+                    return;
+                }
+            }
+            Ok(Some(Err(e))) => panic!("event error: {}", e),
+            Ok(None) => panic!("event stream closed"),
+            Err(_) => break,
+        }
+    }
+    panic!("did not receive custom event with subclass {}", subclass);
+}
+
+#[tokio::test]
+#[ignore]
+async fn live_sendevent_repeated_diversion_header() {
+    use freeswitch_types::EslArray;
+
+    let (client, mut events, _permit) = connect().await;
+
+    let subclass = format!("esl_test::diversion_{}", std::process::id());
+
+    client
+        .subscribe_events_raw(EventFormat::Plain, &format!("CUSTOM {}", subclass))
+        .await
+        .unwrap();
+
+    let mut event = EslEvent::with_type(EslEventType::Custom);
+    event.set_header("Event-Name", "CUSTOM");
+    event.set_header("Event-Subclass", subclass.clone());
+    // SIP Diversion header (RFC 5806) with history info containing SIP URI params
+    event.push_header(
+        "variable_sip_h_Diversion",
+        "<sip:+15551234567@gw.example.com;reason=unconditional>",
+    );
+    event.push_header(
+        "variable_sip_h_Diversion",
+        "<sip:+15559876543@proxy.example.com;reason=no-answer;counter=3>",
+    );
+
+    client
+        .sendevent(event)
+        .await
+        .unwrap();
+
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    while tokio::time::Instant::now() < deadline {
+        match tokio::time::timeout_at(deadline, events.recv()).await {
+            Ok(Some(Ok(evt))) => {
+                if evt.header(EventHeader::EventSubclass) == Some(subclass.as_str()) {
+                    let raw = evt
+                        .variable_str("sip_h_Diversion")
+                        .expect("Diversion variable should be present");
+                    let arr = EslArray::parse(raw).expect("should parse as ARRAY");
+                    assert_eq!(arr.len(), 2, "expected 2 Diversion entries");
+                    assert_eq!(
+                        arr.items()[0],
+                        "<sip:+15551234567@gw.example.com;reason=unconditional>"
+                    );
+                    assert_eq!(
+                        arr.items()[1],
+                        "<sip:+15559876543@proxy.example.com;reason=no-answer;counter=3>"
+                    );
+                    return;
+                }
+            }
+            Ok(Some(Err(e))) => panic!("event error: {}", e),
+            Ok(None) => panic!("event stream closed"),
+            Err(_) => break,
+        }
+    }
+    panic!("did not receive custom event with subclass {}", subclass);
+}
+
 /// bgapi originate via the builder, wait for BACKGROUND_JOB, return the UUID.
 async fn bgapi_originate_ok(
     client: &EslClient,

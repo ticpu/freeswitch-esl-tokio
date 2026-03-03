@@ -1321,6 +1321,92 @@ async fn bgapi_multiple_jobs_correlated() {
     assert_eq!(matched.len(), 3);
 }
 
+// --- Repeating SIP header wire format tests ---
+
+#[tokio::test]
+async fn test_sip_comma_separated_header_wire_round_trip() {
+    let (mut mock, _client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
+
+    // Simulate a CHANNEL_CREATE with comma-separated P-Asserted-Identity,
+    // as FreeSWITCH would send it from a SIP INVITE with two identities
+    let mut headers = HashMap::new();
+    headers.insert("Unique-ID".to_string(), "pai-test-uuid".to_string());
+    headers.insert(
+        "variable_sip_P-Asserted-Identity".to_string(),
+        "<sip:alice@atlanta.example.com>, <tel:+15551234567>".to_string(),
+    );
+    mock.send_event_plain("CHANNEL_CREATE", &headers)
+        .await;
+
+    let event = recv_event(&mut events).await;
+    assert_eq!(event.event_type(), Some(EslEventType::ChannelCreate));
+    // Comma-separated value should survive percent-encoding round-trip intact
+    assert_eq!(
+        event.variable_str("sip_P-Asserted-Identity"),
+        Some("<sip:alice@atlanta.example.com>, <tel:+15551234567>")
+    );
+}
+
+#[tokio::test]
+async fn test_sip_array_header_wire_round_trip() {
+    use freeswitch_types::EslArray;
+
+    let (mut mock, _client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
+
+    // Simulate an event with ARRAY-formatted repeating SIP header
+    let mut headers = HashMap::new();
+    headers.insert("Unique-ID".to_string(), "pai-array-uuid".to_string());
+    headers.insert(
+        "variable_sip_P-Asserted-Identity".to_string(),
+        "ARRAY::<sip:alice@atlanta.example.com>|:<tel:+15551234567>".to_string(),
+    );
+    mock.send_event_plain("CHANNEL_CREATE", &headers)
+        .await;
+
+    let event = recv_event(&mut events).await;
+    assert_eq!(event.event_type(), Some(EslEventType::ChannelCreate));
+
+    let raw = event
+        .variable_str("sip_P-Asserted-Identity")
+        .expect("P-Asserted-Identity variable should be present");
+    let arr = EslArray::parse(raw).expect("should parse as ARRAY");
+    assert_eq!(arr.len(), 2);
+    assert_eq!(arr.items()[0], "<sip:alice@atlanta.example.com>");
+    assert_eq!(arr.items()[1], "<tel:+15551234567>");
+}
+
+#[tokio::test]
+async fn test_sip_diversion_repeated_header_wire_round_trip() {
+    use freeswitch_types::EslArray;
+
+    let (mut mock, _client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
+
+    // SIP Diversion header (RFC 5806) can repeat with history entries
+    let mut headers = HashMap::new();
+    headers.insert("Unique-ID".to_string(), "diversion-uuid".to_string());
+    headers.insert(
+        "variable_sip_h_Diversion".to_string(),
+        "ARRAY::<sip:+15551234567@gw.example.com;reason=unconditional>|:<sip:+15559876543@proxy.example.com;reason=no-answer;counter=3>".to_string(),
+    );
+    mock.send_event_plain("CHANNEL_CREATE", &headers)
+        .await;
+
+    let event = recv_event(&mut events).await;
+    let raw = event
+        .variable_str("sip_h_Diversion")
+        .expect("Diversion variable should be present");
+    let arr = EslArray::parse(raw).expect("should parse as ARRAY");
+    assert_eq!(arr.len(), 2);
+    assert_eq!(
+        arr.items()[0],
+        "<sip:+15551234567@gw.example.com;reason=unconditional>"
+    );
+    assert_eq!(
+        arr.items()[1],
+        "<sip:+15559876543@proxy.example.com;reason=no-answer;counter=3>"
+    );
+}
+
 // --- Rude rejection ---
 
 #[tokio::test]
