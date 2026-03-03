@@ -633,6 +633,11 @@ impl Originate {
         &self.target
     }
 
+    /// Mutable reference to the originate target.
+    pub fn target_mut(&mut self) -> &mut OriginateTarget {
+        &mut self.target
+    }
+
     /// The dialplan type, if explicitly set.
     pub fn dialplan_type(&self) -> Option<&DialplanType> {
         self.dialplan

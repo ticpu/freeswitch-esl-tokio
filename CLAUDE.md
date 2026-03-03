@@ -58,6 +58,11 @@ or modifying public structs to verify external construction still works.
 - **Crate root re-exports: core and dptools only.** Module-specific types
   (conference, sofia) stay in their submodules.
 
+- **`_mut()` accessors on serde command builders.** Structs that are both
+  serde-deserializable and command builders (e.g. `Originate`, endpoint types)
+  must pair each read accessor for an owned field (`&T`, `&Enum`) with a
+  `_mut()` variant. Callers deserialize from config then need to tweak fields.
+
 Follow existing patterns in the codebase for `impl Into<String>`, `Duration`,
 `impl IntoIterator<Item = impl Borrow<T>>`, `HeaderLookup`, `From<Concrete>`.
 
