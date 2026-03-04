@@ -50,6 +50,14 @@ define_header_enum! {
         DtmfDigit => "DTMF-Digit",
         Priority => "priority",
         LogLevel => "Log-Level",
+        /// SIP NOTIFY body content (JSON payload from `NOTIFY_IN` events).
+        PlData => "pl_data",
+        /// SIP event package name from `NOTIFY_IN` events (e.g. `emergency-AbandonedCall`).
+        SipEvent => "event",
+        /// SIP content type from `NOTIFY_IN` events.
+        SipContentType => "sip_content_type",
+        /// Gateway that received the SIP NOTIFY.
+        GatewayName => "gateway_name",
     }
 }
 
@@ -139,6 +147,10 @@ mod tests {
             EventHeader::DtmfDigit,
             EventHeader::Priority,
             EventHeader::LogLevel,
+            EventHeader::PlData,
+            EventHeader::SipEvent,
+            EventHeader::SipContentType,
+            EventHeader::GatewayName,
         ];
         for v in variants {
             let wire = v.to_string();

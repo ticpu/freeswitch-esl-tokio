@@ -128,6 +128,27 @@ pub trait HeaderLookup {
         self.header(EventHeader::EventSubclass)
     }
 
+    /// `pl_data` header — SIP NOTIFY body content from `NOTIFY_IN` events.
+    ///
+    /// Contains the JSON payload (already percent-decoded by the ESL parser).
+    /// For NG9-1-1 events this is the inner object without the wrapper key
+    /// (FreeSWITCH strips it).
+    fn pl_data(&self) -> Option<&str> {
+        self.header(EventHeader::PlData)
+    }
+
+    /// `event` header — SIP event package name from `NOTIFY_IN` events.
+    ///
+    /// Examples: `emergency-AbandonedCall`, `emergency-ServiceState`.
+    fn sip_event(&self) -> Option<&str> {
+        self.header(EventHeader::SipEvent)
+    }
+
+    /// `gateway_name` header — gateway that received a SIP NOTIFY.
+    fn gateway_name(&self) -> Option<&str> {
+        self.header(EventHeader::GatewayName)
+    }
+
     /// Parse the `Channel-State` header into a [`ChannelState`].
     ///
     /// Returns `Ok(None)` if the header is absent, `Err` if present but unparseable.
@@ -499,6 +520,21 @@ mod tests {
         assert_eq!(s.callee_id_name(), None);
         assert_eq!(s.event_subclass(), None);
         assert_eq!(s.job_uuid(), None);
+        assert_eq!(s.pl_data(), None);
+        assert_eq!(s.sip_event(), None);
+        assert_eq!(s.gateway_name(), None);
+    }
+
+    #[test]
+    fn notify_in_headers() {
+        let s = store_with(&[
+            ("pl_data", r#"{"invite":"INVITE ..."}"#),
+            ("event", "emergency-AbandonedCall"),
+            ("gateway_name", "ng911-bcf"),
+        ]);
+        assert_eq!(s.pl_data(), Some(r#"{"invite":"INVITE ..."}"#));
+        assert_eq!(s.sip_event(), Some("emergency-AbandonedCall"));
+        assert_eq!(s.gateway_name(), Some("ng911-bcf"));
     }
 
     #[test]
