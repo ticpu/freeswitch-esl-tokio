@@ -43,5 +43,5 @@ pub use headers::{EventHeader, ParseEventHeaderError};
 pub use lookup::HeaderLookup;
 pub use variables::{
     ChannelVariable, EslArray, MultipartBody, MultipartItem, ParseChannelVariableError,
-    VariableName,
+    SipCallInfo, SipCallInfoEntry, SipCallInfoError, VariableName,
 };

@@ -3,12 +3,14 @@
 
 mod core;
 mod esl_array;
+mod sip_call_info;
 mod sip_invite;
 mod sip_multipart;
 mod sofia;
 
 pub use self::core::{ChannelVariable, ParseChannelVariableError};
 pub use esl_array::EslArray;
+pub use sip_call_info::{SipCallInfo, SipCallInfoEntry, SipCallInfoError};
 pub use sip_invite::{ParseSipInviteHeaderError, SipInviteHeader};
 pub use sip_multipart::{MultipartBody, MultipartItem};
 pub use sofia::{ParseSofiaVariableError, SofiaVariable};
