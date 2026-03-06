@@ -44,10 +44,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await
     {
         Ok(response) => {
+            // api_result() strips +OK prefix for action commands,
+            // returns raw body for query commands like `status`.
             info!("FreeSWITCH Status:");
-            if let Some(body) = response.body() {
-                println!("{}", body);
-            }
+            println!(
+                "{}",
+                response
+                    .api_result()
+                    .unwrap_or("(empty)")
+            );
         }
         Err(e) => error!("Failed to get status: {}", e),
     }
@@ -58,9 +63,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         Ok(response) => {
             info!("Channel Count:");
-            if let Some(body) = response.body() {
-                println!("{}", body);
-            }
+            println!(
+                "{}",
+                response
+                    .api_result()
+                    .unwrap_or("(empty)")
+            );
         }
         Err(e) => error!("Failed to get channel count: {}", e),
     }

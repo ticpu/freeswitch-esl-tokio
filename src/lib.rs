@@ -21,7 +21,7 @@
 //!     let (client, mut events) = EslClient::connect("localhost", DEFAULT_ESL_PORT, DEFAULT_ESL_PASSWORD).await?;
 //!
 //!     let response = client.api("status").await?;
-//!     println!("Status: {}", response.body().unwrap_or("No body"));
+//!     println!("Status: {}", response.api_result()?);
 //!
 //!     Ok(())
 //! }

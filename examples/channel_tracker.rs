@@ -482,7 +482,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await
     {
         Ok(response) => {
-            if let Some(body) = response.body() {
+            // show channels as json returns raw JSON (no +OK prefix)
+            if let Ok(body) = response.api_result() {
                 let uuids = tracker.bootstrap(body);
                 for uuid in &uuids {
                     request_dump(&client, &mut tracker, uuid).await;

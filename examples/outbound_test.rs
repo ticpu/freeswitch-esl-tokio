@@ -57,23 +57,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let resp = inbound
         .api(&originate.to_string())
         .await?;
-    if resp.is_success()
-        || resp
-            .body()
-            .is_some_and(|b| b.starts_with("+OK"))
-    {
-        step_ok("originate call");
-        pass += 1;
-    } else {
-        step_fail(
-            "originate call",
-            &format!(
-                "{:?}",
-                resp.reply_text()
-                    .or(resp.body())
-            ),
-        );
-        fail += 1;
+    match resp.api_result() {
+        Ok(_) => {
+            step_ok("originate call");
+            pass += 1;
+        }
+        Err(e) => {
+            step_fail("originate call", &format!("{}", e));
+            fail += 1;
+        }
     }
 
     // Step 4: Accept outbound connection

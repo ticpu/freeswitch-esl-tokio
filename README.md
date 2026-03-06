@@ -31,7 +31,7 @@ detection.
 
 ```rust
 use std::time::Duration;
-use freeswitch_esl_tokio::*;
+use freeswitch_esl_tokio::{parse_api_body, *};
 use freeswitch_esl_tokio::commands::*;
 
 #[tokio::main]
@@ -72,7 +72,10 @@ async fn main() -> Result<(), EslError> {
                 break;
             }
             EslEventType::BackgroundJob => {
-                println!("bgapi result: {}", event.body().unwrap_or(""));
+                match parse_api_body(event.body().unwrap_or("")) {
+                    Ok(data) => println!("bgapi result: {}", data),
+                    Err(e) => eprintln!("bgapi error: {}", e),
+                }
             }
             _ => {}
         }
@@ -137,7 +140,8 @@ See [docs/design-rationale.md](docs/design-rationale.md) for the full story.
 let (client, mut events) = EslClient::connect("localhost", 8021, "ClueCon").await?;
 
 let response = client.api("status").await?;
-println!("{}", response.body_string());
+// api_result() strips +OK prefix for action commands, returns raw body for queries
+println!("{}", response.api_result()?);
 ```
 
 Multi-tenant with per-user ACL:
@@ -184,12 +188,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### Background API calls
 
-`api()` blocks until FreeSWITCH finishes the command (subject to command
-timeout). `bgapi()` returns immediately with a Job-UUID; the result arrives
-as a `BACKGROUND_JOB` event:
+`api()` **blocks the entire ESL socket** until FreeSWITCH finishes the
+command -- no events are delivered and no other commands can be sent on the
+connection until it returns. Use `bgapi()` for anything that may take time
+(originate, conference operations, bulk queries). `bgapi()` returns
+immediately with a Job-UUID; the result arrives as a `BACKGROUND_JOB` event:
 
 ```rust
-use freeswitch_esl_tokio::HeaderLookup;
+use freeswitch_esl_tokio::{parse_api_body, HeaderLookup};
 
 client.subscribe_events(EventFormat::Plain, &[
     EslEventType::BackgroundJob,
@@ -204,8 +210,12 @@ while let Some(Ok(event)) = events.recv().await {
     if event.is_event_type(EslEventType::BackgroundJob)
         && event.job_uuid() == Some(&job_uuid)
     {
-        // BACKGROUND_JOB always has a body; most other event types don't
-        println!("{}", event.body().unwrap());
+        // parse_api_body handles +OK/-ERR prefixed and raw responses
+        let body = event.body().unwrap();
+        match parse_api_body(body) {
+            Ok(data) => println!("{}", data),
+            Err(e) => eprintln!("command failed: {}", e),
+        }
         break;
     }
 }

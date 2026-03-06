@@ -5,8 +5,8 @@
 
 use freeswitch_esl_tokio::commands::{LoopbackEndpoint, UuidGetVar, UuidKill, UuidSetVar};
 use freeswitch_esl_tokio::{
-    Application, ConnectionStatus, DialplanType, DisconnectReason, Endpoint, EslClient,
-    EslConnectOptions, EslError, EslEvent, EslEventPriority, EslEventType, EventFormat,
+    parse_api_body, Application, ConnectionStatus, DialplanType, DisconnectReason, Endpoint,
+    EslClient, EslConnectOptions, EslError, EslEvent, EslEventPriority, EslEventType, EventFormat,
     EventHeader, HeaderLookup, Originate, ReplyStatus, DEFAULT_ESL_PASSWORD,
 };
 use std::time::Duration;
@@ -378,13 +378,13 @@ async fn live_api_err_body() {
         .api("nonexistent_command_xyz")
         .await
         .unwrap();
-    let body = resp
-        .body()
-        .expect("api error should have body");
+    let err = resp
+        .api_result()
+        .unwrap_err();
     assert!(
-        body.contains("-ERR") || body.contains("-USAGE"),
-        "expected error in body: {}",
-        body
+        matches!(err, EslError::CommandFailed { .. }),
+        "expected CommandFailed, got: {}",
+        err
     );
 }
 
@@ -406,28 +406,13 @@ async fn live_channel_timetable_on_create() {
         .api("originate null/test &park()")
         .await
         .unwrap();
-    let body = resp
-        .body()
-        .unwrap_or("");
-    assert!(
-        body.starts_with("+OK") || body.contains("-"),
-        "originate response: {}",
-        body
-    );
-
-    if !body.starts_with("+OK") {
-        eprintln!(
-            "originate failed ({}), skipping timetable test",
-            body.trim()
-        );
-        return;
-    }
-
-    // Extract the UUID from "+OK <uuid>"
-    let uuid = body
-        .trim()
-        .strip_prefix("+OK ")
-        .expect("expected UUID after +OK");
+    let uuid = match resp.api_result() {
+        Ok(uuid) => uuid.to_string(),
+        Err(e) => {
+            eprintln!("originate failed ({}), skipping timetable test", e);
+            return;
+        }
+    };
 
     // Wait for CHANNEL_CREATE with our UUID
     let deadline = Instant::now() + Duration::from_secs(5);
@@ -436,7 +421,7 @@ async fn live_channel_timetable_on_create() {
         match tokio::time::timeout_at(deadline, events.recv()).await {
             Ok(Some(Ok(evt))) => {
                 if evt.event_type() == Some(EslEventType::ChannelCreate)
-                    && evt.unique_id() == Some(uuid)
+                    && evt.unique_id() == Some(&uuid)
                 {
                     let tt = evt
                         .caller_timetable()
@@ -674,12 +659,8 @@ async fn bgapi_originate_ok(
                     let body = evt
                         .body()
                         .expect("BACKGROUND_JOB should have a body");
-                    assert!(body.starts_with("+OK"), "originate failed: {}", body.trim());
-                    return body
-                        .trim()
-                        .strip_prefix("+OK ")
-                        .expect("expected UUID after +OK")
-                        .to_string();
+                    let uuid = parse_api_body(body).expect("originate failed");
+                    return uuid.to_string();
                 }
             }
             Ok(Some(Err(e))) => panic!("event error: {}", e),
@@ -1038,24 +1019,19 @@ async fn live_uuid_setvar_getvar_round_trip() {
         .api(&set_cmd.to_string())
         .await
         .unwrap();
-    assert!(
-        resp.body()
-            .unwrap_or("")
-            .contains("+OK"),
-        "uuid_setvar failed: {:?}",
-        resp.body()
-    );
+    resp.api_result()
+        .expect("uuid_setvar failed");
 
-    // Get the variable back
+    // Get the variable back (uuid_getvar returns the raw value, no +OK prefix)
     let get_cmd = UuidGetVar::new(&uuid, "esl_test_var");
     let resp = client
         .api(&get_cmd.to_string())
         .await
         .unwrap();
     assert_eq!(
-        resp.body()
-            .map(|b| b.trim()),
-        Some("hello_world"),
+        resp.api_result()
+            .unwrap(),
+        "hello_world",
         "uuid_getvar should return the value we set"
     );
 
@@ -1090,13 +1066,8 @@ async fn live_uuid_kill_with_cause() {
         .api(&kill_cmd.to_string())
         .await
         .unwrap();
-    assert!(
-        resp.body()
-            .unwrap_or("")
-            .contains("+OK"),
-        "uuid_kill failed: {:?}",
-        resp.body()
-    );
+    resp.api_result()
+        .expect("uuid_kill failed");
 
     // Verify the hangup cause in the CHANNEL_HANGUP_COMPLETE event
     let deadline = Instant::now() + Duration::from_secs(5);
@@ -1388,14 +1359,9 @@ async fn live_header_normalization() {
         .api(&originate.to_string())
         .await
         .expect("originate failed");
-    let body = resp
-        .body()
-        .unwrap_or("");
-    assert!(body.starts_with("+OK"), "originate failed: {body}");
-    let uuid = body
-        .trim()
-        .strip_prefix("+OK ")
-        .expect("expected UUID")
+    let uuid = resp
+        .api_result()
+        .expect("originate returned error")
         .to_string();
 
     let deadline = Instant::now() + Duration::from_secs(10);
@@ -1471,14 +1437,9 @@ async fn live_codec_header_normalization() {
         .api(&originate.to_string())
         .await
         .expect("originate failed");
-    let body = resp
-        .body()
-        .unwrap_or("");
-    assert!(body.starts_with("+OK"), "originate failed: {body}");
-    let uuid = body
-        .trim()
-        .strip_prefix("+OK ")
-        .expect("expected UUID")
+    let uuid = resp
+        .api_result()
+        .expect("originate returned error")
         .to_string();
 
     let deadline = Instant::now() + Duration::from_secs(10);

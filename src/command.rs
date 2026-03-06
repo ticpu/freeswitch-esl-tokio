@@ -42,11 +42,22 @@ use std::time::Duration;
 /// # }
 /// ```
 pub fn parse_api_body(body: &str) -> EslResult<&str> {
-    // Stub: always fails — TDD red phase
-    let _ = body;
-    Err(EslError::protocol_error(
-        "parse_api_body not yet implemented",
-    ))
+    let trimmed = body.trim();
+    if trimmed.is_empty() {
+        return Err(EslError::protocol_error("api response body is empty"));
+    }
+    if let Some(rest) = trimmed.strip_prefix("+OK") {
+        Ok(rest
+            .strip_prefix(' ')
+            .unwrap_or(rest)
+            .trim())
+    } else if trimmed.starts_with("-ERR") || trimmed.starts_with("-USAGE") {
+        Err(EslError::CommandFailed {
+            reply_text: trimmed.to_string(),
+        })
+    } else {
+        Ok(trimmed)
+    }
 }
 
 /// Validate that a user-provided string contains no newline characters.

@@ -19,9 +19,9 @@ use freeswitch_esl_tokio::commands::{
 use std::time::Duration;
 
 use freeswitch_esl_tokio::{
-    Application, DialplanType, Endpoint, EslClient, EslError, EslEventType, EventFormat,
-    EventHeader, HeaderLookup, Originate, Variables, VariablesType, DEFAULT_ESL_PASSWORD,
-    DEFAULT_ESL_PORT,
+    parse_api_body, Application, DialplanType, Endpoint, EslClient, EslError, EslEventType,
+    EventFormat, EventHeader, HeaderLookup, Originate, Variables, VariablesType,
+    DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT,
 };
 use tracing::{error, info};
 
@@ -373,21 +373,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if event.job_uuid() != Some(job_uuid.as_str()) {
                     continue; // unrelated bgapi job
                 }
-                // The body of a BACKGROUND_JOB event is the raw API response text,
-                // not an EslResponse -- raw "+OK"/ "-ERR" matching is appropriate here.
-                let result = event
+                // BACKGROUND_JOB body has the same +OK/-ERR format as api responses.
+                // parse_api_body() handles all variants (including raw query data).
+                let body = event
                     .body()
                     .unwrap(); // BACKGROUND_JOB always has a body
-                if let Some(uuid) = result.strip_prefix("+OK ") {
-                    call_uuid = Some(
-                        uuid.trim()
-                            .to_string(),
-                    );
-                    info!("call created: {}", uuid.trim());
-                } else {
-                    // -ERR <cause> -- originate failed before any channel was created
-                    error!("originate failed: {}", result.trim());
-                    break;
+                match parse_api_body(body) {
+                    Ok(uuid) => {
+                        call_uuid = Some(uuid.to_string());
+                        info!("call created: {}", uuid);
+                    }
+                    Err(e) => {
+                        error!("originate failed: {}", e);
+                        break;
+                    }
                 }
             }
             Some(EslEventType::ChannelCreate) => {

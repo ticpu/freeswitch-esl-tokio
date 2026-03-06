@@ -1014,15 +1014,23 @@ impl EslClient {
             .map(|_| ())
     }
 
-    /// Execute API command. Blocks until FreeSWITCH completes the command.
+    /// Execute API command synchronously.
     ///
-    /// FreeSWITCH blocks the ESL socket during `api` — no events are delivered
-    /// until it returns. Use [`bgapi`](Self::bgapi) for long-running commands.
+    /// **Warning: this blocks the entire ESL socket.** FreeSWITCH processes
+    /// `api` commands inline — no events are delivered and no other commands
+    /// can be sent on this connection until the command finishes. For commands
+    /// that may take a long time (`originate`, `conference`, bulk operations),
+    /// use [`bgapi`](Self::bgapi) instead so events keep flowing.
+    ///
+    /// Use [`EslResponse::api_result`] to parse the response body, or
+    /// [`parse_api_body`](crate::parse_api_body) for `BACKGROUND_JOB` event
+    /// bodies.
     ///
     /// ```rust,no_run
     /// # async fn example(client: &freeswitch_esl_tokio::EslClient) -> Result<(), freeswitch_esl_tokio::EslError> {
     /// let resp = client.api("status").await?;
-    /// println!("{}", resp.body().unwrap_or(""));
+    /// let status = resp.api_result()?;
+    /// println!("{}", status);
     /// # Ok(())
     /// # }
     /// ```
