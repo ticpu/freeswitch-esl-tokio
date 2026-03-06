@@ -81,8 +81,49 @@ define_header_enum! {
 }
 
 /// Normalize a header key to its canonical form for case-insensitive storage.
+///
+/// FreeSWITCH's C ESL uses case-insensitive header lookups (`strcasecmp`), but
+/// stores header names verbatim. Multiple C code paths emit the same logical
+/// header with different casing (e.g. `switch_channel.c` sends `Unique-ID`
+/// while `switch_event.c` sends `unique-id`). This function normalizes keys
+/// so that both resolve to the same `HashMap` entry.
+///
+/// **Strategy:**
+/// 1. Known [`EventHeader`] variants are matched first (case-insensitive) and
+///    returned in their canonical wire form (e.g. `unique-id` → `Unique-ID`).
+/// 2. Unknown keys containing underscores are returned **unchanged** — these
+///    are channel variables (`variable_*`) or `sip_h_*` passthrough headers
+///    where the suffix preserves the original SIP header casing.
+/// 3. Unknown dash-separated keys are Title-Cased to match FreeSWITCH's
+///    dominant convention for event and framing headers.
 pub fn normalize_header_key(raw: &str) -> String {
-    raw.to_string()
+    if let Ok(eh) = raw.parse::<EventHeader>() {
+        return eh
+            .as_str()
+            .to_string();
+    }
+    if raw.contains('_') {
+        raw.to_string()
+    } else {
+        title_case_dashes(raw)
+    }
+}
+
+fn title_case_dashes(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut capitalize_next = true;
+    for c in s.chars() {
+        if c == '-' {
+            result.push('-');
+            capitalize_next = true;
+        } else if capitalize_next {
+            result.push(c.to_ascii_uppercase());
+            capitalize_next = false;
+        } else {
+            result.push(c.to_ascii_lowercase());
+        }
+    }
+    result
 }
 
 #[cfg(test)]

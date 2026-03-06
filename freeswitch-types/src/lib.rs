@@ -39,7 +39,7 @@ pub use event::{
     EslEvent, EslEventPriority, EslEventType, EventFormat, ParseEventFormatError,
     ParseEventTypeError, ParsePriorityError,
 };
-pub use headers::{EventHeader, ParseEventHeaderError};
+pub use headers::{normalize_header_key, EventHeader, ParseEventHeaderError};
 pub use lookup::HeaderLookup;
 pub use variables::{
     ChannelVariable, EslArray, MultipartBody, MultipartItem, ParseChannelVariableError,

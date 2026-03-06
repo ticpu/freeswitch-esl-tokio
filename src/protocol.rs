@@ -11,7 +11,7 @@ use crate::{
     },
     error::{EslError, EslResult},
     event::{EslEvent, EslEventType, EventFormat},
-    headers::EventHeader,
+    headers::{normalize_header_key, EventHeader},
 };
 use percent_encoding::percent_decode_str;
 use std::collections::HashMap;
@@ -246,9 +246,7 @@ impl EslParser {
             }
 
             if let Some(colon_pos) = line.find(':') {
-                let key = line[..colon_pos]
-                    .trim()
-                    .to_string();
+                let key = normalize_header_key(line[..colon_pos].trim());
                 let raw_value = line[colon_pos + 1..].trim();
                 let value = percent_decode_str(raw_value)
                     .decode_utf8()
@@ -350,9 +348,7 @@ impl EslParser {
                 continue;
             }
             if let Some(colon_pos) = line.find(':') {
-                let key = line[..colon_pos]
-                    .trim()
-                    .to_string();
+                let key = normalize_header_key(line[..colon_pos].trim());
                 let raw_value = line[colon_pos + 1..].trim();
                 let value = percent_decode_str(raw_value)
                     .decode_utf8()
