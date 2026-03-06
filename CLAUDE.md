@@ -105,6 +105,7 @@ cargo fmt --all
 cargo clippy --workspace --release -- -D warnings
 cargo test --workspace --release
 cargo build --workspace --release
+cargo build --examples
 cargo semver-checks check-release -p freeswitch-types
 cargo semver-checks check-release -p freeswitch-esl-tokio
 cargo publish --dry-run -p freeswitch-types

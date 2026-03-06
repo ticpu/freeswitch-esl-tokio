@@ -454,6 +454,10 @@ impl EslParser {
         let mut in_headers = false;
         let mut current_tag: Option<String> = None;
         let mut in_body = false;
+        // Accumulator for text content: quick-xml 0.39 splits text around
+        // entity references (e.g. "Smith &amp; Jones" becomes Text, GeneralRef,
+        // Text), so we must accumulate fragments and flush on End tags.
+        let mut text_buf = String::new();
 
         loop {
             match reader.read_event() {
@@ -466,7 +470,10 @@ impl EslParser {
                     match tag.as_str() {
                         "headers" => in_headers = true,
                         "body" => in_body = true,
-                        _ if in_headers => current_tag = Some(tag),
+                        _ if in_headers => {
+                            text_buf.clear();
+                            current_tag = Some(tag);
+                        }
                         _ => {}
                     }
                 }
@@ -478,19 +485,35 @@ impl EslParser {
                     .to_string();
                     match tag.as_str() {
                         "headers" => in_headers = false,
-                        "body" => in_body = false,
-                        _ if in_headers => current_tag = None,
+                        "body" => {
+                            if !text_buf.is_empty() {
+                                event.set_body(std::mem::take(&mut text_buf));
+                            }
+                            in_body = false;
+                        }
+                        _ if in_headers => {
+                            if let Some(ref tag) = current_tag {
+                                if !text_buf.is_empty() {
+                                    event.set_header(tag.clone(), std::mem::take(&mut text_buf));
+                                }
+                            }
+                            current_tag = None;
+                        }
                         _ => {}
                     }
                 }
                 Ok(XmlEvent::Text(ref e)) => {
-                    let text = e
-                        .unescape()?
-                        .to_string();
-                    if in_body {
-                        event.set_body(text);
-                    } else if let Some(ref tag) = current_tag {
-                        event.set_header(tag.clone(), text);
+                    let decoded = e
+                        .decode()
+                        .map_err(quick_xml::Error::from)?;
+                    if in_body || current_tag.is_some() {
+                        text_buf.push_str(&decoded);
+                    }
+                }
+                Ok(XmlEvent::GeneralRef(ref e)) => {
+                    if in_body || current_tag.is_some() {
+                        let resolved = Self::resolve_entity(e)?;
+                        text_buf.push_str(&resolved);
                     }
                 }
                 Ok(XmlEvent::Eof) => break,
@@ -507,6 +530,23 @@ impl EslParser {
         }
 
         Ok(event)
+    }
+
+    /// Resolve an XML entity reference (`&name;` or `&#num;`) to its string value.
+    fn resolve_entity(entity: &quick_xml::events::BytesRef<'_>) -> EslResult<String> {
+        if let Some(ch) = entity.resolve_char_ref()? {
+            return Ok(ch.to_string());
+        }
+        let name = entity
+            .decode()
+            .map_err(quick_xml::Error::from)?;
+        match quick_xml::escape::resolve_xml_entity(&name) {
+            Some(s) => Ok(s.to_string()),
+            None => Err(EslError::protocol_error(format!(
+                "unknown XML entity: &{};",
+                name
+            ))),
+        }
     }
 }
 

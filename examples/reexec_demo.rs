@@ -15,7 +15,7 @@ mod demo {
     use freeswitch_esl_tokio::{
         EslClient, EslError, EslEventType, EventFormat, DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT,
     };
-    use std::os::unix::io::FromRawFd;
+    use std::os::unix::io::BorrowedFd;
     use tracing::{error, info};
 
     pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
@@ -92,15 +92,17 @@ mod demo {
         // original fd registered. We dup() to get a clean fd not known to
         // the reactor, then forget the client (leaks the old registration,
         // but keeps the TCP connection alive by not sending FIN).
-        let dup_fd = nix::unistd::dup(fd).expect("dup failed");
+        // Safety: fd is a valid open descriptor from teardown_for_reexec().
+        // We borrow it for dup() without taking ownership (client still holds it).
+        let dup_fd = nix::unistd::dup(unsafe { BorrowedFd::borrow_raw(fd) }).expect("dup failed");
         std::mem::forget(client);
 
         // Phase 3: adopt the stream (simulating new process)
         info!("Adopting stream (simulating new process)...");
 
         // Reconstruct a TcpStream from the dup'd fd.
-        // Safety: dup_fd is exclusively ours, not registered with any reactor.
-        let std_stream = unsafe { std::net::TcpStream::from_raw_fd(dup_fd) };
+        // OwnedFd transfers ownership to TcpStream (no close-on-drop race).
+        let std_stream = std::net::TcpStream::from(dup_fd);
         std_stream.set_nonblocking(true)?;
         let tokio_stream = tokio::net::TcpStream::from_std(std_stream)?;
 
