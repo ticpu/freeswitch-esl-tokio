@@ -375,6 +375,11 @@ impl Application {
         }
     }
 
+    /// Park the channel (hold in place without bridging).
+    pub fn park() -> Self {
+        Self::simple("park")
+    }
+
     /// Format as inline (`name:args`) or XML (`&name(args)`) syntax.
     pub fn to_string_with_dialplan(&self, dialplan: &DialplanType) -> String {
         match dialplan {

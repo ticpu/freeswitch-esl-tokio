@@ -1363,3 +1363,168 @@ async fn live_bgapi_single_round_trip() {
         }
     }
 }
+
+/// Verify that header key normalization works against real FreeSWITCH.
+///
+/// FreeSWITCH emits headers with inconsistent casing from multiple C code paths.
+/// This test confirms that known EventHeader variants resolve, no duplicate keys
+/// exist after normalization, and channel variables preserve underscore keys.
+#[tokio::test]
+#[ignore]
+async fn live_header_normalization() {
+    let (client, mut events, _permit) = connect().await;
+
+    client
+        .subscribe_events(EventFormat::Plain, &[EslEventType::ChannelCreate])
+        .await
+        .expect("subscribe failed");
+
+    // api originate is synchronous — events are queued while it blocks
+    let originate = Originate::application(
+        Endpoint::from(LoopbackEndpoint::new("9199")),
+        Application::park(),
+    );
+    let resp = client
+        .api(&originate.to_string())
+        .await
+        .expect("originate failed");
+    let body = resp
+        .body()
+        .unwrap_or("");
+    assert!(body.starts_with("+OK"), "originate failed: {body}");
+    let uuid = body
+        .trim()
+        .strip_prefix("+OK ")
+        .expect("expected UUID")
+        .to_string();
+
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let mut saw_channel_create = false;
+
+    loop {
+        match tokio::time::timeout_at(deadline, events.recv()).await {
+            Ok(Some(Ok(evt))) => {
+                if evt.event_type() != Some(EslEventType::ChannelCreate) {
+                    continue;
+                }
+
+                // Known EventHeader lookups must work
+                assert!(evt
+                    .header(EventHeader::UniqueId)
+                    .is_some());
+                assert!(evt
+                    .header(EventHeader::ChannelState)
+                    .is_some());
+                assert!(evt
+                    .header(EventHeader::EventName)
+                    .is_some());
+
+                // No duplicate keys (normalization collapsed different casings)
+                let headers = evt.headers();
+                let unique_lower: std::collections::HashSet<String> = headers
+                    .keys()
+                    .map(|k| k.to_ascii_lowercase())
+                    .collect();
+                assert_eq!(
+                    headers.len(),
+                    unique_lower.len(),
+                    "duplicate keys with different casing found in headers"
+                );
+
+                // Channel variables preserve underscore keys
+                if let Some(dir) = evt.variable_str("direction") {
+                    assert!(!dir.is_empty());
+                }
+
+                saw_channel_create = true;
+                break;
+            }
+            Ok(Some(Err(e))) => panic!("event error: {e}"),
+            Ok(None) => panic!("connection closed before CHANNEL_CREATE"),
+            Err(_) => break,
+        }
+    }
+
+    kill_channel(&client, &uuid).await;
+    assert!(saw_channel_create, "never received CHANNEL_CREATE event");
+}
+
+/// Verify that CODEC events have normalized codec headers.
+///
+/// switch_core_codec.c emits lowercase headers while switch_channel.c
+/// emits Title-Case — both should normalize to the same canonical key.
+#[tokio::test]
+#[ignore]
+async fn live_codec_header_normalization() {
+    let (client, mut events, _permit) = connect().await;
+
+    client
+        .subscribe_events(EventFormat::Plain, &[EslEventType::Codec])
+        .await
+        .expect("subscribe failed");
+
+    let originate = Originate::application(
+        Endpoint::from(LoopbackEndpoint::new("9199")),
+        Application::park(),
+    );
+    let resp = client
+        .api(&originate.to_string())
+        .await
+        .expect("originate failed");
+    let body = resp
+        .body()
+        .unwrap_or("");
+    assert!(body.starts_with("+OK"), "originate failed: {body}");
+    let uuid = body
+        .trim()
+        .strip_prefix("+OK ")
+        .expect("expected UUID")
+        .to_string();
+
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let mut saw_codec = false;
+
+    loop {
+        match tokio::time::timeout_at(deadline, events.recv()).await {
+            Ok(Some(Ok(evt))) => {
+                if evt.event_type() != Some(EslEventType::Codec) {
+                    continue;
+                }
+
+                // Codec headers accessible via typed API
+                if let Some(codec) = evt.header(EventHeader::ChannelReadCodecName) {
+                    assert!(!codec.is_empty());
+                }
+
+                // No duplicate keys after normalization
+                let headers = evt.headers();
+                let unique_lower: std::collections::HashSet<String> = headers
+                    .keys()
+                    .map(|k| k.to_ascii_lowercase())
+                    .collect();
+                assert_eq!(
+                    headers.len(),
+                    unique_lower.len(),
+                    "CODEC event has duplicate keys with different casing: {:?}",
+                    headers
+                        .keys()
+                        .filter(|k| {
+                            headers
+                                .keys()
+                                .any(|other| other != *k && other.eq_ignore_ascii_case(k))
+                        })
+                        .collect::<Vec<_>>()
+                );
+
+                saw_codec = true;
+                break;
+            }
+            Ok(Some(Err(e))) => panic!("event error: {e}"),
+            Ok(None) => panic!("connection closed before CODEC event"),
+            Err(_) => break,
+        }
+    }
+
+    kill_channel(&client, &uuid).await;
+    assert!(saw_codec, "never received CODEC event");
+}
