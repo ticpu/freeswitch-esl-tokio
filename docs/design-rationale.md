@@ -219,6 +219,15 @@ SIP peer. Lowercasing these would break outbound header passthrough, since
 `sofia_glue_get_extra_headers()` strips the prefix and emits the remainder
 as the SIP header name on the wire.
 
+Normalization applies at every entry point: the wire parser, `set_header()`,
+and serde deserialization all funnel through `normalize_header_key()`.
+`EslEvent` maintains an `original_keys` alias map (`original → normalized`)
+populated when the original key differs from its normalized form, so that
+`header_str("unique-id")` resolves to the `"Unique-ID"` entry without
+allocating on every lookup — one extra hash probe in the fallback path.
+The alias map is derived state (`#[serde(skip)]`), rebuilt during
+deserialization by routing all headers through `set_header()`.
+
 ## Command builders as pure Display types
 
 Command builders in `commands/`, `app/`, and `variables/` implement `Display`

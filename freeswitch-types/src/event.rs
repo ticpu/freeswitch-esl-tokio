@@ -1161,6 +1161,100 @@ mod tests {
         assert!(!plain.contains("<sip:alice"));
     }
 
+    // --- Header key normalization on EslEvent ---
+    // set_header() normalizes keys so lookups via header(EventHeader::X)
+    // and header_str() work regardless of the casing used at insertion.
+
+    #[test]
+    fn set_header_normalizes_known_enum_variant() {
+        let mut event = EslEvent::new();
+        event.set_header("unique-id", "abc-123");
+        assert_eq!(event.header(EventHeader::UniqueId), Some("abc-123"));
+    }
+
+    #[test]
+    fn set_header_normalizes_codec_header() {
+        let mut event = EslEvent::new();
+        event.set_header("channel-read-codec-bit-rate", "128000");
+        assert_eq!(
+            event.header(EventHeader::ChannelReadCodecBitRate),
+            Some("128000")
+        );
+    }
+
+    #[test]
+    fn header_str_finds_by_original_key() {
+        let mut event = EslEvent::new();
+        event.set_header("unique-id", "abc-123");
+        // Lookup by original non-canonical key should still work
+        assert_eq!(event.header_str("unique-id"), Some("abc-123"));
+        // Lookup by canonical key also works
+        assert_eq!(event.header_str("Unique-ID"), Some("abc-123"));
+    }
+
+    #[test]
+    fn header_str_finds_unknown_dash_header_by_original() {
+        let mut event = EslEvent::new();
+        event.set_header("x-custom-header", "val");
+        // Stored as Title-Case
+        assert_eq!(event.header_str("X-Custom-Header"), Some("val"));
+        // Original key also works via alias
+        assert_eq!(event.header_str("x-custom-header"), Some("val"));
+    }
+
+    #[test]
+    fn set_header_underscore_passthrough_preserves_sip_h() {
+        let mut event = EslEvent::new();
+        event.set_header("variable_sip_h_X-My-CUSTOM-Header", "val");
+        assert_eq!(
+            event.header_str("variable_sip_h_X-My-CUSTOM-Header"),
+            Some("val")
+        );
+    }
+
+    #[test]
+    fn set_header_different_casing_overwrites() {
+        let mut event = EslEvent::new();
+        event.set_header("Unique-ID", "first");
+        event.set_header("unique-id", "second");
+        // Both normalize to "Unique-ID", second overwrites first
+        assert_eq!(event.header(EventHeader::UniqueId), Some("second"));
+    }
+
+    #[test]
+    fn remove_header_by_original_key() {
+        let mut event = EslEvent::new();
+        event.set_header("unique-id", "abc-123");
+        let removed = event.remove_header("unique-id");
+        assert_eq!(removed, Some("abc-123".to_string()));
+        assert_eq!(event.header(EventHeader::UniqueId), None);
+    }
+
+    #[test]
+    fn remove_header_by_canonical_key() {
+        let mut event = EslEvent::new();
+        event.set_header("unique-id", "abc-123");
+        let removed = event.remove_header("Unique-ID");
+        assert_eq!(removed, Some("abc-123".to_string()));
+        assert_eq!(event.header_str("unique-id"), None);
+    }
+
+    #[test]
+    fn serde_round_trip_preserves_normalization() {
+        let mut event = EslEvent::new();
+        event.set_header("unique-id", "abc-123");
+        event.set_header("channel-read-codec-bit-rate", "128000");
+        let json = serde_json::to_string(&event).unwrap();
+        let deserialized: EslEvent = serde_json::from_str(&json).unwrap();
+        // After deserialization, lookups by original key must still work
+        assert_eq!(deserialized.header(EventHeader::UniqueId), Some("abc-123"));
+        assert_eq!(
+            deserialized.header(EventHeader::ChannelReadCodecBitRate),
+            Some("128000")
+        );
+        assert_eq!(deserialized.header_str("unique-id"), Some("abc-123"));
+    }
+
     #[test]
     fn test_event_typed_accessors_invalid_values() {
         let mut event = EslEvent::new();
