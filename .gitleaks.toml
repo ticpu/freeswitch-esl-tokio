@@ -1,0 +1,42 @@
+title = "freeswitch-sip-trace-analyzer gitleaks config"
+
+[[rules]]
+id = "phone-number-e164"
+description = "E.164 phone number (North American +1XXXXXXXXXX)"
+regex = '''\+1[2-9]\d{9}\b'''
+tags = ["pii", "phone"]
+[rules.allowlist]
+regexTarget = "match"
+regexes = [
+  '''\+1555\d{7}''',
+]
+
+[[rules]]
+id = "phone-number-nanp"
+description = "NANP phone number (10 digits, no country code)"
+regex = '''\b[2-9]\d{2}[2-9]\d{6}\b'''
+tags = ["pii", "phone"]
+[rules.allowlist]
+regexTarget = "match"
+regexes = [
+  '''555\d{7}''',
+  '''9005551212''',
+]
+
+[[rules]]
+id = "phone-number-parens"
+description = "Phone number with parentheses (XXX) XXX-XXXX"
+regex = '''\([2-9]\d{2}\)\s?\d{3}-\d{4}'''
+tags = ["pii", "phone"]
+[rules.allowlist]
+regexTarget = "match"
+regexes = [
+  '''\(555\)''',
+]
+
+[allowlist]
+description = "Global allowlist"
+paths = [
+  '''siptraces/''',
+  '''\.txt$''',
+]
