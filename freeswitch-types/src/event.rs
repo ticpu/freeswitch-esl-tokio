@@ -1,6 +1,6 @@
 //! ESL event types and structures
 
-use crate::headers::EventHeader;
+use crate::headers::{normalize_header_key, EventHeader};
 use crate::lookup::HeaderLookup;
 use crate::variables::EslArray;
 use percent_encoding::{percent_encode, NON_ALPHANUMERIC};
@@ -441,10 +441,12 @@ impl FromStr for EslEventPriority {
 }
 
 /// ESL Event structure containing headers and optional body
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, Serialize)]
 pub struct EslEvent {
     event_type: Option<EslEventType>,
     headers: HashMap<String, String>,
+    #[serde(skip)]
+    original_keys: HashMap<String, String>,
     body: Option<String>,
 }
 
@@ -454,6 +456,7 @@ impl EslEvent {
         Self {
             event_type: None,
             headers: HashMap::new(),
+            original_keys: HashMap::new(),
             body: None,
         }
     }
@@ -463,6 +466,7 @@ impl EslEvent {
         Self {
             event_type: Some(event_type),
             headers: HashMap::new(),
+            original_keys: HashMap::new(),
             body: None,
         }
     }
@@ -486,7 +490,8 @@ impl EslEvent {
             .map(|s| s.as_str())
     }
 
-    /// Look up a header by its raw wire name (case-sensitive).
+    /// Look up a header by name, trying the canonical key first then falling
+    /// back through the alias map for non-canonical lookups.
     ///
     /// Use [`header()`](Self::header) with an [`EventHeader`] variant for known
     /// headers. This method is for headers not (yet) covered by the enum,
@@ -495,6 +500,14 @@ impl EslEvent {
     pub fn header_str(&self, name: &str) -> Option<&str> {
         self.headers
             .get(name)
+            .or_else(|| {
+                self.original_keys
+                    .get(name)
+                    .and_then(|normalized| {
+                        self.headers
+                            .get(normalized)
+                    })
+            })
             .map(|s| s.as_str())
     }
 
@@ -512,16 +525,38 @@ impl EslEvent {
         &self.headers
     }
 
-    /// Set or overwrite a header.
+    /// Set or overwrite a header, normalizing the key.
     pub fn set_header(&mut self, name: impl Into<String>, value: impl Into<String>) {
+        let original = name.into();
+        let normalized = normalize_header_key(&original);
+        if original != normalized {
+            self.original_keys
+                .insert(original, normalized.clone());
+        }
         self.headers
-            .insert(name.into(), value.into());
+            .insert(normalized, value.into());
     }
 
     /// Remove a header, returning its value if it existed.
+    ///
+    /// Accepts both canonical and original (non-normalized) key names.
     pub fn remove_header(&mut self, name: impl AsRef<str>) -> Option<String> {
-        self.headers
-            .remove(name.as_ref())
+        let name = name.as_ref();
+        if let Some(value) = self
+            .headers
+            .remove(name)
+        {
+            return Some(value);
+        }
+        if let Some(normalized) = self
+            .original_keys
+            .remove(name)
+        {
+            return self
+                .headers
+                .remove(&normalized);
+        }
+        None
     }
 
     /// Event body (the content after the blank line in plain-text events).
@@ -661,14 +696,42 @@ impl Default for EslEvent {
 
 impl HeaderLookup for EslEvent {
     fn header_str(&self, name: &str) -> Option<&str> {
-        self.headers
-            .get(name)
-            .map(|s| s.as_str())
+        EslEvent::header_str(self, name)
     }
 
     fn variable_str(&self, name: &str) -> Option<&str> {
         let key = format!("variable_{}", name);
         self.header_str(&key)
+    }
+}
+
+impl PartialEq for EslEvent {
+    fn eq(&self, other: &Self) -> bool {
+        self.event_type == other.event_type
+            && self.headers == other.headers
+            && self.body == other.body
+    }
+}
+
+impl<'de> Deserialize<'de> for EslEvent {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct Raw {
+            event_type: Option<EslEventType>,
+            headers: HashMap<String, String>,
+            body: Option<String>,
+        }
+        let raw = Raw::deserialize(deserializer)?;
+        let mut event = EslEvent::new();
+        event.event_type = raw.event_type;
+        event.body = raw.body;
+        for (k, v) in raw.headers {
+            event.set_header(k, v);
+        }
+        Ok(event)
     }
 }
 
@@ -1240,19 +1303,29 @@ mod tests {
     }
 
     #[test]
-    fn serde_round_trip_preserves_normalization() {
+    fn serde_round_trip_preserves_canonical_lookups() {
         let mut event = EslEvent::new();
         event.set_header("unique-id", "abc-123");
         event.set_header("channel-read-codec-bit-rate", "128000");
         let json = serde_json::to_string(&event).unwrap();
         let deserialized: EslEvent = serde_json::from_str(&json).unwrap();
-        // After deserialization, lookups by original key must still work
         assert_eq!(deserialized.header(EventHeader::UniqueId), Some("abc-123"));
         assert_eq!(
             deserialized.header(EventHeader::ChannelReadCodecBitRate),
             Some("128000")
         );
-        assert_eq!(deserialized.header_str("unique-id"), Some("abc-123"));
+    }
+
+    #[test]
+    fn serde_deserialize_normalizes_external_json() {
+        let json = r#"{"event_type":null,"headers":{"unique-id":"abc-123","channel-read-codec-bit-rate":"128000"},"body":null}"#;
+        let event: EslEvent = serde_json::from_str(json).unwrap();
+        assert_eq!(event.header(EventHeader::UniqueId), Some("abc-123"));
+        assert_eq!(
+            event.header(EventHeader::ChannelReadCodecBitRate),
+            Some("128000")
+        );
+        assert_eq!(event.header_str("unique-id"), Some("abc-123"));
     }
 
     #[test]

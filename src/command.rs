@@ -779,13 +779,13 @@ mod tests {
         let answer = AppCommand::answer()
             .to_wire_format()
             .unwrap();
-        assert!(answer.contains("execute-app-name: answer"));
+        assert!(answer.contains("Execute-App-Name: answer"));
 
         let hangup = AppCommand::hangup(Some(crate::channel::HangupCause::NormalClearing))
             .to_wire_format()
             .unwrap();
-        assert!(hangup.contains("execute-app-name: hangup"));
-        assert!(hangup.contains("execute-app-arg: NORMAL_CLEARING"));
+        assert!(hangup.contains("Execute-App-Name: hangup"));
+        assert!(hangup.contains("Execute-App-Arg: NORMAL_CLEARING"));
     }
 
     #[test]
@@ -802,10 +802,10 @@ mod tests {
         let wire = cmd
             .to_wire_format()
             .unwrap();
-        assert!(wire.contains("event-lock: true"));
-        assert!(wire.contains("async: true"));
-        assert!(wire.contains("loops: 3"));
-        assert!(wire.contains("execute-app-name: playback"));
+        assert!(wire.contains("Event-Lock: true"));
+        assert!(wire.contains("Async: true"));
+        assert!(wire.contains("Loops: 3"));
+        assert!(wire.contains("Execute-App-Name: playback"));
     }
 
     #[test]
@@ -1247,7 +1247,7 @@ mod tests {
         let redacted = cmd.redact_wire(&wire);
         // SendMsg is not sensitive, wire content is preserved (minus terminator)
         assert!(redacted.contains("sendmsg"));
-        assert!(redacted.contains("execute-app-name: answer"));
+        assert!(redacted.contains("Execute-App-Name: answer"));
         assert!(!redacted.ends_with("\n\n"));
     }
 
