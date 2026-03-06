@@ -16,6 +16,7 @@ pub mod commands;
 pub mod event;
 pub mod headers;
 pub mod lookup;
+pub mod prelude;
 pub mod variables;
 
 /// Default FreeSWITCH ESL port for inbound connections.

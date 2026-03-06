@@ -63,3 +63,7 @@ path = "examples/originate_examples.rs"
 [[example]]
 name = "reexec_demo"
 path = "examples/reexec_demo.rs"
+
+[[example]]
+name = "reconnecting_client_demo"
+path = "examples/reconnecting_client.rs"

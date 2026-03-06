@@ -20,9 +20,15 @@ use crate::variables::VariableName;
 /// and get all typed accessors (`channel_state()`, `call_direction()`, `timetable()`,
 /// etc.) as default implementations.
 ///
-/// This trait must be in scope (`use freeswitch_types::HeaderLookup`) to call
-/// its methods on `EslEvent` -- including `job_uuid()`, `hangup_cause()`, and
-/// `channel_state()`.
+/// This trait must be in scope to call its methods on `EslEvent` -- including
+/// `unique_id()`, `hangup_cause()`, and `channel_state()`. Import it directly
+/// or via the prelude:
+///
+/// ```ignore
+/// use freeswitch_esl_tokio::prelude::*;
+/// // or: use freeswitch_esl_tokio::HeaderLookup;
+/// // or: use freeswitch_types::HeaderLookup;
+/// ```
 ///
 /// # Example
 ///

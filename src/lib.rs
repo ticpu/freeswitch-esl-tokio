@@ -133,7 +133,7 @@ pub(crate) mod constants;
 pub(crate) mod protocol;
 
 // Re-export sub-modules from freeswitch-types for path-based access
-pub use freeswitch_types::{channel, commands, event, headers, lookup, variables};
+pub use freeswitch_types::{channel, commands, event, headers, lookup, prelude, variables};
 
 // Re-export domain types from freeswitch-types
 pub use freeswitch_types::{
