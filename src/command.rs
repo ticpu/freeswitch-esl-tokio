@@ -12,6 +12,43 @@ use std::collections::HashMap;
 use std::fmt;
 use std::time::Duration;
 
+/// Parse a FreeSWITCH API response body into a result.
+///
+/// FreeSWITCH API commands return results in varying formats:
+///
+/// - **Action commands** (`originate`, `uuid_kill`, …) prefix success
+///   with `+OK` — this function strips it and returns the payload.
+/// - **Query commands** (`show channels as json`, `uuid_dump`, …) return
+///   raw data with no prefix — returned as-is.
+/// - **Errors** (`-ERR …`, `-USAGE: …`) produce [`EslError::CommandFailed`].
+///
+/// All successful values are trimmed of leading/trailing whitespace.
+/// Returns [`EslError::ProtocolError`] if the body is empty or
+/// whitespace-only.
+///
+/// This is the same parser used by [`EslResponse::api_result`]. Use it
+/// directly on [`EslEvent::body`](freeswitch_types::EslEvent::body) for
+/// `BACKGROUND_JOB` results:
+///
+/// ```rust,no_run
+/// # use freeswitch_esl_tokio::{parse_api_body, EslEvent, HeaderLookup};
+/// # fn example(event: &EslEvent) {
+/// if let Some(body) = event.body() {
+///     match parse_api_body(body) {
+///         Ok(data) => println!("result: {}", data),
+///         Err(e) => eprintln!("command failed: {}", e),
+///     }
+/// }
+/// # }
+/// ```
+pub fn parse_api_body(body: &str) -> EslResult<&str> {
+    // Stub: always fails — TDD red phase
+    let _ = body;
+    Err(EslError::protocol_error(
+        "parse_api_body not yet implemented",
+    ))
+}
+
 /// Validate that a user-provided string contains no newline characters.
 ///
 /// ESL commands are line-delimited; embedded newlines would allow injection
@@ -133,6 +170,49 @@ impl EslResponse {
             .and_then(|t| t.strip_prefix("+OK "))
             .map(|s| s.trim())
             .filter(|s| !s.is_empty())
+    }
+
+    /// Parse the response body as an API result.
+    ///
+    /// FreeSWITCH `api` commands return the result in the response body.
+    /// The format varies by command:
+    ///
+    /// - **Action commands** (`originate`, `uuid_kill`, `uuid_setvar`, …)
+    ///   return `+OK <data>` on success — this method strips the prefix
+    ///   and returns the payload.
+    /// - **Query commands** (`show channels as json`, `uuid_dump`,
+    ///   `uuid_getvar`, `status`, …) return raw data with no prefix —
+    ///   this method returns the body as-is.
+    /// - **Error responses** (`-ERR <message>`, `-USAGE: <usage>`)
+    ///   return [`EslError::CommandFailed`].
+    ///
+    /// All successful results are trimmed of leading/trailing whitespace.
+    ///
+    /// Returns [`EslError::ProtocolError`] if the body is missing or empty.
+    ///
+    /// ```
+    /// # use freeswitch_esl_tokio::EslResponse;
+    /// # use std::collections::HashMap;
+    /// let headers = HashMap::from([("Reply-Text".into(), "+OK".into())]);
+    ///
+    /// // Action command: +OK prefix stripped
+    /// let resp = EslResponse::new(headers.clone(), Some("+OK d4f3a2b1-1234\n".into()));
+    /// assert_eq!(resp.api_result().unwrap(), "d4f3a2b1-1234");
+    ///
+    /// // Query command: raw body returned as-is
+    /// let resp = EslResponse::new(headers.clone(), Some(r#"{"rows":[]}"#.into()));
+    /// assert_eq!(resp.api_result().unwrap(), r#"{"rows":[]}"#);
+    ///
+    /// // Error: Err variant
+    /// let resp = EslResponse::new(headers, Some("-ERR no such channel\n".into()));
+    /// assert!(resp.api_result().is_err());
+    /// ```
+    pub fn api_result(&self) -> EslResult<&str> {
+        let body = self
+            .body
+            .as_deref()
+            .unwrap_or("");
+        parse_api_body(body)
     }
 
     /// Convert to result based on success status.
@@ -1327,5 +1407,95 @@ mod tests {
         );
         assert_eq!(resp.variable_str("sip_call_id"), Some("abc-123"));
         assert_eq!(resp.variable_str("nonexistent"), None);
+    }
+
+    // --- parse_api_body() tests ---
+
+    #[test]
+    fn parse_api_body_ok_with_data() {
+        let data = parse_api_body("+OK d4f3a2b1-1234-5678-abcd-ef0123456789\n").unwrap();
+        assert_eq!(data, "d4f3a2b1-1234-5678-abcd-ef0123456789");
+    }
+
+    #[test]
+    fn parse_api_body_ok_no_data() {
+        let data = parse_api_body("+OK\n").unwrap();
+        assert_eq!(data, "");
+    }
+
+    #[test]
+    fn parse_api_body_ok_bare() {
+        let data = parse_api_body("+OK").unwrap();
+        assert_eq!(data, "");
+    }
+
+    #[test]
+    fn parse_api_body_err() {
+        let err = parse_api_body("-ERR invalid command\n").unwrap_err();
+        assert!(matches!(
+            err,
+            EslError::CommandFailed { ref reply_text } if reply_text == "-ERR invalid command"
+        ));
+    }
+
+    #[test]
+    fn parse_api_body_usage() {
+        let err = parse_api_body("-USAGE: originate <call_url> <exten>\n").unwrap_err();
+        assert!(matches!(err, EslError::CommandFailed { .. }));
+    }
+
+    #[test]
+    fn parse_api_body_raw_json() {
+        let data = parse_api_body(r#"{"row_count":2,"rows":[]}"#).unwrap();
+        assert_eq!(data, r#"{"row_count":2,"rows":[]}"#);
+    }
+
+    #[test]
+    fn parse_api_body_raw_value() {
+        let data = parse_api_body("hello_world\n").unwrap();
+        assert_eq!(data, "hello_world");
+    }
+
+    #[test]
+    fn parse_api_body_raw_multiline() {
+        let dump = "Variable-Name: value\nOther-Name: other\n";
+        let data = parse_api_body(dump).unwrap();
+        assert_eq!(data, "Variable-Name: value\nOther-Name: other");
+    }
+
+    #[test]
+    fn parse_api_body_empty() {
+        let err = parse_api_body("").unwrap_err();
+        assert!(matches!(err, EslError::ProtocolError { .. }));
+    }
+
+    #[test]
+    fn parse_api_body_whitespace_only() {
+        let err = parse_api_body("  \n").unwrap_err();
+        assert!(matches!(err, EslError::ProtocolError { .. }));
+    }
+
+    // --- api_result() tests ---
+
+    #[test]
+    fn api_result_delegates_to_parse() {
+        let headers: HashMap<String, String> = [("Reply-Text".into(), "+OK".into())].into();
+        let resp = EslResponse::new(headers, Some("+OK uuid-123\n".into()));
+        assert_eq!(
+            resp.api_result()
+                .unwrap(),
+            "uuid-123"
+        );
+    }
+
+    #[test]
+    fn api_result_no_body() {
+        let headers: HashMap<String, String> = [("Reply-Text".into(), "+OK".into())].into();
+        let resp = EslResponse::new(headers, None);
+        assert!(matches!(
+            resp.api_result()
+                .unwrap_err(),
+            EslError::ProtocolError { .. }
+        ));
     }
 }

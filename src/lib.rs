@@ -150,7 +150,9 @@ pub use freeswitch_types::{
 };
 
 pub use app::dptools::AppCommand;
-pub use command::{CommandBuilder, EslCommand, EslResponse, ExecuteOptions, ReplyStatus};
+pub use command::{
+    parse_api_body, CommandBuilder, EslCommand, EslResponse, ExecuteOptions, ReplyStatus,
+};
 pub use connection::{
     ConnectionMode, ConnectionStatus, DisconnectReason, EslClient, EslConnectOptions,
     EslEventStream,
