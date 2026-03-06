@@ -58,7 +58,31 @@ define_header_enum! {
         SipContentType => "sip_content_type",
         /// Gateway that received the SIP NOTIFY.
         GatewayName => "gateway_name",
+
+        // --- Codec (from switch_channel_event_set_data / switch_core_codec.c) ---
+        // Audio read
+        ChannelReadCodecName => "Channel-Read-Codec-Name",
+        ChannelReadCodecRate => "Channel-Read-Codec-Rate",
+        ChannelReadCodecBitRate => "Channel-Read-Codec-Bit-Rate",
+        /// Only present when actual_samples_per_second != samples_per_second.
+        ChannelReportedReadCodecRate => "Channel-Reported-Read-Codec-Rate",
+        // Audio write
+        ChannelWriteCodecName => "Channel-Write-Codec-Name",
+        ChannelWriteCodecRate => "Channel-Write-Codec-Rate",
+        ChannelWriteCodecBitRate => "Channel-Write-Codec-Bit-Rate",
+        /// Only present when actual_samples_per_second != samples_per_second.
+        ChannelReportedWriteCodecRate => "Channel-Reported-Write-Codec-Rate",
+        // Video read/write
+        ChannelVideoReadCodecName => "Channel-Video-Read-Codec-Name",
+        ChannelVideoReadCodecRate => "Channel-Video-Read-Codec-Rate",
+        ChannelVideoWriteCodecName => "Channel-Video-Write-Codec-Name",
+        ChannelVideoWriteCodecRate => "Channel-Video-Write-Codec-Rate",
     }
+}
+
+/// Normalize a header key to its canonical form for case-insensitive storage.
+pub fn normalize_header_key(raw: &str) -> String {
+    raw.to_string()
 }
 
 #[cfg(test)]
@@ -116,6 +140,122 @@ mod tests {
         );
     }
 
+    // --- normalize_header_key tests ---
+    // FreeSWITCH C ESL uses strcasecmp for header lookups but stores names
+    // verbatim. Multiple C code paths emit the same logical header with
+    // different casing (switch_channel.c Title-Case vs switch_event.c lowercase
+    // vs switch_core_codec.c mixed). normalize_header_key canonicalizes keys
+    // so they collapse to a single HashMap entry.
+
+    #[test]
+    fn normalize_known_enum_variants_return_canonical_form() {
+        // EventHeader::from_str is case-insensitive; canonical as_str() is returned
+        assert_eq!(normalize_header_key("unique-id"), "Unique-ID");
+        assert_eq!(normalize_header_key("UNIQUE-ID"), "Unique-ID");
+        assert_eq!(normalize_header_key("Unique-ID"), "Unique-ID");
+        assert_eq!(normalize_header_key("dtmf-digit"), "DTMF-Digit");
+        assert_eq!(normalize_header_key("DTMF-DIGIT"), "DTMF-Digit");
+        assert_eq!(
+            normalize_header_key("channel-call-uuid"),
+            "Channel-Call-UUID"
+        );
+        assert_eq!(normalize_header_key("event-name"), "Event-Name");
+    }
+
+    #[test]
+    fn normalize_known_underscore_variants_return_canonical_form() {
+        // Headers whose canonical form contains underscores
+        assert_eq!(normalize_header_key("priority"), "priority");
+        assert_eq!(normalize_header_key("PRIORITY"), "priority");
+        assert_eq!(normalize_header_key("pl_data"), "pl_data");
+        assert_eq!(normalize_header_key("PL_DATA"), "pl_data");
+        assert_eq!(normalize_header_key("sip_content_type"), "sip_content_type");
+        assert_eq!(normalize_header_key("gateway_name"), "gateway_name");
+        assert_eq!(normalize_header_key("event"), "event");
+        assert_eq!(normalize_header_key("EVENT"), "event");
+    }
+
+    #[test]
+    fn normalize_codec_headers_from_switch_core_codec() {
+        // switch_core_codec.c sends lowercase, switch_channel_event_set_data sends Title-Case
+        // Both must normalize to the canonical EventHeader form
+        assert_eq!(
+            normalize_header_key("channel-read-codec-bit-rate"),
+            "Channel-Read-Codec-Bit-Rate"
+        );
+        assert_eq!(
+            normalize_header_key("Channel-Read-Codec-Bit-Rate"),
+            "Channel-Read-Codec-Bit-Rate"
+        );
+        // switch_core_codec.c mixed case for write: "Channel-Write-codec-bit-rate"
+        assert_eq!(
+            normalize_header_key("Channel-Write-codec-bit-rate"),
+            "Channel-Write-Codec-Bit-Rate"
+        );
+        assert_eq!(
+            normalize_header_key("channel-video-read-codec-name"),
+            "Channel-Video-Read-Codec-Name"
+        );
+    }
+
+    #[test]
+    fn normalize_unknown_underscore_keys_passthrough() {
+        // Channel variables and sip_h_* passthrough preserve original casing
+        assert_eq!(
+            normalize_header_key("variable_sip_call_id"),
+            "variable_sip_call_id"
+        );
+        assert_eq!(
+            normalize_header_key("variable_sip_h_X-My-CUSTOM-Header"),
+            "variable_sip_h_X-My-CUSTOM-Header"
+        );
+        assert_eq!(
+            normalize_header_key("variable_sip_h_Diversion"),
+            "variable_sip_h_Diversion"
+        );
+    }
+
+    #[test]
+    fn normalize_unknown_dash_keys_title_case() {
+        // Framing and unknown event headers get Title-Cased
+        assert_eq!(normalize_header_key("content-type"), "Content-Type");
+        assert_eq!(normalize_header_key("Content-Type"), "Content-Type");
+        assert_eq!(normalize_header_key("CONTENT-TYPE"), "Content-Type");
+        assert_eq!(normalize_header_key("x-custom-header"), "X-Custom-Header");
+        assert_eq!(
+            normalize_header_key("Content-Disposition"),
+            "Content-Disposition"
+        );
+        assert_eq!(normalize_header_key("reply-text"), "Reply-Text");
+    }
+
+    #[test]
+    fn normalize_idempotent_for_all_enum_variants() {
+        // Normalizing an already-canonical wire string must return it unchanged
+        let variants = [
+            EventHeader::EventName,
+            EventHeader::UniqueId,
+            EventHeader::ChannelCallUuid,
+            EventHeader::DtmfDigit,
+            EventHeader::Priority,
+            EventHeader::PlData,
+            EventHeader::SipEvent,
+            EventHeader::GatewayName,
+            EventHeader::SipContentType,
+            EventHeader::ChannelReadCodecBitRate,
+            EventHeader::ChannelVideoWriteCodecRate,
+            EventHeader::LogLevel,
+        ];
+        for v in variants {
+            let canonical = v.as_str();
+            assert_eq!(
+                normalize_header_key(canonical),
+                canonical,
+                "normalization not idempotent for {canonical}"
+            );
+        }
+    }
+
     #[test]
     fn from_str_round_trip_all_variants() {
         let variants = [
@@ -151,6 +291,18 @@ mod tests {
             EventHeader::SipEvent,
             EventHeader::SipContentType,
             EventHeader::GatewayName,
+            EventHeader::ChannelReadCodecName,
+            EventHeader::ChannelReadCodecRate,
+            EventHeader::ChannelReadCodecBitRate,
+            EventHeader::ChannelReportedReadCodecRate,
+            EventHeader::ChannelWriteCodecName,
+            EventHeader::ChannelWriteCodecRate,
+            EventHeader::ChannelWriteCodecBitRate,
+            EventHeader::ChannelReportedWriteCodecRate,
+            EventHeader::ChannelVideoReadCodecName,
+            EventHeader::ChannelVideoReadCodecRate,
+            EventHeader::ChannelVideoWriteCodecName,
+            EventHeader::ChannelVideoWriteCodecRate,
         ];
         for v in variants {
             let wire = v.to_string();
