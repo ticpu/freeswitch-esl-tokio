@@ -1,6 +1,6 @@
 [package]
 name = "freeswitch-types"
-version = "0.13.1"
+version = "0.14.0"
 edition = "2021"
 authors = ["Jérôme Poulin <jeromepoulin@gmail.com>"]
 description = "FreeSWITCH protocol types: channel state, events, commands, variables"
