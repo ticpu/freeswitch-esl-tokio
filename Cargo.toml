@@ -67,3 +67,11 @@ path = "examples/reexec_demo.rs"
 [[example]]
 name = "reconnecting_client_demo"
 path = "examples/reconnecting_client.rs"
+
+[[example]]
+name = "codec_monitor"
+path = "examples/codec_monitor.rs"
+
+[[example]]
+name = "bgapi_bench"
+path = "examples/bgapi_bench.rs"

@@ -538,6 +538,22 @@ impl HeaderLookup for TrackedChannel {
 See `cargo run --example channel_tracker` for a complete reference
 implementation using `HeaderLookup` for channel lifecycle monitoring.
 
+## Benchmarks
+
+bgapi throughput on localhost (N=10000, `bgapi status`, single connection):
+
+| Metric | Rust | C ESL |
+|---|---|---|
+| send_rate_per_sec | 914 | 918 |
+| rtt_median_us | 1104 | 5,472,455 |
+
+Send rate is identical (~915 cmd/sec) -- both bottlenecked by serial ESL.
+The RTT difference reflects architecture: Rust's reader task receives events
+concurrently, while C ESL queues them internally during `esl_send_recv` and
+only drains them afterward.
+
+See [bench/](bench/) for build instructions and details.
+
 ## Development
 
 ```sh

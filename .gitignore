@@ -30,3 +30,6 @@ Thumbs.db
 
 # Code review transcripts (not for publishing)
 review/
+
+# Benchmark binaries
+bench/bgapi_bench_c
