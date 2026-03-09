@@ -13,6 +13,7 @@ mod macros;
 
 pub mod channel;
 pub mod commands;
+pub mod conference_info;
 pub mod event;
 pub mod headers;
 pub mod lookup;

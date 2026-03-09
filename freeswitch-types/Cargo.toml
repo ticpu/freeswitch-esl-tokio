@@ -16,12 +16,15 @@ exclude = ["CLAUDE.md"]
 [features]
 default = ["serde"]
 serde = ["dep:serde", "indexmap/serde"]
+conference-info = ["dep:quick-xml", "serde"]
 
 [dependencies]
 thiserror = "2.0"
 serde = { version = "1.0", features = ["derive"], optional = true }
 percent-encoding = "2"
 indexmap = "2"
+quick-xml = { version = "0.39", features = ["serialize"], optional = true }
 
 [dev-dependencies]
 serde_json = "1.0"
+quick-xml = { version = "0.39", features = ["serialize"] }

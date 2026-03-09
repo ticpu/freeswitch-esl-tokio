@@ -432,3 +432,30 @@ produces garbage silently. This library propagates all parse errors to the
 caller via `EslResult`. The caller can classify them (`is_connection_error()`
 vs `is_recoverable()`) and decide whether to disconnect and reconnect from
 a known-good state.
+
+## RFC 4575 conference-info XML namespace handling
+
+RFC 4575 documents use the XML namespace `urn:ietf:params:xml:ns:conference-info`,
+but producers choose their own prefix: Bell's BCF uses `confInfo:`, others use
+`ci:`, and some declare it as the default namespace (no prefix). The element
+names are identical in all cases — only the prefix varies.
+
+quick-xml's serde deserializer matches element names literally, including any
+prefix. A field annotated `#[serde(rename = "users")]` matches `<users>` but
+not `<confInfo:users>`. The serde layer has no namespace awareness.
+
+quick-xml does provide `NsReader` for namespace-aware event-based parsing, but
+it cannot be combined with serde. Using it would mean writing a manual
+event-driven parser for every RFC 4575 type — hundreds of lines of brittle code
+that discards the entire value of serde derivation.
+
+The chosen approach: **pre-process the XML to strip namespace prefixes** before
+feeding it to `quick_xml::de::from_str()`. An internal `normalize` function
+uses quick-xml's `Reader`/`Writer` event loop to rewrite element names
+(`confInfo:users` → `users`), remove `xmlns` declarations, and preserve all
+other attributes. This is correct because RFC 4575 uses a single namespace —
+there are no competing prefixes to disambiguate.
+
+The normalizer is an internal implementation detail behind `ConferenceInfo::from_xml()`.
+Callers never see it. Serialization with `to_xml()` emits prefix-free XML,
+which is valid RFC 4575 (using the default namespace).

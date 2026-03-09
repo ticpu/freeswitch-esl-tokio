@@ -23,12 +23,16 @@ which re-exports everything from this crate.
 | `lookup` | `HeaderLookup` trait (typed accessors for any key-value store) |
 | `commands` | `Originate`, `BridgeDialString`, `UuidKill`, `UuidBridge`, endpoint types, `DialString` trait |
 | `variables` | `ChannelVariable`, `SofiaVariable`, `EslArray`, `MultipartBody` |
+| `conference_info` | RFC 4575 `conference-info+xml` types: `ConferenceInfo`, `User`, `Endpoint`, `Media`, `SipDialogId` |
 
 ## Features
 
 - **`serde`** (enabled by default) — adds `Serialize`/`Deserialize` impls for
   all public types. Disable with `default-features = false` if you only need
   wire-format parsing (`Display`/`FromStr`) without pulling in serde.
+- **`conference-info`** — enables `ConferenceInfo::from_xml()`/`to_xml()` for
+  parsing RFC 4575 `application/conference-info+xml` documents (pulls in
+  `quick-xml`). Type definitions are always available without this feature.
 
 ## Usage
 
