@@ -1,13 +1,12 @@
 use std::fmt;
 use std::str::FromStr;
 
-use serde::{Deserialize, Serialize};
-
 use super::{extract_variables, write_variables};
 use crate::commands::originate::{OriginateError, Variables};
 
 /// Distribution order for group_call dial strings.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub enum GroupCallOrder {
     /// Ring all members simultaneously.
@@ -55,7 +54,8 @@ impl FromStr for GroupCallOrder {
 
 /// Runtime expression resolving directory group members:
 /// `${group_call(group@domain[+order])}`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub struct GroupCall {
     /// Group name from the directory.
@@ -63,10 +63,16 @@ pub struct GroupCall {
     /// Domain for the group lookup.
     pub domain: String,
     /// Distribution order.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     pub order: Option<GroupCallOrder>,
     /// Per-channel variables prepended as `{key=value}`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     pub variables: Option<Variables>,
 }
 

@@ -1,7 +1,5 @@
 use std::fmt;
 
-use serde::{Deserialize, Serialize};
-
 use super::{extract_variables, write_variables};
 use crate::commands::originate::{OriginateError, Variables};
 
@@ -9,14 +7,21 @@ use crate::commands::originate::{OriginateError, Variables};
 ///
 /// Wire format: `{module}[/{destination}]` where destination is typically
 /// empty or `auto_answer` (recognized by portaudio and pulseaudio).
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub struct AudioEndpoint {
     /// Destination string (e.g. `auto_answer`). `None` for bare module name.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     pub destination: Option<String>,
     /// Per-channel variables prepended as `{key=value}`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     pub variables: Option<Variables>,
 }
 

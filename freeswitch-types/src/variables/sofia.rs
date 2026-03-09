@@ -1,7 +1,5 @@
 //! Typed mod_sofia / SIP channel variable names.
 
-use serde::{Deserialize, Serialize};
-
 /// Error returned when parsing an unrecognized Sofia variable name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseSofiaVariableError(pub String);

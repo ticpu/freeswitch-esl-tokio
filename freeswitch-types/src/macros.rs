@@ -31,7 +31,8 @@ macro_rules! define_header_enum {
         }
     ) => {
         $(#[$enum_meta])*
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
         #[non_exhaustive]
         #[allow(missing_docs)]
         $vis enum $Name {

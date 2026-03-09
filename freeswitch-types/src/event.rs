@@ -4,13 +4,13 @@ use crate::headers::{normalize_header_key, EventHeader};
 use crate::lookup::HeaderLookup;
 use crate::variables::EslArray;
 use percent_encoding::{percent_encode, NON_ALPHANUMERIC};
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
 
 /// Event format types supported by FreeSWITCH ESL
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub enum EventFormat {
     /// Plain text format (default)
@@ -92,7 +92,8 @@ macro_rules! esl_event_types {
         /// and `switch_event.c` EVENT_NAMES[].
         ///
         /// Variant names are the canonical wire names (e.g. `ChannelCreate` = `CHANNEL_CREATE`).
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
         #[non_exhaustive]
         #[allow(missing_docs)]
         pub enum EslEventType {
@@ -394,7 +395,8 @@ impl fmt::Display for ParseEventTypeError {
 impl std::error::Error for ParseEventTypeError {}
 
 /// Event priority levels matching FreeSWITCH `esl_priority_t`
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub enum EslEventPriority {
     /// Default priority.
@@ -441,11 +443,12 @@ impl FromStr for EslEventPriority {
 }
 
 /// ESL Event structure containing headers and optional body
-#[derive(Debug, Clone, Eq, Serialize)]
+#[derive(Debug, Clone, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct EslEvent {
     event_type: Option<EslEventType>,
     headers: HashMap<String, String>,
-    #[serde(skip)]
+    #[cfg_attr(feature = "serde", serde(skip))]
     original_keys: HashMap<String, String>,
     body: Option<String>,
 }
@@ -713,12 +716,13 @@ impl PartialEq for EslEvent {
     }
 }
 
-impl<'de> Deserialize<'de> for EslEvent {
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for EslEvent {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
-        #[derive(Deserialize)]
+        #[derive(serde::Deserialize)]
         struct Raw {
             event_type: Option<EslEventType>,
             headers: HashMap<String, String>,

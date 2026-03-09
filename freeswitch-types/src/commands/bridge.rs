@@ -6,8 +6,6 @@
 use std::fmt;
 use std::str::FromStr;
 
-use serde::{Deserialize, Serialize};
-
 use super::endpoint::Endpoint;
 use super::find_matching_bracket;
 use super::originate::{OriginateError, Variables};
@@ -20,11 +18,15 @@ use super::originate::{OriginateError, Variables};
 /// - `|` separates groups tried sequentially (failover)
 /// - Each endpoint may have channel-scope `[variables]`
 /// - Global `{variables}` apply to all endpoints
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub struct BridgeDialString {
     /// Default-scope variables applied to all endpoints.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     pub variables: Option<Variables>,
     /// Sequential failover groups (`|`-separated). Within each group,
     /// endpoints ring simultaneously (`,`-separated).

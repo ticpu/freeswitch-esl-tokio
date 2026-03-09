@@ -1,12 +1,12 @@
 //! Channel-related data types extracted from ESL event headers.
 
-use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
 
 /// Channel state from `switch_channel_state_t` — carried in the `Channel-State` header
 /// as a string (`CS_ROUTING`) and in `Channel-State-Number` as an integer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 #[repr(u8)]
 #[allow(missing_docs)]
@@ -114,7 +114,8 @@ impl FromStr for ChannelState {
 }
 
 /// Call state from `switch_channel_callstate_t` — carried in the `Channel-Call-State` header.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 #[allow(missing_docs)]
 pub enum CallState {
@@ -178,7 +179,8 @@ impl FromStr for CallState {
 }
 
 /// Answer state from the `Answer-State` header. Wire format is lowercase.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 #[allow(missing_docs)]
 pub enum AnswerState {
@@ -227,7 +229,8 @@ impl FromStr for AnswerState {
 }
 
 /// Call direction from the `Call-Direction` header. Wire format is lowercase.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 #[allow(missing_docs)]
 pub enum CallDirection {
@@ -286,7 +289,8 @@ impl std::error::Error for ParseHangupCauseError {}
 /// Carried in the `Hangup-Cause` header. Wire format is `SCREAMING_SNAKE_CASE`
 /// (e.g. `NORMAL_CLEARING`). The numeric value matches the Q.850 cause code
 /// for standard causes, or a FreeSWITCH-internal range for extensions.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 #[repr(u16)]
 #[allow(missing_docs)]
@@ -665,7 +669,8 @@ impl FromStr for HangupCause {
 /// Extracted from ESL event headers using a prefix (typically `"Caller"`
 /// or `"Other-Leg"`). The wire header format is `{prefix}-{suffix}`,
 /// e.g. `Caller-Channel-Created-Time`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub struct ChannelTimetable {
     /// When the caller profile was created.
@@ -697,7 +702,8 @@ pub struct ChannelTimetable {
 /// FreeSWITCH emits timetable headers as `{prefix}-Channel-Created-Time`, etc.
 /// The prefix varies by context — `Caller` for the primary leg, `Other-Leg`
 /// for the bridged party, `Channel` in outbound ESL mode, etc.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub enum TimetablePrefix {
     /// Primary call leg (`Caller-*`).

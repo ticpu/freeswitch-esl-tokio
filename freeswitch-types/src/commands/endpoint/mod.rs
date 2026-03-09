@@ -22,8 +22,6 @@ pub use user::UserEndpoint;
 use std::fmt;
 use std::str::FromStr;
 
-use serde::{Deserialize, Serialize};
-
 use super::find_matching_bracket;
 use super::originate::{OriginateError, Variables};
 
@@ -84,8 +82,9 @@ fn extract_variables(s: &str) -> Result<(Option<Variables>, &str), OriginateErro
 ///
 /// Use this in [`Originate`](super::originate::Originate) and
 /// [`BridgeDialString`](super::bridge::BridgeDialString) where any endpoint type must be accepted.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[non_exhaustive]
 pub enum Endpoint {
     /// `sofia/{profile}/{destination}`
@@ -103,10 +102,10 @@ pub enum Endpoint {
     /// `error/{cause}`
     Error(ErrorEndpoint),
     /// `portaudio[/{destination}]`
-    #[serde(rename = "portaudio")]
+    #[cfg_attr(feature = "serde", serde(rename = "portaudio"))]
     PortAudio(AudioEndpoint),
     /// `pulseaudio[/{destination}]`
-    #[serde(rename = "pulseaudio")]
+    #[cfg_attr(feature = "serde", serde(rename = "pulseaudio"))]
     PulseAudio(AudioEndpoint),
     /// `alsa[/{destination}]`
     Alsa(AudioEndpoint),

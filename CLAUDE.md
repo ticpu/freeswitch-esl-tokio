@@ -85,6 +85,7 @@ of the event group constants (`CHANNEL_EVENTS`, `MEDIA_EVENTS`,
 
 ```sh
 cargo fmt --all
+cargo check -p freeswitch-types --no-default-features --message-format=short
 cargo check --workspace --message-format=short
 cargo clippy --workspace --fix --allow-dirty --message-format=short
 cargo test --workspace --lib

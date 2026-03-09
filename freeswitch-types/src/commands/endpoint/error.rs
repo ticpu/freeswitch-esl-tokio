@@ -1,13 +1,12 @@
 use std::fmt;
 use std::str::FromStr;
 
-use serde::{Deserialize, Serialize};
-
 use crate::channel::HangupCause;
 use crate::commands::originate::OriginateError;
 
 /// Bridge to a specific hangup cause: `error/{cause}`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub struct ErrorEndpoint {
     /// Hangup cause code.

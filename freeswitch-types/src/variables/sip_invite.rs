@@ -8,8 +8,6 @@
 //! FreeSWITCH's ARRAY format (`ARRAY::value1|:value2`). Parse them
 //! with [`EslArray`](super::EslArray).
 
-use serde::{Deserialize, Serialize};
-
 /// Error returned when parsing an unrecognized SIP invite header variable name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseSipInviteHeaderError(pub String);

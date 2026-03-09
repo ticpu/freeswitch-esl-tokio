@@ -6,9 +6,6 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use indexmap::IndexMap;
-use serde::de::Deserializer;
-use serde::ser::Serializer;
-use serde::{Deserialize, Serialize};
 
 use super::{originate_quote, originate_split, originate_unquote};
 
@@ -20,8 +17,9 @@ use super::{originate_quote, originate_split, originate_unquote};
 const UNDEF: &str = "undef";
 
 /// FreeSWITCH dialplan type for originate commands.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "lowercase"))]
 #[non_exhaustive]
 pub enum DialplanType {
     /// Inline dialplan: applications execute directly without XML lookup.
@@ -70,8 +68,9 @@ impl FromStr for DialplanType {
 /// - `Enterprise` (`<>`) — applies across all threads (`:_:` separated)
 /// - `Default` (`{}`) — applies to all channels in this originate
 /// - `Channel` (`[]`) — applies only to one specific channel
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "lowercase"))]
 #[non_exhaustive]
 pub enum VariablesType {
     /// `<>` scope — applies across all `:_:` separated threads.
@@ -212,8 +211,9 @@ impl Variables {
     }
 }
 
-impl Serialize for Variables {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+#[cfg(feature = "serde")]
+impl serde::Serialize for Variables {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         if self.vars_type == VariablesType::Default {
             self.inner
                 .serialize(serializer)
@@ -227,9 +227,10 @@ impl Serialize for Variables {
     }
 }
 
-impl<'de> Deserialize<'de> for Variables {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        #[derive(Deserialize)]
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Variables {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
         #[serde(untagged)]
         enum VariablesRepr {
             Scoped {
@@ -348,13 +349,17 @@ pub use super::endpoint::Endpoint;
 /// Formats differently depending on [`DialplanType`]:
 /// - Inline: `name` or `name:args`
 /// - XML: `&name(args)`
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub struct Application {
     /// Application name (e.g. `park`, `conference`, `socket`).
     pub name: String,
     /// Application arguments, if any.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     pub args: Option<String>,
 }
 
@@ -407,8 +412,9 @@ impl Application {
 /// FreeSWITCH syntax: `originate <endpoint> <target> [dialplan] ...`
 /// where `<target>` is either a bare extension string (routes through
 /// the dialplan engine) or `&app(args)` / `app:args` (executes inline).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
 #[non_exhaustive]
 pub enum OriginateTarget {
     /// Route through the dialplan engine to this extension.
@@ -461,78 +467,83 @@ pub struct Originate {
     timeout: Option<Duration>,
 }
 
-/// Intermediate type for serde, mirroring the old public-field layout.
-#[derive(Serialize, Deserialize)]
-struct OriginateRaw {
-    endpoint: Endpoint,
-    #[serde(flatten)]
-    target: OriginateTarget,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    dialplan: Option<DialplanType>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    context: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    cid_name: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    cid_num: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    timeout_secs: Option<u64>,
-}
+#[cfg(feature = "serde")]
+mod serde_support {
+    use super::*;
 
-impl TryFrom<OriginateRaw> for Originate {
-    type Error = OriginateError;
+    /// Intermediate type for serde, mirroring the old public-field layout.
+    #[derive(serde::Serialize, serde::Deserialize)]
+    pub(super) struct OriginateRaw {
+        pub endpoint: Endpoint,
+        #[serde(flatten)]
+        pub target: OriginateTarget,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub dialplan: Option<DialplanType>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub context: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub cid_name: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub cid_num: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub timeout_secs: Option<u64>,
+    }
 
-    fn try_from(raw: OriginateRaw) -> Result<Self, Self::Error> {
-        if matches!(raw.target, OriginateTarget::Extension(_))
-            && matches!(raw.dialplan, Some(DialplanType::Inline))
-        {
-            return Err(OriginateError::ExtensionWithInlineDialplan);
+    impl TryFrom<OriginateRaw> for Originate {
+        type Error = OriginateError;
+
+        fn try_from(raw: OriginateRaw) -> Result<Self, Self::Error> {
+            if matches!(raw.target, OriginateTarget::Extension(_))
+                && matches!(raw.dialplan, Some(DialplanType::Inline))
+            {
+                return Err(OriginateError::ExtensionWithInlineDialplan);
+            }
+            if let OriginateTarget::InlineApplications(ref apps) = raw.target {
+                if apps.is_empty() {
+                    return Err(OriginateError::EmptyInlineApplications);
+                }
+            }
+            Ok(Self {
+                endpoint: raw.endpoint,
+                target: raw.target,
+                dialplan: raw.dialplan,
+                context: raw.context,
+                cid_name: raw.cid_name,
+                cid_num: raw.cid_num,
+                timeout: raw
+                    .timeout_secs
+                    .map(Duration::from_secs),
+            })
         }
-        if let OriginateTarget::InlineApplications(ref apps) = raw.target {
-            if apps.is_empty() {
-                return Err(OriginateError::EmptyInlineApplications);
+    }
+
+    impl From<Originate> for OriginateRaw {
+        fn from(o: Originate) -> Self {
+            Self {
+                endpoint: o.endpoint,
+                target: o.target,
+                dialplan: o.dialplan,
+                context: o.context,
+                cid_name: o.cid_name,
+                cid_num: o.cid_num,
+                timeout_secs: o
+                    .timeout
+                    .map(|d| d.as_secs()),
             }
         }
-        Ok(Self {
-            endpoint: raw.endpoint,
-            target: raw.target,
-            dialplan: raw.dialplan,
-            context: raw.context,
-            cid_name: raw.cid_name,
-            cid_num: raw.cid_num,
-            timeout: raw
-                .timeout_secs
-                .map(Duration::from_secs),
-        })
     }
-}
 
-impl From<Originate> for OriginateRaw {
-    fn from(o: Originate) -> Self {
-        Self {
-            endpoint: o.endpoint,
-            target: o.target,
-            dialplan: o.dialplan,
-            context: o.context,
-            cid_name: o.cid_name,
-            cid_num: o.cid_num,
-            timeout_secs: o
-                .timeout
-                .map(|d| d.as_secs()),
+    impl serde::Serialize for Originate {
+        fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+            OriginateRaw::from(self.clone()).serialize(serializer)
         }
     }
-}
 
-impl Serialize for Originate {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        OriginateRaw::from(self.clone()).serialize(serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for Originate {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let raw = OriginateRaw::deserialize(deserializer)?;
-        Originate::try_from(raw).map_err(serde::de::Error::custom)
+    impl<'de> serde::Deserialize<'de> for Originate {
+        fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+            let raw = OriginateRaw::deserialize(deserializer)?;
+            Originate::try_from(raw).map_err(serde::de::Error::custom)
+        }
     }
 }
 

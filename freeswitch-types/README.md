@@ -24,11 +24,24 @@ which re-exports everything from this crate.
 | `commands` | `Originate`, `BridgeDialString`, `UuidKill`, `UuidBridge`, endpoint types, `DialString` trait |
 | `variables` | `ChannelVariable`, `SofiaVariable`, `EslArray`, `MultipartBody` |
 
+## Features
+
+- **`serde`** (enabled by default) — adds `Serialize`/`Deserialize` impls for
+  all public types. Disable with `default-features = false` if you only need
+  wire-format parsing (`Display`/`FromStr`) without pulling in serde.
+
 ## Usage
 
 ```toml
 [dependencies]
 freeswitch-types = "1"
+```
+
+Without serde:
+
+```toml
+[dependencies]
+freeswitch-types = { version = "1", default-features = false }
 ```
 
 ### Command builders
@@ -75,7 +88,7 @@ impl HeaderLookup for MyHeaders {
 // h.header(EventHeader::UniqueId), h.variable(ChannelVariable::ReadCodec), etc.
 ```
 
-### Serde support
+### Serde support (requires `serde` feature, enabled by default)
 
 All builder types implement `Serialize`/`Deserialize` for config-driven usage:
 

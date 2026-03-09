@@ -1,13 +1,12 @@
 use std::fmt;
 use std::str::FromStr;
 
-use serde::{Deserialize, Serialize};
-
 use super::{extract_variables, write_variables};
 use crate::commands::originate::{OriginateError, Variables};
 
 /// SIP endpoint via a named profile: `sofia/{profile}/{destination}`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub struct SofiaEndpoint {
     /// SIP profile name (e.g. `internal`, `external`).
@@ -15,13 +14,17 @@ pub struct SofiaEndpoint {
     /// SIP URI or destination number.
     pub destination: String,
     /// Per-channel variables prepended as `{key=value}`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     pub variables: Option<Variables>,
 }
 
 /// SIP endpoint via a configured gateway:
 /// `sofia/gateway/[{profile}::]{gateway}/{destination}`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub struct SofiaGateway {
     /// Gateway name as configured in the SIP profile.
@@ -29,10 +32,16 @@ pub struct SofiaGateway {
     /// Destination number or SIP user part.
     pub destination: String,
     /// SIP profile name to qualify the gateway lookup.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     pub profile: Option<String>,
     /// Per-channel variables prepended as `{key=value}`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     pub variables: Option<Variables>,
 }
 
@@ -47,7 +56,8 @@ pub struct SofiaGateway {
 /// single named profile (see `sofia_contact_function` in
 /// `mod_sofia.c` where `strcmp(profile_name, "*")` skips the single-profile
 /// lookup and falls through to the all-profiles hash iteration).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub struct SofiaContact {
     /// User part of the contact lookup.
@@ -55,10 +65,16 @@ pub struct SofiaContact {
     /// Domain for the contact lookup.
     pub domain: String,
     /// SIP profile name, or `"*"` for all profiles.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     pub profile: Option<String>,
     /// Per-channel variables prepended as `{key=value}`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     pub variables: Option<Variables>,
 }
 

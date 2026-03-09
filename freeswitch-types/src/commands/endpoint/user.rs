@@ -1,22 +1,27 @@
 use std::fmt;
 use std::str::FromStr;
 
-use serde::{Deserialize, Serialize};
-
 use super::{extract_variables, write_variables};
 use crate::commands::originate::{OriginateError, Variables};
 
 /// Directory-based endpoint: `user/{name}[@{domain}]`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub struct UserEndpoint {
     /// User name from the directory.
     pub name: String,
     /// Domain name (optional, uses default domain if absent).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     pub domain: Option<String>,
     /// Per-channel variables prepended as `{key=value}`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     pub variables: Option<Variables>,
 }
 
