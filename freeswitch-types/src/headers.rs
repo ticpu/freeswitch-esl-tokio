@@ -48,8 +48,6 @@ define_header_enum! {
         DtmfDigit => "DTMF-Digit",
         Priority => "priority",
         LogLevel => "Log-Level",
-        /// Active session count from `HEARTBEAT` events.
-        SessionCount => "Session-Count",
         /// SIP NOTIFY body content (JSON payload from `NOTIFY_IN` events).
         PlData => "pl_data",
         /// SIP event package name from `NOTIFY_IN` events (e.g. `emergency-AbandonedCall`).
@@ -77,6 +75,8 @@ define_header_enum! {
         ChannelVideoReadCodecRate => "Channel-Video-Read-Codec-Rate",
         ChannelVideoWriteCodecName => "Channel-Video-Write-Codec-Name",
         ChannelVideoWriteCodecRate => "Channel-Video-Write-Codec-Rate",
+        /// Active session count from `HEARTBEAT` events.
+        SessionCount => "Session-Count",
     }
 }
 
