@@ -17,7 +17,12 @@ use std::str::FromStr;
 /// assert_eq!(addr.display_name(), Some("Alice"));
 /// assert_eq!(addr.tag(), Some("abc123"));
 /// ```
+///
+/// [`Display`](std::fmt::Display) always emits angle brackets around the URI,
+/// even for bare addr-spec input. This is the canonical form required by
+/// RFC 3261 when header-level parameters are present.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct SipHeaderAddr {
     display_name: Option<String>,
     uri: sip_uri::Uri,
@@ -25,20 +30,19 @@ pub struct SipHeaderAddr {
 }
 
 /// Error returned when parsing a SIP header address value fails.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("invalid SIP header address: {0}")]
 pub struct ParseSipHeaderAddrError(pub String);
-
-impl fmt::Display for ParseSipHeaderAddrError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "invalid SIP header address: {}", self.0)
-    }
-}
-
-impl std::error::Error for ParseSipHeaderAddrError {}
 
 impl From<sip_uri::ParseUriError> for ParseSipHeaderAddrError {
     fn from(e: sip_uri::ParseUriError) -> Self {
-        ParseSipHeaderAddrError(e.to_string())
+        Self(e.to_string())
+    }
+}
+
+impl From<sip_uri::ParseSipUriError> for ParseSipHeaderAddrError {
+    fn from(e: sip_uri::ParseSipUriError) -> Self {
+        Self(e.to_string())
     }
 }
 
