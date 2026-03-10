@@ -11,6 +11,8 @@
 #[macro_use]
 mod macros;
 
+pub use sip_uri;
+
 pub mod channel;
 pub mod commands;
 pub mod conference_info;
@@ -45,6 +47,6 @@ pub use headers::{normalize_header_key, EventHeader, ParseEventHeaderError};
 pub use lookup::HeaderLookup;
 pub use variables::{
     ChannelVariable, EslArray, MultipartBody, MultipartItem, ParseChannelVariableError,
-    SipCallInfo, SipCallInfoEntry, SipCallInfoError, SipGeolocation, SipGeolocationRef,
-    VariableName,
+    ParseSipHeaderAddrError, SipCallInfo, SipCallInfoEntry, SipCallInfoError, SipGeolocation,
+    SipGeolocationRef, SipHeaderAddr, VariableName,
 };
