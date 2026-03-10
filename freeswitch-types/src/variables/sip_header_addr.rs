@@ -1,6 +1,8 @@
 use std::fmt;
 use std::str::FromStr;
 
+use percent_encoding::percent_decode_str;
+
 /// A SIP header field value containing a name-addr or addr-spec with
 /// header-level parameters (RFC 3261 S20).
 ///
@@ -116,9 +118,10 @@ impl SipHeaderAddr {
     /// `Some(None)` if it is a flag param (no value),
     /// `None` if the param is not present.
     pub fn param(&self, name: &str) -> Option<Option<&str>> {
+        let needle = name.to_ascii_lowercase();
         self.params
             .iter()
-            .find(|(k, _)| k.eq_ignore_ascii_case(name))
+            .find(|(k, _)| *k == needle)
             .map(|(_, v)| v.as_deref())
     }
 
@@ -166,21 +169,20 @@ fn extract_angle_uri(s: &str) -> Option<(&str, &str)> {
 }
 
 /// Parse header-level parameters from the trailing portion after `>`.
+/// Values are percent-decoded per SIP header rules (RFC 3261 S25).
 fn parse_header_params(s: &str) -> Vec<(String, Option<String>)> {
     let mut params = Vec::new();
     for segment in s.split(';') {
-        let segment = segment.trim();
         if segment.is_empty() {
             continue;
         }
         if let Some((key, value)) = segment.split_once('=') {
             params.push((
-                key.trim()
-                    .to_ascii_lowercase(),
+                key.to_ascii_lowercase(),
                 Some(
-                    value
-                        .trim()
-                        .to_string(),
+                    percent_decode_str(value)
+                        .decode_utf8_lossy()
+                        .into_owned(),
                 ),
             ));
         } else {
@@ -373,10 +375,7 @@ mod tests {
             .parse()
             .unwrap();
         assert_eq!(addr.display_name(), None);
-        assert_eq!(
-            addr.param("serviceurn"),
-            Some(Some("urn%3Aservice%3Apolice"))
-        );
+        assert_eq!(addr.param("serviceurn"), Some(Some("urn:service:police")));
         let sip = addr
             .sip_uri()
             .unwrap();
