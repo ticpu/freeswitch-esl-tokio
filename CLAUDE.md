@@ -1,10 +1,3 @@
-## Editing This File
-
-**CLAUDE.md edits should be the first change in any batch** that includes
-policy updates. This file is part of the cached prompt context; changing it
-invalidates the cache and costs money. Group all CLAUDE.md changes into one
-early edit to minimize cache misses.
-
 ## Project Type
 
 This is a **library-first** crate. There is an examples/ folder buildable binaries
