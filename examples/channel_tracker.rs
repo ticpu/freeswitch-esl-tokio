@@ -23,8 +23,8 @@ use std::collections::HashMap;
 use std::fmt::Display;
 
 use freeswitch_esl_tokio::{
-    CallState, EslClient, EslError, EslEvent, EslEventType, EventFormat, EventHeader, HeaderLookup,
-    DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT,
+    BgJobTracker, CallState, EslClient, EslError, EslEvent, EslEventType, EventFormat, EventHeader,
+    HeaderLookup, DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT,
 };
 use percent_encoding::percent_decode_str;
 use tracing::{debug, error, info, warn};
@@ -153,15 +153,12 @@ impl TrackedChannel {
 
 struct ChannelTracker {
     channels: HashMap<String, TrackedChannel>,
-    /// Maps bgapi Job-UUID -> channel UUID for pending uuid_dump results.
-    pending_dumps: HashMap<String, String>,
 }
 
 impl ChannelTracker {
     fn new() -> Self {
         Self {
             channels: HashMap::new(),
-            pending_dumps: HashMap::new(),
         }
     }
 
@@ -208,21 +205,6 @@ impl ChannelTracker {
         {
             ch.update_from_dump(body);
             debug!("uuid_dump applied for {}", short_uuid(uuid));
-        }
-    }
-
-    fn handle_background_job(&mut self, event: &EslEvent) {
-        let job_uuid = match event.job_uuid() {
-            Some(j) => j,
-            None => return,
-        };
-        if let Some(channel_uuid) = self
-            .pending_dumps
-            .remove(job_uuid)
-        {
-            if let Some(body) = event.body() {
-                self.apply_dump(&channel_uuid, body);
-            }
         }
     }
 
@@ -385,22 +367,14 @@ impl ChannelTracker {
 }
 
 /// Request a uuid_dump via bgapi (non-blocking). The result arrives as a
-/// BACKGROUND_JOB event and is matched by Job-UUID in the event loop.
-async fn request_dump(client: &EslClient, tracker: &mut ChannelTracker, uuid: &str) {
-    match client
-        .bgapi(&format!("uuid_dump {}", uuid))
+/// BACKGROUND_JOB event, tracked by `bg` and correlated in the event loop
+/// via [`BgJobTracker::try_complete`].
+async fn request_dump(client: &EslClient, bg: &mut BgJobTracker<String>, uuid: &str) {
+    if let Err(e) = bg
+        .bgapi(client, &format!("uuid_dump {}", uuid), uuid.to_string())
         .await
     {
-        Ok(response) => {
-            if let Some(job_uuid) = response.job_uuid() {
-                tracker
-                    .pending_dumps
-                    .insert(job_uuid.to_string(), uuid.to_string());
-            }
-        }
-        Err(e) => {
-            debug!("bgapi uuid_dump {} failed: {}", short_uuid(uuid), e);
-        }
+        debug!("bgapi uuid_dump {} failed: {}", short_uuid(uuid), e);
     }
 }
 
@@ -473,6 +447,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Subscribed to channel events + heartbeat");
 
     let mut tracker = ChannelTracker::new();
+    let mut bg: BgJobTracker<String> = BgJobTracker::new();
 
     // Bootstrap: show channels -> fake events -> bgapi uuid_dump per channel.
     // Subscribe first so we don't miss channels created during bootstrap.
@@ -486,7 +461,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if let Ok(body) = response.api_result() {
                 let uuids = tracker.bootstrap(body);
                 for uuid in &uuids {
-                    request_dump(&client, &mut tracker, uuid).await;
+                    request_dump(&client, &mut bg, uuid).await;
                 }
             }
         }
@@ -507,16 +482,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         };
 
+        if let Some((channel_uuid, result)) = bg.try_complete(&event) {
+            if let Some(body) = result.body() {
+                tracker.apply_dump(&channel_uuid, body);
+            }
+            continue;
+        }
+
         match event.event_type() {
             Some(EslEventType::Heartbeat) => tracker.print_summary(),
-            Some(EslEventType::BackgroundJob) => tracker.handle_background_job(&event),
             Some(EslEventType::ChannelCreate) => {
                 let uuid = event
                     .unique_id()
                     .map(|s| s.to_string());
                 tracker.process_event(&event);
                 if let Some(uuid) = uuid {
-                    request_dump(&client, &mut tracker, &uuid).await;
+                    request_dump(&client, &mut bg, &uuid).await;
                 }
             }
             _ => tracker.process_event(&event),

@@ -124,6 +124,7 @@
 //! ```
 
 pub mod app;
+pub mod bgjob;
 pub mod connection;
 pub mod error;
 
@@ -150,6 +151,7 @@ pub use freeswitch_types::{
 };
 
 pub use app::dptools::AppCommand;
+pub use bgjob::{BgJobResult, BgJobTracker};
 pub use command::{
     parse_api_body, CommandBuilder, EslCommand, EslResponse, ExecuteOptions, ReplyStatus,
 };

@@ -459,3 +459,35 @@ there are no competing prefixes to disambiguate.
 The normalizer is an internal implementation detail behind `ConferenceInfo::from_xml()`.
 Callers never see it. Serialization with `to_xml()` emits prefix-free XML,
 which is valid RFC 4575 (using the default namespace).
+
+## BgJobTracker: bgapi correlation as a data structure
+
+Every production ESL daemon we've built — fs-eventd's channel tracker,
+noans-worker's originate monitor, the bgapi benchmark — contained the same
+boilerplate: a `HashMap<String, Context>` mapping Job-UUID to application
+state, a check for `BackgroundJob` type + Job-UUID match on every event,
+removal from the map, and `parse_api_body()` on the body. The pattern was
+identical each time, differing only in what context was attached (channel
+UUID, send timestamp, call ID).
+
+`BgJobTracker<C>` extracts this into a generic `HashMap` wrapper. The type
+parameter `C` is caller-defined context attached at send time and returned
+by `try_complete()` when the matching event arrives. The caller's match arm
+in the event loop is the handler — the same code that would have lived in
+the manual `BackgroundJob` branch, but without the UUID bookkeeping.
+
+A callback-based dispatcher was considered but rejected: `Box<dyn FnOnce>`
+handlers run inside `dispatch()` which holds `&mut self`, preventing the
+handler from accessing the surrounding `&mut app_state` without
+`Arc<Mutex<>>`. A future-based design (oneshot-backed handles) creates two
+consumption paths for one result — the caller must both drive `dispatch()`
+and `.await` handles elsewhere, hanging silently if they forget one side.
+The context-return approach sidesteps both problems because the caller
+already has `&mut app_state` at the `try_complete` call site.
+
+`BgJobResult<'a>` borrows from the event rather than cloning, matching the
+library's general pattern where `event.body()` and `event.job_uuid()`
+return `Option<&str>`. The result is always consumed in the same event loop
+iteration. The tracker lives in `freeswitch-esl-tokio` rather than
+`freeswitch-types` because its `bgapi()` convenience method calls
+`EslClient::bgapi()`.

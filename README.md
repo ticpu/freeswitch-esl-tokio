@@ -192,32 +192,47 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 command -- no events are delivered and no other commands can be sent on the
 connection until it returns. Use `bgapi()` for anything that may take time
 (originate, conference operations, bulk queries). `bgapi()` returns
-immediately with a Job-UUID; the result arrives as a `BACKGROUND_JOB` event:
+immediately with a Job-UUID; the result arrives as a `BACKGROUND_JOB` event.
+
+`BgJobTracker` handles the Job-UUID correlation so you don't have to
+maintain a pending-jobs HashMap yourself:
 
 ```rust
-use freeswitch_esl_tokio::{parse_api_body, HeaderLookup};
+use freeswitch_esl_tokio::BgJobTracker;
 
 client.subscribe_events(EventFormat::Plain, &[
     EslEventType::BackgroundJob,
 ]).await?;
 
-// bgapi queues the command and returns immediately with a Job-UUID
-let response = client.bgapi("sofia xmlstatus profile internal").await?;
-let job_uuid = response.job_uuid().expect("bgapi returns Job-UUID");
+let mut bg = BgJobTracker::new();
+bg.send(&client, "sofia xmlstatus profile internal").await?;
 
-// The result arrives later as a BACKGROUND_JOB event
 while let Some(Ok(event)) = events.recv().await {
-    if event.is_event_type(EslEventType::BackgroundJob)
-        && event.job_uuid() == Some(&job_uuid)
-    {
-        // parse_api_body handles +OK/-ERR prefixed and raw responses
-        let body = event.body().unwrap();
-        match parse_api_body(body) {
+    if let Some(((), result)) = bg.try_complete(&event) {
+        match result.parse_body() {
             Ok(data) => println!("{}", data),
             Err(e) => eprintln!("command failed: {}", e),
         }
         break;
     }
+}
+```
+
+Attach caller context to each job for dispatch without a separate map.
+The context is returned alongside the result:
+
+```rust
+let mut bg: BgJobTracker<String> = BgJobTracker::new();
+
+for uuid in &channel_uuids {
+    bg.bgapi(&client, &format!("uuid_dump {uuid}"), uuid.clone()).await?;
+}
+
+while let Some(Ok(event)) = events.recv().await {
+    if let Some((channel_uuid, result)) = bg.try_complete(&event) {
+        println!("dump for {}: {:?}", channel_uuid, result.body());
+    }
+    // ... handle other events
 }
 ```
 
