@@ -319,9 +319,9 @@ mod tests {
     fn parse_target_xml_no_args() {
         let target = parse_originate_target("&conference()", None).unwrap();
         if let OriginateTarget::Application(app) = target {
-            assert_eq!(app.name, "conference");
+            assert_eq!(app.name(), "conference");
             assert!(app
-                .args
+                .args()
                 .is_none());
         } else {
             panic!("expected Application");
@@ -332,12 +332,8 @@ mod tests {
     fn parse_target_xml_with_args() {
         let target = parse_originate_target("&conference(1)", None).unwrap();
         if let OriginateTarget::Application(app) = target {
-            assert_eq!(app.name, "conference");
-            assert_eq!(
-                app.args
-                    .as_deref(),
-                Some("1")
-            );
+            assert_eq!(app.name(), "conference");
+            assert_eq!(app.args(), Some("1"));
         } else {
             panic!("expected Application");
         }
@@ -352,20 +348,10 @@ mod tests {
         .unwrap();
         if let OriginateTarget::InlineApplications(apps) = target {
             assert_eq!(apps.len(), 2);
-            assert_eq!(apps[0].name, "conference");
-            assert_eq!(
-                apps[0]
-                    .args
-                    .as_deref(),
-                Some("1")
-            );
-            assert_eq!(apps[1].name, "hangup");
-            assert_eq!(
-                apps[1]
-                    .args
-                    .as_deref(),
-                Some("NORMAL_CLEARING")
-            );
+            assert_eq!(apps[0].name(), "conference");
+            assert_eq!(apps[0].args(), Some("1"));
+            assert_eq!(apps[1].name(), "hangup");
+            assert_eq!(apps[1].args(), Some("NORMAL_CLEARING"));
         } else {
             panic!("expected InlineApplications");
         }
@@ -376,9 +362,9 @@ mod tests {
         let target = parse_originate_target("hangup", Some(&DialplanType::Inline)).unwrap();
         if let OriginateTarget::InlineApplications(apps) = target {
             assert_eq!(apps.len(), 1);
-            assert_eq!(apps[0].name, "hangup");
+            assert_eq!(apps[0].name(), "hangup");
             assert!(apps[0]
-                .args
+                .args()
                 .is_none());
         } else {
             panic!("expected InlineApplications");
@@ -392,17 +378,12 @@ mod tests {
                 .unwrap();
         if let OriginateTarget::InlineApplications(apps) = target {
             assert_eq!(apps.len(), 2);
-            assert_eq!(apps[0].name, "park");
+            assert_eq!(apps[0].name(), "park");
             assert!(apps[0]
-                .args
+                .args()
                 .is_none());
-            assert_eq!(apps[1].name, "hangup");
-            assert_eq!(
-                apps[1]
-                    .args
-                    .as_deref(),
-                Some("NORMAL_CLEARING")
-            );
+            assert_eq!(apps[1].name(), "hangup");
+            assert_eq!(apps[1].args(), Some("NORMAL_CLEARING"));
         } else {
             panic!("expected InlineApplications");
         }
@@ -413,7 +394,7 @@ mod tests {
         let target = parse_originate_target("park:", Some(&DialplanType::Inline)).unwrap();
         if let OriginateTarget::InlineApplications(apps) = target {
             assert!(apps[0]
-                .args
+                .args()
                 .is_none());
         } else {
             panic!("expected InlineApplications");

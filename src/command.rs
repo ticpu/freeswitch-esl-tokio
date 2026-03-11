@@ -12,6 +12,19 @@ use std::borrow::Cow;
 use std::fmt;
 use std::time::Duration;
 
+/// Wraps a string so `Debug` prints `[REDACTED]` instead of the value.
+///
+/// Used for password fields in [`EslCommand`] to prevent accidental exposure
+/// in debug logs. The inner value is not accessible from external crates.
+#[derive(Clone)]
+pub struct Secret(pub(crate) String);
+
+impl fmt::Debug for Secret {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("[REDACTED]")
+    }
+}
+
 /// Parse a FreeSWITCH API response body into a result.
 ///
 /// FreeSWITCH API commands return results in varying formats:
@@ -132,14 +145,6 @@ impl EslResponse {
     pub fn body(&self) -> Option<&str> {
         self.body
             .as_deref()
-    }
-
-    /// Body as owned `String`, empty if `None`.
-    pub fn body_string(&self) -> String {
-        self.body
-            .as_ref()
-            .cloned()
-            .unwrap_or_default()
     }
 
     /// Look up a response header by name.
@@ -347,16 +352,10 @@ impl CommandBuilder {
 /// Controls optional headers that modify execution behavior in outbound
 /// ESL mode (socket application with `async full`).
 #[derive(Debug, Clone, Default)]
-#[non_exhaustive]
 pub struct ExecuteOptions {
-    /// Lock the event queue during execution so events are serialized
-    /// with the application (prevents race conditions on fast-executing apps).
-    pub event_lock: bool,
-    /// Return immediately instead of waiting for the application to finish.
-    /// Only meaningful in outbound `async full` mode.
-    pub async_mode: bool,
-    /// Repeat the application N times.
-    pub loops: Option<u32>,
+    event_lock: bool,
+    async_mode: bool,
+    loops: Option<u32>,
 }
 
 impl ExecuteOptions {
@@ -382,6 +381,23 @@ impl ExecuteOptions {
         self.loops = Some(count);
         self
     }
+
+    /// Lock the event queue during execution so events are serialized
+    /// with the application (prevents race conditions on fast-executing apps).
+    pub fn event_lock(&self) -> bool {
+        self.event_lock
+    }
+
+    /// Return immediately instead of waiting for the application to finish.
+    /// Only meaningful in outbound `async full` mode.
+    pub fn async_mode(&self) -> bool {
+        self.async_mode
+    }
+
+    /// Repeat the application N times.
+    pub fn loops(&self) -> Option<u32> {
+        self.loops
+    }
 }
 
 /// ESL command types for the wire protocol.
@@ -389,20 +405,20 @@ impl ExecuteOptions {
 /// Most users won't construct these directly — use [`EslClient`](crate::EslClient)
 /// methods or [`AppCommand`](crate::AppCommand) instead. This enum is public so
 /// that [`send_command()`](crate::EslClient::send_command) callers can name the type.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 #[non_exhaustive]
 pub enum EslCommand {
     /// Authenticate with password.
     Auth {
         /// ESL password (from `event_socket.conf.xml`).
-        password: String,
+        password: Secret,
     },
     /// Authenticate with user and password.
     UserAuth {
         /// Username (e.g. `admin@default`).
         user: String,
         /// Password for this user.
-        password: String,
+        password: Secret,
     },
     /// Execute API command.
     Api {
@@ -506,98 +522,6 @@ pub enum EslCommand {
     Connect,
 }
 
-impl fmt::Debug for EslCommand {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            EslCommand::Auth { .. } => f
-                .debug_struct("Auth")
-                .field("password", &"[REDACTED]")
-                .finish(),
-            EslCommand::UserAuth { user, .. } => f
-                .debug_struct("UserAuth")
-                .field("user", user)
-                .field("password", &"[REDACTED]")
-                .finish(),
-            EslCommand::Api { command } => f
-                .debug_struct("Api")
-                .field("command", command)
-                .finish(),
-            EslCommand::BgApi { command } => f
-                .debug_struct("BgApi")
-                .field("command", command)
-                .finish(),
-            EslCommand::Events { format, events } => f
-                .debug_struct("Events")
-                .field("format", format)
-                .field("events", events)
-                .finish(),
-            EslCommand::Filter { header, value } => f
-                .debug_struct("Filter")
-                .field("header", header)
-                .field("value", value)
-                .finish(),
-            EslCommand::SendMsg { uuid, event } => f
-                .debug_struct("SendMsg")
-                .field("uuid", uuid)
-                .field("event", event)
-                .finish(),
-            EslCommand::Execute {
-                app,
-                args,
-                uuid,
-                options,
-            } => f
-                .debug_struct("Execute")
-                .field("app", app)
-                .field("args", args)
-                .field("uuid", uuid)
-                .field("options", options)
-                .finish(),
-            EslCommand::Exit => write!(f, "Exit"),
-            EslCommand::Log { level } => f
-                .debug_struct("Log")
-                .field("level", level)
-                .finish(),
-            EslCommand::NoLog => write!(f, "NoLog"),
-            EslCommand::NoOp => write!(f, "NoOp"),
-            EslCommand::SendEvent { event } => f
-                .debug_struct("SendEvent")
-                .field("event", event)
-                .finish(),
-            EslCommand::MyEvents { format, uuid } => f
-                .debug_struct("MyEvents")
-                .field("format", format)
-                .field("uuid", uuid)
-                .finish(),
-            EslCommand::Linger { timeout } => f
-                .debug_struct("Linger")
-                .field("timeout", &timeout.map(|d| d.as_secs()))
-                .finish(),
-            EslCommand::NoLinger => write!(f, "NoLinger"),
-            EslCommand::Resume => write!(f, "Resume"),
-            EslCommand::NixEvent { events } => f
-                .debug_struct("NixEvent")
-                .field("events", events)
-                .finish(),
-            EslCommand::NoEvents => write!(f, "NoEvents"),
-            EslCommand::FilterDelete { header, value } => f
-                .debug_struct("FilterDelete")
-                .field("header", header)
-                .field("value", value)
-                .finish(),
-            EslCommand::DivertEvents { on } => f
-                .debug_struct("DivertEvents")
-                .field("on", on)
-                .finish(),
-            EslCommand::GetVar { name } => f
-                .debug_struct("GetVar")
-                .field("name", name)
-                .finish(),
-            EslCommand::Connect => write!(f, "Connect"),
-        }
-    }
-}
-
 impl EslCommand {
     /// Format a simple command with optional arguments
     fn format_simple_command(cmd: &str, args: &[&str]) -> String {
@@ -614,15 +538,15 @@ impl EslCommand {
     pub fn to_wire_format(&self) -> EslResult<String> {
         match self {
             EslCommand::Auth { password } => {
-                validate_no_newlines(password, "password")?;
-                Ok(Self::format_simple_command("auth", &[password]))
+                validate_no_newlines(&password.0, "password")?;
+                Ok(Self::format_simple_command("auth", &[&password.0]))
             }
             EslCommand::UserAuth { user, password } => {
                 validate_no_newlines(user, "user")?;
-                validate_no_newlines(password, "password")?;
+                validate_no_newlines(&password.0, "password")?;
                 Ok(Self::format_simple_command(
                     "userauth",
-                    &[&format!("{}:{}", user, password)],
+                    &[&format!("{}:{}", user, password.0)],
                 ))
             }
             EslCommand::Api { command } => {
@@ -834,7 +758,7 @@ mod tests {
     #[test]
     fn test_esl_commands() {
         let auth = EslCommand::Auth {
-            password: "test".to_string(),
+            password: Secret("test".to_string()),
         };
         assert_eq!(
             auth.to_wire_format()
@@ -1168,7 +1092,7 @@ mod tests {
             .is_err());
 
         let auth = EslCommand::Auth {
-            password: "test\napi status".to_string(),
+            password: Secret("test\napi status".to_string()),
         };
         assert!(auth
             .to_wire_format()
@@ -1186,7 +1110,7 @@ mod tests {
     #[test]
     fn test_debug_redacts_password() {
         let auth = EslCommand::Auth {
-            password: "secret".to_string(),
+            password: Secret("secret".to_string()),
         };
         let debug_str = format!("{:?}", auth);
         assert!(!debug_str.contains("secret"));
@@ -1194,7 +1118,7 @@ mod tests {
 
         let user_auth = EslCommand::UserAuth {
             user: "admin@default".to_string(),
-            password: "secret".to_string(),
+            password: Secret("secret".to_string()),
         };
         let debug_str = format!("{:?}", user_auth);
         assert!(!debug_str.contains("secret"));
@@ -1290,7 +1214,7 @@ mod tests {
     fn test_user_auth_wire_format() {
         let cmd = EslCommand::UserAuth {
             user: "admin@default".to_string(),
-            password: "secret123".to_string(),
+            password: Secret("secret123".to_string()),
         };
         assert_eq!(
             cmd.to_wire_format()
@@ -1303,7 +1227,7 @@ mod tests {
     fn test_user_auth_newline_in_user_rejected() {
         let cmd = EslCommand::UserAuth {
             user: "admin\n@default".to_string(),
-            password: "pass".to_string(),
+            password: Secret("pass".to_string()),
         };
         assert!(cmd
             .to_wire_format()
@@ -1314,7 +1238,7 @@ mod tests {
     fn test_user_auth_newline_in_password_rejected() {
         let cmd = EslCommand::UserAuth {
             user: "admin@default".to_string(),
-            password: "pass\nword".to_string(),
+            password: Secret("pass\nword".to_string()),
         };
         assert!(cmd
             .to_wire_format()
@@ -1359,7 +1283,7 @@ mod tests {
     #[test]
     fn test_redact_wire_auth() {
         let cmd = EslCommand::Auth {
-            password: "secret".to_string(),
+            password: Secret("secret".to_string()),
         };
         let wire = cmd
             .to_wire_format()
@@ -1373,7 +1297,7 @@ mod tests {
     fn test_redact_wire_user_auth() {
         let cmd = EslCommand::UserAuth {
             user: "admin@default".to_string(),
-            password: "secret".to_string(),
+            password: Secret("secret".to_string()),
         };
         let wire = cmd
             .to_wire_format()

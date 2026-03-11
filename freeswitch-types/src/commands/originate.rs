@@ -353,16 +353,13 @@ pub use super::endpoint::Endpoint;
 /// - XML: `&name(args)`
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[non_exhaustive]
 pub struct Application {
-    /// Application name (e.g. `park`, `conference`, `socket`).
-    pub name: String,
-    /// Application arguments, if any.
+    name: String,
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub args: Option<String>,
+    args: Option<String>,
 }
 
 impl Application {
@@ -385,6 +382,27 @@ impl Application {
     /// Park the channel (hold in place without bridging).
     pub fn park() -> Self {
         Self::simple("park")
+    }
+
+    /// Application name (e.g. `park`, `conference`, `socket`).
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Application arguments, if any.
+    pub fn args(&self) -> Option<&str> {
+        self.args
+            .as_deref()
+    }
+
+    /// Mutable reference to the application name.
+    pub fn name_mut(&mut self) -> &mut String {
+        &mut self.name
+    }
+
+    /// Mutable reference to the application arguments.
+    pub fn args_mut(&mut self) -> &mut Option<String> {
+        &mut self.args
     }
 
     /// Format as inline (`name:args`) or XML (`&name(args)`) syntax.
@@ -690,6 +708,31 @@ impl Originate {
         self.timeout
             .map(|d| d.as_secs())
     }
+
+    /// Override the dialplan type after construction.
+    pub fn set_dialplan(&mut self, dp: Option<DialplanType>) {
+        self.dialplan = dp;
+    }
+
+    /// Override the dialplan context after construction.
+    pub fn set_context(&mut self, ctx: Option<impl Into<String>>) {
+        self.context = ctx.map(|c| c.into());
+    }
+
+    /// Override the caller ID name after construction.
+    pub fn set_cid_name(&mut self, name: Option<impl Into<String>>) {
+        self.cid_name = name.map(|n| n.into());
+    }
+
+    /// Override the caller ID number after construction.
+    pub fn set_cid_num(&mut self, num: Option<impl Into<String>>) {
+        self.cid_num = num.map(|n| n.into());
+    }
+
+    /// Override the timeout after construction.
+    pub fn set_timeout(&mut self, timeout: Option<Duration>) {
+        self.timeout = timeout;
+    }
 }
 
 impl fmt::Display for Originate {
@@ -862,7 +905,7 @@ impl FromStr for Originate {
 }
 
 /// Errors from originate command parsing or construction.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum OriginateError {
     /// A single-quoted token was never closed.
@@ -1210,11 +1253,7 @@ mod tests {
             .unwrap();
         assert_eq!(parsed.to_string(), input);
         if let OriginateTarget::Application(ref app) = parsed.target() {
-            assert_eq!(
-                app.args
-                    .as_deref(),
-                Some("127.0.0.1:8040 async full")
-            );
+            assert_eq!(app.args(), Some("127.0.0.1:8040 async full"));
         } else {
             panic!("expected Application target");
         }
@@ -1246,7 +1285,7 @@ mod tests {
         assert_eq!(parsed.to_string(), input);
         if let OriginateTarget::InlineApplications(ref apps) = parsed.target() {
             assert!(apps[0]
-                .args
+                .args()
                 .is_none());
         } else {
             panic!("expected InlineApplications target");
@@ -1533,9 +1572,9 @@ mod tests {
     #[test]
     fn application_simple_no_args() {
         let app = Application::simple("park");
-        assert_eq!(app.name, "park");
+        assert_eq!(app.name(), "park");
         assert!(app
-            .args
+            .args()
             .is_none());
     }
 

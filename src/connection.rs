@@ -16,7 +16,7 @@ use tracing::{debug, info, trace, warn};
 #[cfg(unix)]
 use crate::constants::REEXEC_DRAIN_TIMEOUT_MS;
 use crate::{
-    command::{EslCommand, EslResponse, ExecuteOptions},
+    command::{EslCommand, EslResponse, ExecuteOptions, Secret},
     constants::{
         CONTENT_TYPE_LOG_DATA, DEFAULT_TIMEOUT_MS, HEADER_CONTENT_TYPE, MAX_EVENT_QUEUE_SIZE,
         SOCKET_BUF_SIZE,
@@ -187,12 +187,9 @@ struct SharedState {
 /// Controls parameters that are fixed at connection time, such as the event
 /// queue capacity and connect timeout. Use [`Default::default()`] for standard settings.
 #[derive(Debug, Clone)]
-#[non_exhaustive]
 pub struct EslConnectOptions {
-    /// Capacity of the mpsc channel delivering events. Default: 1000.
-    pub event_queue_size: usize,
-    /// Timeout for TCP connect and each auth handshake read. Default: 2s.
-    pub connect_timeout: Duration,
+    event_queue_size: usize,
+    connect_timeout: Duration,
 }
 
 impl EslConnectOptions {
@@ -211,6 +208,16 @@ impl EslConnectOptions {
     pub fn with_connect_timeout(mut self, timeout: Duration) -> Self {
         self.connect_timeout = timeout;
         self
+    }
+
+    /// Capacity of the mpsc channel delivering events. Default: 1000.
+    pub fn event_queue_size(&self) -> usize {
+        self.event_queue_size
+    }
+
+    /// Timeout for TCP connect and each auth handshake read. Default: 2s.
+    pub fn connect_timeout(&self) -> Duration {
+        self.connect_timeout
     }
 }
 
@@ -334,11 +341,11 @@ async fn authenticate(
 
     let auth_cmd = match method {
         AuthMethod::Password(password) => EslCommand::Auth {
-            password: password.to_string(),
+            password: Secret(password.to_string()),
         },
         AuthMethod::User { user, password } => EslCommand::UserAuth {
             user: user.to_string(),
-            password: password.to_string(),
+            password: Secret(password.to_string()),
         },
     };
 

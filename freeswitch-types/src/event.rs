@@ -716,6 +716,19 @@ impl PartialEq for EslEvent {
     }
 }
 
+impl std::hash::Hash for EslEvent {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.event_type
+            .hash(state);
+        for (k, v) in &self.headers {
+            k.hash(state);
+            v.hash(state);
+        }
+        self.body
+            .hash(state);
+    }
+}
+
 #[cfg(feature = "serde")]
 impl<'de> serde::Deserialize<'de> for EslEvent {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>

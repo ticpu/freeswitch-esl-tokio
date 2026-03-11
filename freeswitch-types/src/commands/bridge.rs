@@ -20,17 +20,13 @@ use super::originate::{OriginateError, Variables};
 /// - Global `{variables}` apply to all endpoints
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[non_exhaustive]
 pub struct BridgeDialString {
-    /// Default-scope variables applied to all endpoints.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub variables: Option<Variables>,
-    /// Sequential failover groups (`|`-separated). Within each group,
-    /// endpoints ring simultaneously (`,`-separated).
-    pub groups: Vec<Vec<Endpoint>>,
+    variables: Option<Variables>,
+    groups: Vec<Vec<Endpoint>>,
 }
 
 impl BridgeDialString {
@@ -46,6 +42,28 @@ impl BridgeDialString {
     pub fn with_variables(mut self, variables: Variables) -> Self {
         self.variables = Some(variables);
         self
+    }
+
+    /// Default-scope variables applied to all endpoints.
+    pub fn variables(&self) -> Option<&Variables> {
+        self.variables
+            .as_ref()
+    }
+
+    /// Sequential failover groups (`|`-separated). Within each group,
+    /// endpoints ring simultaneously (`,`-separated).
+    pub fn groups(&self) -> &[Vec<Endpoint>] {
+        &self.groups
+    }
+
+    /// Mutable reference to the default-scope variables.
+    pub fn variables_mut(&mut self) -> &mut Option<Variables> {
+        &mut self.variables
+    }
+
+    /// Mutable reference to the failover groups.
+    pub fn groups_mut(&mut self) -> &mut Vec<Vec<Endpoint>> {
+        &mut self.groups
     }
 }
 
@@ -171,37 +189,19 @@ mod tests {
 
     #[test]
     fn display_single_endpoint() {
-        let bridge = BridgeDialString {
-            variables: None,
-            groups: vec![vec![Endpoint::SofiaGateway(SofiaGateway {
-                gateway: "my_provider".into(),
-                destination: "18005551234".into(),
-                profile: None,
-                variables: None,
-            })]],
-        };
+        let bridge =
+            BridgeDialString::new(vec![vec![
+                SofiaGateway::new("my_provider", "18005551234").into()
+            ]]);
         assert_eq!(bridge.to_string(), "sofia/gateway/my_provider/18005551234");
     }
 
     #[test]
     fn display_simultaneous_ring() {
-        let bridge = BridgeDialString {
-            variables: None,
-            groups: vec![vec![
-                Endpoint::SofiaGateway(SofiaGateway {
-                    gateway: "primary".into(),
-                    destination: "18005551234".into(),
-                    profile: None,
-                    variables: None,
-                }),
-                Endpoint::SofiaGateway(SofiaGateway {
-                    gateway: "secondary".into(),
-                    destination: "18005551234".into(),
-                    profile: None,
-                    variables: None,
-                }),
-            ]],
-        };
+        let bridge = BridgeDialString::new(vec![vec![
+            SofiaGateway::new("primary", "18005551234").into(),
+            SofiaGateway::new("secondary", "18005551234").into(),
+        ]]);
         assert_eq!(
             bridge.to_string(),
             "sofia/gateway/primary/18005551234,sofia/gateway/secondary/18005551234"
@@ -210,23 +210,10 @@ mod tests {
 
     #[test]
     fn display_sequential_failover() {
-        let bridge = BridgeDialString {
-            variables: None,
-            groups: vec![
-                vec![Endpoint::SofiaGateway(SofiaGateway {
-                    gateway: "primary".into(),
-                    destination: "18005551234".into(),
-                    profile: None,
-                    variables: None,
-                })],
-                vec![Endpoint::SofiaGateway(SofiaGateway {
-                    gateway: "backup".into(),
-                    destination: "18005551234".into(),
-                    profile: None,
-                    variables: None,
-                })],
-            ],
-        };
+        let bridge = BridgeDialString::new(vec![
+            vec![SofiaGateway::new("primary", "18005551234").into()],
+            vec![SofiaGateway::new("backup", "18005551234").into()],
+        ]);
         assert_eq!(
             bridge.to_string(),
             "sofia/gateway/primary/18005551234|sofia/gateway/backup/18005551234"
@@ -235,31 +222,13 @@ mod tests {
 
     #[test]
     fn display_mixed_simultaneous_and_sequential() {
-        let bridge = BridgeDialString {
-            variables: None,
-            groups: vec![
-                vec![
-                    Endpoint::SofiaGateway(SofiaGateway {
-                        gateway: "primary".into(),
-                        destination: "1234".into(),
-                        profile: None,
-                        variables: None,
-                    }),
-                    Endpoint::SofiaGateway(SofiaGateway {
-                        gateway: "secondary".into(),
-                        destination: "1234".into(),
-                        profile: None,
-                        variables: None,
-                    }),
-                ],
-                vec![Endpoint::SofiaGateway(SofiaGateway {
-                    gateway: "backup".into(),
-                    destination: "1234".into(),
-                    profile: None,
-                    variables: None,
-                })],
+        let bridge = BridgeDialString::new(vec![
+            vec![
+                SofiaGateway::new("primary", "1234").into(),
+                SofiaGateway::new("secondary", "1234").into(),
             ],
-        };
+            vec![SofiaGateway::new("backup", "1234").into()],
+        ]);
         assert_eq!(
             bridge.to_string(),
             "sofia/gateway/primary/1234,sofia/gateway/secondary/1234|sofia/gateway/backup/1234"
@@ -270,14 +239,11 @@ mod tests {
     fn display_with_global_variables() {
         let mut vars = Variables::new(VariablesType::Default);
         vars.insert("hangup_after_bridge", "true");
-        let bridge = BridgeDialString {
-            variables: Some(vars),
-            groups: vec![vec![Endpoint::Sofia(SofiaEndpoint {
-                profile: "internal".into(),
-                destination: "1000@domain".into(),
-                variables: None,
-            })]],
-        };
+        let bridge =
+            BridgeDialString::new(vec![vec![
+                SofiaEndpoint::new("internal", "1000@domain").into()
+            ]])
+            .with_variables(vars);
         assert_eq!(
             bridge.to_string(),
             "{hangup_after_bridge=true}sofia/internal/1000@domain"
@@ -288,23 +254,12 @@ mod tests {
     fn display_with_per_endpoint_variables() {
         let mut ep_vars = Variables::new(VariablesType::Channel);
         ep_vars.insert("leg_timeout", "30");
-        let bridge = BridgeDialString {
-            variables: None,
-            groups: vec![vec![
-                Endpoint::SofiaGateway(SofiaGateway {
-                    gateway: "gw1".into(),
-                    destination: "1234".into(),
-                    profile: None,
-                    variables: Some(ep_vars),
-                }),
-                Endpoint::SofiaGateway(SofiaGateway {
-                    gateway: "gw2".into(),
-                    destination: "1234".into(),
-                    profile: None,
-                    variables: None,
-                }),
-            ]],
-        };
+        let bridge = BridgeDialString::new(vec![vec![
+            SofiaGateway::new("gw1", "1234")
+                .with_variables(ep_vars)
+                .into(),
+            SofiaGateway::new("gw2", "1234").into(),
+        ]]);
         assert_eq!(
             bridge.to_string(),
             "[leg_timeout=30]sofia/gateway/gw1/1234,sofia/gateway/gw2/1234"
@@ -313,20 +268,10 @@ mod tests {
 
     #[test]
     fn display_with_error_endpoint_failover() {
-        let bridge = BridgeDialString {
-            variables: None,
-            groups: vec![
-                vec![Endpoint::SofiaGateway(SofiaGateway {
-                    gateway: "primary".into(),
-                    destination: "1234".into(),
-                    profile: None,
-                    variables: None,
-                })],
-                vec![Endpoint::Error(ErrorEndpoint::new(
-                    crate::channel::HangupCause::UserBusy,
-                ))],
-            ],
-        };
+        let bridge = BridgeDialString::new(vec![
+            vec![SofiaGateway::new("primary", "1234").into()],
+            vec![ErrorEndpoint::new(crate::channel::HangupCause::UserBusy).into()],
+        ]);
         assert_eq!(
             bridge.to_string(),
             "sofia/gateway/primary/1234|error/USER_BUSY"
@@ -335,12 +280,9 @@ mod tests {
 
     #[test]
     fn display_with_loopback() {
-        let bridge = BridgeDialString {
-            variables: None,
-            groups: vec![vec![Endpoint::Loopback(
-                LoopbackEndpoint::new("9199").with_context("default"),
-            )]],
-        };
+        let bridge = BridgeDialString::new(vec![vec![LoopbackEndpoint::new("9199")
+            .with_context("default")
+            .into()]]);
         assert_eq!(bridge.to_string(), "loopback/9199/default");
     }
 
@@ -353,13 +295,13 @@ mod tests {
             .unwrap();
         assert_eq!(
             bridge
-                .groups
+                .groups()
                 .len(),
             1
         );
-        assert_eq!(bridge.groups[0].len(), 1);
+        assert_eq!(bridge.groups()[0].len(), 1);
         assert!(bridge
-            .variables
+            .variables()
             .is_none());
     }
 
@@ -370,11 +312,11 @@ mod tests {
             .unwrap();
         assert_eq!(
             bridge
-                .groups
+                .groups()
                 .len(),
             1
         );
-        assert_eq!(bridge.groups[0].len(), 2);
+        assert_eq!(bridge.groups()[0].len(), 2);
     }
 
     #[test]
@@ -384,12 +326,12 @@ mod tests {
             .unwrap();
         assert_eq!(
             bridge
-                .groups
+                .groups()
                 .len(),
             2
         );
-        assert_eq!(bridge.groups[0].len(), 1);
-        assert_eq!(bridge.groups[1].len(), 1);
+        assert_eq!(bridge.groups()[0].len(), 1);
+        assert_eq!(bridge.groups()[1].len(), 1);
     }
 
     #[test]
@@ -400,12 +342,12 @@ mod tests {
                 .unwrap();
         assert_eq!(
             bridge
-                .groups
+                .groups()
                 .len(),
             2
         );
-        assert_eq!(bridge.groups[0].len(), 2);
-        assert_eq!(bridge.groups[1].len(), 1);
+        assert_eq!(bridge.groups()[0].len(), 2);
+        assert_eq!(bridge.groups()[1].len(), 1);
     }
 
     #[test]
@@ -414,23 +356,22 @@ mod tests {
             .parse()
             .unwrap();
         assert!(bridge
-            .variables
+            .variables()
             .is_some());
         assert_eq!(
             bridge
-                .variables
-                .as_ref()
+                .variables()
                 .unwrap()
                 .get("hangup_after_bridge"),
             Some("true")
         );
         assert_eq!(
             bridge
-                .groups
+                .groups()
                 .len(),
             1
         );
-        assert_eq!(bridge.groups[0].len(), 1);
+        assert_eq!(bridge.groups()[0].len(), 1);
     }
 
     #[test]
@@ -441,12 +382,12 @@ mod tests {
                 .unwrap();
         assert_eq!(
             bridge
-                .groups
+                .groups()
                 .len(),
             1
         );
-        assert_eq!(bridge.groups[0].len(), 2);
-        let ep = &bridge.groups[0][0];
+        assert_eq!(bridge.groups()[0].len(), 2);
+        let ep = &bridge.groups()[0][0];
         if let Endpoint::SofiaGateway(gw) = ep {
             assert!(gw
                 .variables
@@ -488,15 +429,10 @@ mod tests {
 
     #[test]
     fn serde_round_trip_single() {
-        let bridge = BridgeDialString {
-            variables: None,
-            groups: vec![vec![Endpoint::SofiaGateway(SofiaGateway {
-                gateway: "my_provider".into(),
-                destination: "18005551234".into(),
-                profile: None,
-                variables: None,
-            })]],
-        };
+        let bridge =
+            BridgeDialString::new(vec![vec![
+                SofiaGateway::new("my_provider", "18005551234").into()
+            ]]);
         let json = serde_json::to_string(&bridge).unwrap();
         let parsed: BridgeDialString = serde_json::from_str(&json).unwrap();
         assert_eq!(bridge, parsed);
@@ -506,28 +442,14 @@ mod tests {
     fn serde_round_trip_multi_group() {
         let mut vars = Variables::new(VariablesType::Default);
         vars.insert("hangup_after_bridge", "true");
-        let bridge = BridgeDialString {
-            variables: Some(vars),
-            groups: vec![
-                vec![
-                    Endpoint::SofiaGateway(SofiaGateway {
-                        gateway: "primary".into(),
-                        destination: "1234".into(),
-                        profile: None,
-                        variables: None,
-                    }),
-                    Endpoint::SofiaGateway(SofiaGateway {
-                        gateway: "secondary".into(),
-                        destination: "1234".into(),
-                        profile: None,
-                        variables: None,
-                    }),
-                ],
-                vec![Endpoint::Error(ErrorEndpoint::new(
-                    crate::channel::HangupCause::UserBusy,
-                ))],
+        let bridge = BridgeDialString::new(vec![
+            vec![
+                SofiaGateway::new("primary", "1234").into(),
+                SofiaGateway::new("secondary", "1234").into(),
             ],
-        };
+            vec![ErrorEndpoint::new(crate::channel::HangupCause::UserBusy).into()],
+        ])
+        .with_variables(vars);
         let json = serde_json::to_string(&bridge).unwrap();
         let parsed: BridgeDialString = serde_json::from_str(&json).unwrap();
         assert_eq!(bridge, parsed);
@@ -555,7 +477,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             bridge
-                .groups
+                .groups()
                 .len(),
             1
         );
@@ -567,11 +489,11 @@ mod tests {
             .parse()
             .unwrap();
         assert!(bridge
-            .variables
+            .variables()
             .is_none());
         assert_eq!(
             bridge
-                .groups
+                .groups()
                 .len(),
             1
         );
