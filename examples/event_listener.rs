@@ -3,17 +3,24 @@
 //! This example shows how to subscribe to FreeSWITCH events and process them.
 //!
 //! Usage: cargo run --example event_listener
+//!        cargo run --example event_listener -- -d    # dump raw wire data to stdout
 
 use freeswitch_esl_tokio::{
     EslClient, EslError, EslEventType, EventFormat, EventHeader, HeaderLookup,
     DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT,
 };
 use std::collections::HashMap;
+use std::io::Write;
 use tracing::{debug, error, info};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt::init();
+    let dump_raw = std::env::args().any(|a| a == "-d");
+
+    // Direct tracing to stderr so stdout is clean for -d wire dumps
+    tracing_subscriber::fmt()
+        .with_writer(std::io::stderr)
+        .init();
 
     let host = std::env::var("ESL_HOST").unwrap_or_else(|_| "localhost".to_string());
     let port: u16 = std::env::var("ESL_PORT")
@@ -43,13 +50,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("Subscribing to events...");
     client
+        .subscribe_events(EventFormat::Plain, EslEventType::CHANNEL_EVENTS)
+        .await?;
+    // Additional non-channel events
+    client
         .subscribe_events(
             EventFormat::Plain,
             &[
-                EslEventType::ChannelCreate,
-                EslEventType::ChannelAnswer,
-                EslEventType::ChannelHangup,
-                EslEventType::ChannelHangupComplete,
                 EslEventType::Dtmf,
                 EslEventType::Heartbeat,
                 EslEventType::BackgroundJob,
@@ -59,6 +66,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut active_calls: HashMap<String, CallInfo> = HashMap::new();
     let mut event_count = 0u64;
+    let stdout = std::io::stdout();
 
     info!("Listening for events... Press Ctrl+C to exit");
 
@@ -75,6 +83,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
         event_count += 1;
         debug!("Received event #{}: {:?}", event_count, event.event_type());
+
+        if dump_raw {
+            let mut out = stdout.lock();
+            let _ = out.write_all(
+                event
+                    .to_plain_format()
+                    .as_bytes(),
+            );
+        }
 
         if let Err(e) = process_event(&event, &mut active_calls) {
             error!("Error processing event: {}", e);
@@ -174,7 +191,7 @@ fn process_event(
             }
         }
         Some(EslEventType::Heartbeat) => {
-            if let Some(sessions) = event.header_str("Session-Count") {
+            if let Some(sessions) = event.header(EventHeader::SessionCount) {
                 info!("Heartbeat - active sessions: {}", sessions);
             }
         }

@@ -643,34 +643,17 @@ impl EslEvent {
     /// be fed back through the parser to reconstruct an equivalent `EslEvent`
     /// (round-trip).
     ///
-    /// `Event-Name` is emitted first, remaining headers are sorted alphabetically
-    /// for deterministic output. `Content-Length` from stored headers is skipped
-    /// and recomputed from the body if present.
+    /// Headers are emitted in insertion order (which matches wire order when the
+    /// event was parsed from the network). `Content-Length` from stored headers
+    /// is skipped and recomputed from the body if present.
     pub fn to_plain_format(&self) -> String {
         use std::fmt::Write;
         let mut result = String::new();
 
-        let event_name_key = EventHeader::EventName.as_str();
-        if let Some(event_name) = self
-            .headers
-            .get(event_name_key)
-        {
-            let _ = writeln!(
-                result,
-                "{}: {}",
-                event_name_key,
-                percent_encode(event_name.as_bytes(), NON_ALPHANUMERIC)
-            );
-        }
-
-        let mut sorted_headers: Vec<_> = self
-            .headers
-            .iter()
-            .filter(|(k, _)| k.as_str() != event_name_key && k.as_str() != "Content-Length")
-            .collect();
-        sorted_headers.sort_by_key(|(k, _)| k.as_str());
-
-        for (key, value) in sorted_headers {
+        for (key, value) in &self.headers {
+            if key == "Content-Length" {
+                continue;
+            }
             let _ = writeln!(
                 result,
                 "{}: {}",
@@ -892,6 +875,71 @@ mod tests {
 
         assert!(plain.contains("Content-Length: 11\n"));
         assert!(plain.ends_with("\n\n+OK result\n"));
+    }
+
+    #[test]
+    fn test_to_plain_format_preserves_insertion_order() {
+        let mut event = EslEvent::with_type(EslEventType::Heartbeat);
+        event.set_header("Event-Name", "HEARTBEAT");
+        event.set_header("Core-UUID", "abc-123");
+        event.set_header("FreeSWITCH-Hostname", "fs01");
+        event.set_header("Up-Time", "0 years, 1 day");
+
+        let plain = event.to_plain_format();
+        let lines: Vec<&str> = plain
+            .lines()
+            .collect();
+        assert!(lines[0].starts_with("Event-Name: "));
+        assert!(lines[1].starts_with("Core-UUID: "));
+        assert!(lines[2].starts_with("FreeSWITCH-Hostname: "));
+        assert!(lines[3].starts_with("Up-Time: "));
+    }
+
+    #[test]
+    fn test_to_plain_format_round_trip() {
+        let mut original = EslEvent::with_type(EslEventType::ChannelCreate);
+        original.set_header("Event-Name", "CHANNEL_CREATE");
+        original.set_header("Core-UUID", "abc-123");
+        original.set_header("Channel-Name", "sofia/internal/1000@example.com");
+        original.set_header("Caller-Caller-ID-Name", "Jérôme Poulin");
+        original.set_body("some body content");
+
+        let plain = original.to_plain_format();
+
+        // Simulate what EslParser::parse_plain_event does
+        let (header_section, inner_body) = if let Some(pos) = plain.find("\n\n") {
+            (&plain[..pos], Some(&plain[pos + 2..]))
+        } else {
+            (plain.as_str(), None)
+        };
+
+        let mut parsed = EslEvent::new();
+        for line in header_section.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            if let Some(colon_pos) = line.find(':') {
+                let key = line[..colon_pos].trim();
+                if key == "Content-Length" {
+                    continue;
+                }
+                let raw_value = line[colon_pos + 1..].trim();
+                let value = percent_encoding::percent_decode_str(raw_value)
+                    .decode_utf8()
+                    .unwrap()
+                    .into_owned();
+                parsed.set_header(key, value);
+            }
+        }
+        if let Some(ib) = inner_body {
+            if !ib.is_empty() {
+                parsed.set_body(ib);
+            }
+        }
+
+        assert_eq!(original.headers(), parsed.headers());
+        assert_eq!(original.body(), parsed.body());
     }
 
     #[test]

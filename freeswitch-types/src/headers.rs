@@ -77,6 +77,13 @@ define_header_enum! {
         ChannelVideoWriteCodecRate => "Channel-Video-Write-Codec-Rate",
         /// Active session count from `HEARTBEAT` events.
         SessionCount => "Session-Count",
+        FreeswitchHostname => "FreeSWITCH-Hostname",
+        FreeswitchSwitchname => "FreeSWITCH-Switchname",
+        FreeswitchIpv4 => "FreeSWITCH-IPv4",
+        FreeswitchIpv6 => "FreeSWITCH-IPv6",
+        FreeswitchVersion => "FreeSWITCH-Version",
+        FreeswitchDomain => "FreeSWITCH-Domain",
+        FreeswitchUser => "FreeSWITCH-User",
     }
 }
 

@@ -1407,6 +1407,83 @@ mod tests {
     }
 
     #[test]
+    fn test_to_plain_format_wire_round_trip() {
+        use crate::event::EventFormat;
+        use crate::headers::EventHeader;
+        use indexmap::IndexMap;
+
+        // Realistic wire payload as FreeSWITCH would send it (percent-encoded
+        // values, headers in FS emission order)
+        let wire_body = "\
+Event-Name: CHANNEL_CREATE\n\
+Core-UUID: 2bde6598-0f10-4b90-b70e-d21f4c9e270f\n\
+FreeSWITCH-Hostname: fs01%2Eexample%2Ecom\n\
+FreeSWITCH-IPv4: 10%2E0%2E0%2E1\n\
+Event-Date-Local: 2025-06-15%2010%3A30%3A00\n\
+Unique-ID: a1b2c3d4-5678-9abc-def0-123456789abc\n\
+Channel-Name: sofia%2Finternal%2F1000%40example.com\n\
+Caller-Caller-ID-Name: J%C3%A9r%C3%B4me%20Poulin\n\
+Call-Direction: inbound\n\
+Channel-State: CS_INIT\n\
+\n";
+
+        let msg = EslMessage::new(
+            MessageType::Event,
+            {
+                let mut h = IndexMap::new();
+                h.insert("Content-Type".to_string(), "text/event-plain".to_string());
+                h
+            },
+            Some(wire_body.to_string()),
+        );
+        let event = EslParser::new()
+            .parse_event(msg, EventFormat::Plain)
+            .unwrap();
+
+        assert_eq!(
+            event.header(EventHeader::FreeswitchHostname),
+            Some("fs01.example.com")
+        );
+        assert_eq!(
+            event.header(EventHeader::CallerCallerIdName),
+            Some("Jérôme Poulin")
+        );
+
+        let regenerated = event.to_plain_format();
+
+        // Parse the regenerated output back and compare
+        let msg2 = EslMessage::new(
+            MessageType::Event,
+            {
+                let mut h = IndexMap::new();
+                h.insert("Content-Type".to_string(), "text/event-plain".to_string());
+                h
+            },
+            Some(regenerated.clone()),
+        );
+        let reparsed = EslParser::new()
+            .parse_event(msg2, EventFormat::Plain)
+            .unwrap();
+        assert_eq!(event.headers(), reparsed.headers());
+        assert_eq!(event.body(), reparsed.body());
+
+        // Verify header order is preserved (wire order, not alphabetical)
+        let keys: Vec<&str> = regenerated
+            .lines()
+            .filter(|l| !l.is_empty())
+            .map(|l| {
+                l.split(':')
+                    .next()
+                    .unwrap()
+            })
+            .collect();
+        assert_eq!(keys[0], "Event-Name");
+        assert_eq!(keys[1], "Core-UUID");
+        assert_eq!(keys[2], "FreeSWITCH-Hostname");
+        assert_eq!(keys[3], "FreeSWITCH-IPv4");
+    }
+
+    #[test]
     fn test_to_plain_format_round_trip_with_body() {
         use crate::event::{EslEvent, EslEventType, EventFormat};
         use indexmap::IndexMap;
