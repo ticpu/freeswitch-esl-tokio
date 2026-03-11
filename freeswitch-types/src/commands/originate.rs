@@ -193,15 +193,17 @@ impl Variables {
     }
 
     /// Iterate over key-value pairs in insertion order.
-    pub fn iter(&self) -> impl Iterator<Item = (&String, &String)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> {
         self.inner
             .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
     }
 
     /// Mutable iterator over key-value pairs in insertion order.
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&String, &mut String)> {
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&str, &mut String)> {
         self.inner
             .iter_mut()
+            .map(|(k, v)| (k.as_str(), v))
     }
 
     /// Mutable iterator over values in insertion order.

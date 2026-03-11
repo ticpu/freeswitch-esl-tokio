@@ -341,16 +341,17 @@ add complexity with no throughput benefit.
 
 ## Error classification: auth vs transient
 
-`EslError` carries three classification helpers:
+`EslError` carries two classification helpers:
 
 - `is_connection_error()` — TCP session is dead, must reconnect
 - `is_recoverable()` — connection is still usable, retry the command
-- `is_auth_error()` — permanent configuration error, do not retry
 
-The `is_auth_error()` helper was added after observing production ESL daemons
-(fs-eventd, noans-worker) spinning in infinite reconnect loops on auth failure
-— retrying every 500ms with exponential backoff to 30s, forever. The fix was
-a pattern: auth failure exits with code 78 (`EX_CONFIG`), and systemd's
+`is_recoverable()` returns `false` for `AuthenticationFailed` and
+`AccessDenied`, which prevents reconnect loops on permanent configuration
+errors. The motivation: production ESL daemons (fs-eventd, noans-worker)
+were observed spinning in infinite reconnect loops on auth failure — retrying
+every 500ms with exponential backoff to 30s, forever. The fix was a pattern:
+auth failure exits with code 78 (`EX_CONFIG`), and systemd's
 `RestartPreventExitStatus=78` keeps it down. Transient failures (connection
 lost, timeout) exit with code 1, and systemd restarts normally.
 

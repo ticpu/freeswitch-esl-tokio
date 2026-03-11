@@ -7,8 +7,8 @@ use crate::{
     headers::EventHeader,
     lookup::HeaderLookup,
 };
+use indexmap::IndexMap;
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::fmt;
 use std::time::Duration;
 
@@ -93,14 +93,14 @@ pub enum ReplyStatus {
 /// Response from ESL command execution
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EslResponse {
-    headers: HashMap<String, String>,
+    headers: IndexMap<String, String>,
     body: Option<String>,
     status: ReplyStatus,
 }
 
 impl EslResponse {
     /// `ReplyStatus` is derived from the `Reply-Text` header.
-    pub fn new(headers: HashMap<String, String>, body: Option<String>) -> Self {
+    pub fn new(headers: IndexMap<String, String>, body: Option<String>) -> Self {
         let status = match headers
             .get(HEADER_REPLY_TEXT)
             .map(|s| s.as_str())
@@ -150,7 +150,7 @@ impl EslResponse {
     }
 
     /// All response headers.
-    pub fn headers(&self) -> &HashMap<String, String> {
+    pub fn headers(&self) -> &IndexMap<String, String> {
         &self.headers
     }
 
@@ -203,8 +203,8 @@ impl EslResponse {
     ///
     /// ```
     /// # use freeswitch_esl_tokio::EslResponse;
-    /// # use std::collections::HashMap;
-    /// let headers = HashMap::from([("Reply-Text".into(), "+OK".into())]);
+    /// # use indexmap::IndexMap;
+    /// let headers = IndexMap::from([("Reply-Text".into(), "+OK".into())]);
     ///
     /// // Action command: +OK prefix stripped
     /// let resp = EslResponse::new(headers.clone(), Some("+OK d4f3a2b1-1234\n".into()));
@@ -230,8 +230,8 @@ impl EslResponse {
     ///
     /// ```
     /// # use freeswitch_esl_tokio::EslResponse;
-    /// # use std::collections::HashMap;
-    /// let headers: HashMap<String, String> = [("Reply-Text".into(), "+OK".into())].into();
+    /// # use indexmap::IndexMap;
+    /// let headers: IndexMap<String, String> = [("Reply-Text".into(), "+OK".into())].into();
     /// let resp = EslResponse::new(headers, None);
     /// assert!(resp.into_result().is_ok());
     /// ```
@@ -287,7 +287,7 @@ impl HeaderLookup for EslResponse {
 #[derive(Debug)]
 pub struct CommandBuilder {
     command: String,
-    headers: HashMap<String, String>,
+    headers: IndexMap<String, String>,
     body: Option<String>,
 }
 
@@ -296,7 +296,7 @@ impl CommandBuilder {
     pub fn new(command: &str) -> Self {
         Self {
             command: command.to_string(),
-            headers: HashMap::new(),
+            headers: IndexMap::new(),
             body: None,
         }
     }
@@ -917,7 +917,7 @@ mod tests {
 
     #[test]
     fn test_event_uuid_from_sendevent_reply() {
-        let headers: HashMap<String, String> = [(
+        let headers: IndexMap<String, String> = [(
             "Reply-Text".into(),
             "+OK 7d54c1e6-4a31-11e9-b1e3-001a4a160100".into(),
         )]
@@ -931,7 +931,7 @@ mod tests {
 
     #[test]
     fn test_event_uuid_none_for_plain_ok() {
-        let headers: HashMap<String, String> = [("Reply-Text".into(), "+OK".into())].into();
+        let headers: IndexMap<String, String> = [("Reply-Text".into(), "+OK".into())].into();
         let resp = EslResponse::new(headers, None);
         assert_eq!(resp.event_uuid(), None);
     }
@@ -1204,7 +1204,7 @@ mod tests {
 
     #[test]
     fn test_reply_status_ok() {
-        let headers: HashMap<String, String> =
+        let headers: IndexMap<String, String> =
             [("Reply-Text".into(), "+OK accepted".into())].into();
         let resp = EslResponse::new(headers, None);
         assert_eq!(resp.reply_status(), ReplyStatus::Ok);
@@ -1216,7 +1216,7 @@ mod tests {
 
     #[test]
     fn test_reply_status_ok_prefix_only() {
-        let headers: HashMap<String, String> = [("Reply-Text".into(), "+OK".into())].into();
+        let headers: IndexMap<String, String> = [("Reply-Text".into(), "+OK".into())].into();
         let resp = EslResponse::new(headers, None);
         assert_eq!(resp.reply_status(), ReplyStatus::Ok);
         assert!(resp.is_success());
@@ -1224,7 +1224,7 @@ mod tests {
 
     #[test]
     fn test_reply_status_empty() {
-        let headers: HashMap<String, String> = [("Reply-Text".into(), String::new())].into();
+        let headers: IndexMap<String, String> = [("Reply-Text".into(), String::new())].into();
         let resp = EslResponse::new(headers, None);
         assert_eq!(resp.reply_status(), ReplyStatus::Ok);
         assert!(resp.is_success());
@@ -1232,14 +1232,14 @@ mod tests {
 
     #[test]
     fn test_reply_status_missing_header() {
-        let resp = EslResponse::new(HashMap::new(), None);
+        let resp = EslResponse::new(IndexMap::new(), None);
         assert_eq!(resp.reply_status(), ReplyStatus::Ok);
         assert!(resp.is_success());
     }
 
     #[test]
     fn test_reply_status_err() {
-        let headers: HashMap<String, String> =
+        let headers: IndexMap<String, String> =
             [("Reply-Text".into(), "-ERR invalid command".into())].into();
         let resp = EslResponse::new(headers, None);
         assert_eq!(resp.reply_status(), ReplyStatus::Err);
@@ -1254,7 +1254,7 @@ mod tests {
 
     #[test]
     fn test_reply_status_err_bare() {
-        let headers: HashMap<String, String> = [("Reply-Text".into(), "-ERR".into())].into();
+        let headers: IndexMap<String, String> = [("Reply-Text".into(), "-ERR".into())].into();
         let resp = EslResponse::new(headers, None);
         assert_eq!(resp.reply_status(), ReplyStatus::Err);
         assert!(!resp.is_success());
@@ -1262,7 +1262,7 @@ mod tests {
 
     #[test]
     fn test_reply_status_other_getvar() {
-        let headers: HashMap<String, String> =
+        let headers: IndexMap<String, String> =
             [("Reply-Text".into(), "sip_from_user".into())].into();
         let resp = EslResponse::new(headers, None);
         assert_eq!(resp.reply_status(), ReplyStatus::Other);
@@ -1277,7 +1277,7 @@ mod tests {
 
     #[test]
     fn test_reply_status_other_random() {
-        let headers: HashMap<String, String> =
+        let headers: IndexMap<String, String> =
             [("Reply-Text".into(), "something unexpected".into())].into();
         let resp = EslResponse::new(headers, None);
         assert_eq!(resp.reply_status(), ReplyStatus::Other);
@@ -1398,7 +1398,7 @@ mod tests {
         use crate::headers::EventHeader;
         use crate::lookup::HeaderLookup;
 
-        let headers: HashMap<String, String> = [
+        let headers: IndexMap<String, String> = [
             ("Reply-Text".into(), "+OK".into()),
             ("Channel-Name".into(), "sofia/internal/1000@test".into()),
             ("Channel-State".into(), "CS_EXECUTE".into()),
@@ -1490,7 +1490,7 @@ mod tests {
 
     #[test]
     fn api_result_delegates_to_parse() {
-        let headers: HashMap<String, String> = [("Reply-Text".into(), "+OK".into())].into();
+        let headers: IndexMap<String, String> = [("Reply-Text".into(), "+OK".into())].into();
         let resp = EslResponse::new(headers, Some("+OK uuid-123\n".into()));
         assert_eq!(
             resp.api_result()
@@ -1501,7 +1501,7 @@ mod tests {
 
     #[test]
     fn api_result_no_body() {
-        let headers: HashMap<String, String> = [("Reply-Text".into(), "+OK".into())].into();
+        let headers: IndexMap<String, String> = [("Reply-Text".into(), "+OK".into())].into();
         let resp = EslResponse::new(headers, None);
         assert!(matches!(
             resp.api_result()

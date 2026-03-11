@@ -11,6 +11,14 @@ All public enums and public structs **with public fields** have
 destructuring, and omitting the attribute lets internal code benefit from
 exhaustive compiler checks.
 
+**Public fields split:** Types with invariants or builder APIs
+(`ExecuteOptions`, `EslConnectOptions`, `Application`, `BridgeDialString`)
+use private fields + accessor methods. Pure data/DTO structs with
+`#[non_exhaustive]` and constructors (`SofiaGateway`, `SofiaEndpoint`,
+`SofiaContact`, `LoopbackEndpoint`, `UserEndpoint`, `SipCallInfoEntry`,
+`ConferenceInfo` and its children) keep public fields — no validation
+constraints on individual fields.
+
 **Exception:** single-field error newtypes (`pub struct ParseFooError(pub String)`)
 are exempt. These will never grow additional fields, and adding `#[non_exhaustive]`
 would break destructuring (`let ParseFooError(msg) = err`) for zero practical
@@ -27,6 +35,9 @@ or modifying public structs to verify external construction still works.
 - **Never expose dependency types in public signatures.** Return `impl Iterator`
   (not `indexmap::map::Iter`), wrap dependency errors (not `#[from] serde_json::Error`).
   A dependency major-version bump becomes a semver break if its types leak.
+  **Exception:** `sip-uri` is an accepted public dependency of `freeswitch-types`
+  (same author, narrow scope, stable). The `pub use sip_uri;` re-export and
+  `SipHeaderAddr` returning `sip_uri::Uri` are intentional.
 - **`pub(crate)` modules can still leak types.** If a public function returns a
   type from a `pub(crate)` module, that type is visible but unnameable by callers.
   Either re-export the type or don't return it.
@@ -186,8 +197,10 @@ motivation and production lessons behind these decisions.
 - **Command builders are `Display`/`FromStr`**: no transport dependency.
   Round-trip testable without a FreeSWITCH connection.
 - **No automatic reconnection**: the library classifies errors
-  (`is_connection_error()` / `is_recoverable()` / `is_auth_error()`),
-  the caller decides what to do.
+  (`is_connection_error()` / `is_recoverable()`), the caller decides
+  what to do. `is_recoverable()` returns `false` for
+  `AuthenticationFailed`, which serves the reconnect-loop prevention
+  purpose.
 
 ## Outbound ESL Mode
 

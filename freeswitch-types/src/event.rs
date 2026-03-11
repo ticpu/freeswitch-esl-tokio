@@ -3,8 +3,8 @@
 use crate::headers::{normalize_header_key, EventHeader};
 use crate::lookup::HeaderLookup;
 use crate::variables::EslArray;
+use indexmap::IndexMap;
 use percent_encoding::{percent_encode, NON_ALPHANUMERIC};
-use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
 
@@ -447,9 +447,9 @@ impl FromStr for EslEventPriority {
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct EslEvent {
     event_type: Option<EslEventType>,
-    headers: HashMap<String, String>,
+    headers: IndexMap<String, String>,
     #[cfg_attr(feature = "serde", serde(skip))]
-    original_keys: HashMap<String, String>,
+    original_keys: IndexMap<String, String>,
     body: Option<String>,
 }
 
@@ -458,8 +458,8 @@ impl EslEvent {
     pub fn new() -> Self {
         Self {
             event_type: None,
-            headers: HashMap::new(),
-            original_keys: HashMap::new(),
+            headers: IndexMap::new(),
+            original_keys: IndexMap::new(),
             body: None,
         }
     }
@@ -468,8 +468,8 @@ impl EslEvent {
     pub fn with_type(event_type: EslEventType) -> Self {
         Self {
             event_type: Some(event_type),
-            headers: HashMap::new(),
-            original_keys: HashMap::new(),
+            headers: IndexMap::new(),
+            original_keys: IndexMap::new(),
             body: None,
         }
     }
@@ -524,7 +524,7 @@ impl EslEvent {
     }
 
     /// All headers as a map.
-    pub fn headers(&self) -> &HashMap<String, String> {
+    pub fn headers(&self) -> &IndexMap<String, String> {
         &self.headers
     }
 
@@ -547,17 +547,17 @@ impl EslEvent {
         let name = name.as_ref();
         if let Some(value) = self
             .headers
-            .remove(name)
+            .shift_remove(name)
         {
             return Some(value);
         }
         if let Some(normalized) = self
             .original_keys
-            .remove(name)
+            .shift_remove(name)
         {
             return self
                 .headers
-                .remove(&normalized);
+                .shift_remove(&normalized);
         }
         None
     }
@@ -725,7 +725,7 @@ impl<'de> serde::Deserialize<'de> for EslEvent {
         #[derive(serde::Deserialize)]
         struct Raw {
             event_type: Option<EslEventType>,
-            headers: HashMap<String, String>,
+            headers: IndexMap<String, String>,
             body: Option<String>,
         }
         let raw = Raw::deserialize(deserializer)?;
@@ -742,6 +742,20 @@ impl<'de> serde::Deserialize<'de> for EslEvent {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn headers_preserve_insertion_order() {
+        let mut event = EslEvent::new();
+        event.set_header("Zebra", "last");
+        event.set_header("Alpha", "first");
+        event.set_header("Middle", "mid");
+        let keys: Vec<&str> = event
+            .headers()
+            .keys()
+            .map(|s| s.as_str())
+            .collect();
+        assert_eq!(keys, vec!["Zebra", "Alpha", "Middle"]);
+    }
 
     #[test]
     fn test_notify_in_parse() {

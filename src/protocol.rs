@@ -13,8 +13,8 @@ use crate::{
     event::{EslEvent, EslEventType, EventFormat},
     headers::{normalize_header_key, EventHeader},
 };
+use indexmap::IndexMap;
 use percent_encoding::percent_decode_str;
-use std::collections::HashMap;
 
 /// ESL message types
 #[derive(Debug, Clone, PartialEq)]
@@ -59,7 +59,7 @@ pub struct EslMessage {
     /// Message type
     pub message_type: MessageType,
     /// Message headers
-    pub headers: HashMap<String, String>,
+    pub headers: IndexMap<String, String>,
     /// Message body (optional)
     pub body: Option<String>,
 }
@@ -68,7 +68,7 @@ impl EslMessage {
     /// Create new message
     pub fn new(
         message_type: MessageType,
-        headers: HashMap<String, String>,
+        headers: IndexMap<String, String>,
         body: Option<String>,
     ) -> Self {
         Self {
@@ -90,7 +90,7 @@ enum ParseState {
     WaitingForHeaders,
     WaitingForBody {
         message_type: MessageType,
-        headers: std::collections::HashMap<String, String>,
+        headers: IndexMap<String, String>,
         body_length: usize,
     },
 }
@@ -236,8 +236,8 @@ impl EslParser {
     }
 
     /// Parse headers from string
-    fn parse_headers(&self, headers_str: &str) -> EslResult<HashMap<String, String>> {
-        let mut headers = HashMap::new();
+    fn parse_headers(&self, headers_str: &str) -> EslResult<IndexMap<String, String>> {
+        let mut headers = IndexMap::new();
 
         for line in headers_str.lines() {
             let line = line.trim();
@@ -577,6 +577,20 @@ mod tests {
                 .map(|s| s.as_str()),
             Some("0")
         );
+    }
+
+    #[test]
+    fn parsed_headers_preserve_insertion_order() {
+        let parser = EslParser::new();
+        let headers_str = "Alpha: 1\r\nBravo: 2\r\nCharlie: 3\r\nDelta: 4";
+        let headers = parser
+            .parse_headers(headers_str)
+            .unwrap();
+        let keys: Vec<&str> = headers
+            .keys()
+            .map(|s| s.as_str())
+            .collect();
+        assert_eq!(keys, vec!["Alpha", "Bravo", "Charlie", "Delta"]);
     }
 
     #[test]
@@ -1084,7 +1098,7 @@ mod tests {
         let msg = EslMessage::new(
             MessageType::Event,
             {
-                let mut h = HashMap::new();
+                let mut h = IndexMap::new();
                 h.insert("Content-Type".to_string(), "text/event-plain".to_string());
                 h
             },
@@ -1176,7 +1190,7 @@ mod tests {
         let msg = EslMessage::new(
             MessageType::Event,
             {
-                let mut h = HashMap::new();
+                let mut h = IndexMap::new();
                 h.insert("Content-Type".to_string(), "text/event-json".to_string());
                 h
             },
@@ -1346,7 +1360,7 @@ mod tests {
     #[test]
     fn test_to_plain_format_round_trip() {
         use crate::event::{EslEvent, EslEventType, EventFormat};
-        use std::collections::HashMap;
+        use indexmap::IndexMap;
 
         let mut original = EslEvent::with_type(EslEventType::Heartbeat);
         original.set_header("Event-Name", "HEARTBEAT");
@@ -1359,7 +1373,7 @@ mod tests {
         let msg1 = EslMessage::new(
             MessageType::Event,
             {
-                let mut h = HashMap::new();
+                let mut h = IndexMap::new();
                 h.insert("Content-Type".to_string(), "text/event-plain".to_string());
                 h
             },
@@ -1377,7 +1391,7 @@ mod tests {
         let msg2 = EslMessage::new(
             MessageType::Event,
             {
-                let mut h = HashMap::new();
+                let mut h = IndexMap::new();
                 h.insert("Content-Type".to_string(), "text/event-plain".to_string());
                 h
             },
@@ -1395,7 +1409,7 @@ mod tests {
     #[test]
     fn test_to_plain_format_round_trip_with_body() {
         use crate::event::{EslEvent, EslEventType, EventFormat};
-        use std::collections::HashMap;
+        use indexmap::IndexMap;
 
         let body_text = "+OK Status\nLine 2\n";
         let mut original = EslEvent::with_type(EslEventType::BackgroundJob);
@@ -1413,7 +1427,7 @@ mod tests {
         let msg = EslMessage::new(
             MessageType::Event,
             {
-                let mut h = HashMap::new();
+                let mut h = IndexMap::new();
                 h.insert("Content-Type".to_string(), "text/event-plain".to_string());
                 h
             },

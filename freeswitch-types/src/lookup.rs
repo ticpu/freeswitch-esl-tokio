@@ -253,6 +253,18 @@ impl HeaderLookup for std::collections::HashMap<String, String> {
     }
 }
 
+impl HeaderLookup for indexmap::IndexMap<String, String> {
+    fn header_str(&self, name: &str) -> Option<&str> {
+        self.get(name)
+            .map(|s| s.as_str())
+    }
+
+    fn variable_str(&self, name: &str) -> Option<&str> {
+        self.get(&format!("variable_{name}"))
+            .map(|s| s.as_str())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
