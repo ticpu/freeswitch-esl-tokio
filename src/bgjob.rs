@@ -93,6 +93,14 @@ impl<C> BgJobTracker<C> {
     /// Returns the Job-UUID string on success. The context is stored and
     /// returned by [`try_complete`](Self::try_complete) when the matching
     /// `BACKGROUND_JOB` event arrives.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`EslError::ProtocolError`] if the response is missing the
+    /// `Job-UUID` header. In this case the command has already been sent to
+    /// FreeSWITCH but cannot be tracked, and `ctx` is lost. A missing
+    /// `Job-UUID` is a protocol violation; consider disconnecting and
+    /// reconnecting from a known-good state.
     pub async fn bgapi(&mut self, client: &EslClient, command: &str, ctx: C) -> EslResult<String> {
         let resp = client
             .bgapi(command)
@@ -152,8 +160,24 @@ impl<C> BgJobTracker<C> {
         self.pending
             .remove(job_uuid)
     }
+
+    /// Iterate over pending Job-UUIDs (no specific order).
+    pub fn pending_jobs(&self) -> impl Iterator<Item = &str> {
+        self.pending
+            .keys()
+            .map(|s| s.as_str())
+    }
+
+    /// Retain only jobs matching the predicate, removing the rest.
+    ///
+    /// Useful for timeout-based cleanup when the context carries a timestamp.
+    pub fn retain(&mut self, mut f: impl FnMut(&str, &mut C) -> bool) {
+        self.pending
+            .retain(|uuid, ctx| f(uuid, ctx));
+    }
 }
 
+/// Convenience methods available only when no caller context is needed.
 impl BgJobTracker<()> {
     /// Send a `bgapi` command and track it without context.
     ///
@@ -215,7 +239,8 @@ impl<'a> BgJobResult<'a> {
         )
     }
 
-    /// The underlying [`EslEvent`] for direct access to all headers.
+    /// The underlying [`EslEvent`] for direct access to headers not exposed
+    /// by [`BgJobResult`] or [`HeaderLookup`].
     pub fn event(&self) -> &'a EslEvent {
         self.0
     }
@@ -377,5 +402,60 @@ mod tests {
                 .event_type(),
             Some(EslEventType::BackgroundJob)
         );
+    }
+
+    #[test]
+    fn pending_jobs_iterates_uuids() {
+        let mut bg = BgJobTracker::new();
+        bg.track("uuid-a".into(), "ctx-a".to_string());
+        bg.track("uuid-b".into(), "ctx-b".to_string());
+
+        let mut uuids: Vec<&str> = bg
+            .pending_jobs()
+            .collect();
+        uuids.sort();
+        assert_eq!(uuids, vec!["uuid-a", "uuid-b"]);
+    }
+
+    #[test]
+    fn pending_jobs_empty() {
+        let bg = BgJobTracker::<()>::new();
+        assert_eq!(
+            bg.pending_jobs()
+                .count(),
+            0
+        );
+    }
+
+    #[test]
+    fn retain_filters_pending() {
+        let mut bg = BgJobTracker::new();
+        bg.track("keep-1".into(), 1u32);
+        bg.track("drop-2".into(), 2u32);
+        bg.track("keep-3".into(), 3u32);
+
+        bg.retain(|uuid, _ctx| uuid.starts_with("keep"));
+
+        assert_eq!(bg.pending_count(), 2);
+        assert!(bg.is_pending("keep-1"));
+        assert!(bg.is_pending("keep-3"));
+        assert!(!bg.is_pending("drop-2"));
+    }
+
+    #[test]
+    fn retain_can_mutate_context() {
+        let mut bg = BgJobTracker::new();
+        bg.track("uuid-1".into(), 0u32);
+
+        bg.retain(|_, ctx| {
+            *ctx += 1;
+            true
+        });
+
+        let event = bg_job_event("uuid-1", "+OK");
+        let (ctx, _) = bg
+            .try_complete(&event)
+            .expect("should match");
+        assert_eq!(ctx, 1);
     }
 }
