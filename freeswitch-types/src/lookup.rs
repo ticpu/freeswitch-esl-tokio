@@ -10,6 +10,7 @@ use crate::channel::{
     ParseAnswerStateError, ParseCallDirectionError, ParseCallStateError, ParseChannelStateError,
     ParseHangupCauseError, ParseTimetableError,
 };
+#[cfg(feature = "esl")]
 use crate::event::{EslEventPriority, ParsePriorityError};
 use crate::headers::EventHeader;
 use crate::variables::VariableName;
@@ -215,6 +216,7 @@ pub trait HeaderLookup {
     /// Parse the `priority` header value.
     ///
     /// Returns `Ok(None)` if the header is absent, `Err` if present but unparseable.
+    #[cfg(feature = "esl")]
     fn priority(&self) -> Result<Option<EslEventPriority>, ParsePriorityError> {
         match self.header(EventHeader::Priority) {
             Some(s) => Ok(Some(s.parse()?)),
@@ -253,6 +255,7 @@ impl HeaderLookup for std::collections::HashMap<String, String> {
     }
 }
 
+#[cfg(feature = "esl")]
 impl HeaderLookup for indexmap::IndexMap<String, String> {
     fn header_str(&self, name: &str) -> Option<&str> {
         self.get(name)

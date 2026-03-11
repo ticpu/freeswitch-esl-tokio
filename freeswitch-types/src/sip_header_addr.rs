@@ -1,19 +1,40 @@
+//! RFC 3261 `name-addr` parser with header-level parameter support.
+
+use std::borrow::Cow;
 use std::fmt;
-use std::str::FromStr;
+use std::str::{FromStr, Utf8Error};
 
 use percent_encoding::percent_decode_str;
 
-/// A SIP header field value containing a name-addr or addr-spec with
-/// header-level parameters (RFC 3261 S20).
+/// Parsed SIP `name-addr` (RFC 3261 §25.1) with header-level parameters.
 ///
-/// Handles the full grammar: `(name-addr / addr-spec) *(SEMI generic-param)`
+/// The `name-addr` production from RFC 3261 §25.1 combines an optional
+/// display name with a URI in angle brackets:
 ///
-/// Used for SIP headers like `From`, `To`, `Contact`, `P-Asserted-Identity`,
-/// and `Refer-To` where parameters like `;tag=`, `;expires=`, and
-/// `;serviceurn=` follow the URI.
+/// ```text
+/// name-addr      = [ display-name ] LAQUOT addr-spec RAQUOT
+/// display-name   = *(token LWS) / quoted-string
+/// ```
+///
+/// In SIP headers (`From`, `To`, `Contact`, `P-Asserted-Identity`,
+/// `Refer-To`), the `name-addr` is followed by header-level parameters
+/// (RFC 3261 §20):
+///
+/// ```text
+/// from-spec  = ( name-addr / addr-spec ) *( SEMI from-param )
+/// from-param = tag-param / generic-param
+/// ```
+///
+/// This type handles the full production including those trailing
+/// parameters (`;tag=`, `;expires=`, `;serviceurn=`, etc.).
+///
+/// Replaces [`sip_uri::NameAddr`] which was deprecated in sip-uri 0.2.0
+/// because it only parsed the `name-addr` portion and rejected header-level
+/// parameters after `>`, making it unable to round-trip real SIP header
+/// values.
 ///
 /// ```
-/// use freeswitch_types::variables::SipHeaderAddr;
+/// use freeswitch_types::SipHeaderAddr;
 ///
 /// let addr: SipHeaderAddr = r#""Alice" <sip:alice@example.com>;tag=abc123"#.parse().unwrap();
 /// assert_eq!(addr.display_name(), Some("Alice"));
@@ -32,9 +53,16 @@ pub struct SipHeaderAddr {
 }
 
 /// Error returned when parsing a SIP header address value fails.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[error("invalid SIP header address: {0}")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseSipHeaderAddrError(pub String);
+
+impl fmt::Display for ParseSipHeaderAddrError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "invalid SIP header address: {}", self.0)
+    }
+}
+
+impl std::error::Error for ParseSipHeaderAddrError {}
 
 impl From<sip_uri::ParseUriError> for ParseSipHeaderAddrError {
     fn from(e: sip_uri::ParseUriError) -> Self {
@@ -104,8 +132,8 @@ impl SipHeaderAddr {
             .as_urn()
     }
 
-    /// Iterator over header-level parameters as `(key, value)` pairs.
-    /// Keys are lowercased; values are preserved as-is.
+    /// Iterator over header-level parameters as `(key, raw_value)` pairs.
+    /// Keys are lowercased; values are raw percent-encoded wire format.
     pub fn params(&self) -> impl Iterator<Item = (&str, Option<&str>)> {
         self.params
             .iter()
@@ -114,10 +142,30 @@ impl SipHeaderAddr {
 
     /// Look up a header-level parameter by name (case-insensitive).
     ///
-    /// Returns `Some(Some(value))` if the param has a value,
-    /// `Some(None)` if it is a flag param (no value),
-    /// `None` if the param is not present.
-    pub fn param(&self, name: &str) -> Option<Option<&str>> {
+    /// Values are percent-decoded and validated as UTF-8. Returns `Err` if
+    /// the percent-decoded octets are not valid UTF-8. For non-UTF-8 values
+    /// or raw wire access, use [`param_raw()`](Self::param_raw).
+    ///
+    /// Returns `None` if the param is not present, `Some(Ok(None))` for
+    /// flag params (no value), `Some(Ok(Some(decoded)))` for valued params.
+    pub fn param(&self, name: &str) -> Option<Result<Option<Cow<'_, str>>, Utf8Error>> {
+        let needle = name.to_ascii_lowercase();
+        self.params
+            .iter()
+            .find(|(k, _)| *k == needle)
+            .map(|(_, v)| match v {
+                Some(raw) => percent_decode_str(raw)
+                    .decode_utf8()
+                    .map(Some),
+                None => Ok(None),
+            })
+    }
+
+    /// Look up a raw percent-encoded parameter value (case-insensitive).
+    ///
+    /// Returns the wire-format value without percent-decoding. Use this
+    /// for non-UTF-8 values or when round-trip fidelity matters.
+    pub fn param_raw(&self, name: &str) -> Option<Option<&str>> {
         let needle = name.to_ascii_lowercase();
         self.params
             .iter()
@@ -126,8 +174,11 @@ impl SipHeaderAddr {
     }
 
     /// The `tag` parameter value, if present.
+    ///
+    /// Tag values are simple tokens (never percent-encoded in practice),
+    /// so this returns `&str` directly.
     pub fn tag(&self) -> Option<&str> {
-        self.param("tag")
+        self.param_raw("tag")
             .flatten()
     }
 }
@@ -169,7 +220,7 @@ fn extract_angle_uri(s: &str) -> Option<(&str, &str)> {
 }
 
 /// Parse header-level parameters from the trailing portion after `>`.
-/// Values are percent-decoded per SIP header rules (RFC 3261 S25).
+/// Values are stored as raw percent-encoded strings for round-trip fidelity.
 fn parse_header_params(s: &str) -> Vec<(String, Option<String>)> {
     let mut params = Vec::new();
     for segment in s.split(';') {
@@ -177,14 +228,7 @@ fn parse_header_params(s: &str) -> Vec<(String, Option<String>)> {
             continue;
         }
         if let Some((key, value)) = segment.split_once('=') {
-            params.push((
-                key.to_ascii_lowercase(),
-                Some(
-                    percent_decode_str(value)
-                        .decode_utf8_lossy()
-                        .into_owned(),
-                ),
-            ));
+            params.push((key.to_ascii_lowercase(), Some(value.to_string())));
         } else {
             params.push((segment.to_ascii_lowercase(), None));
         }
@@ -319,6 +363,8 @@ impl fmt::Display for SipHeaderAddr {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
+
     use super::*;
 
     #[test]
@@ -340,7 +386,12 @@ mod tests {
             .unwrap();
         assert_eq!(addr.display_name(), None);
         assert_eq!(addr.tag(), Some("xyz"));
-        assert_eq!(addr.param("expires"), Some(Some("3600")));
+        assert_eq!(
+            addr.param("expires")
+                .unwrap()
+                .unwrap(),
+            Some(Cow::from("3600")),
+        );
     }
 
     #[test]
@@ -375,7 +426,16 @@ mod tests {
             .parse()
             .unwrap();
         assert_eq!(addr.display_name(), None);
-        assert_eq!(addr.param("serviceurn"), Some(Some("urn:service:police")));
+        assert_eq!(
+            addr.param("serviceurn")
+                .unwrap()
+                .unwrap(),
+            Some(Cow::from("urn:service:police")),
+        );
+        assert_eq!(
+            addr.param_raw("serviceurn"),
+            Some(Some("urn%3Aservice%3Apolice")),
+        );
         let sip = addr
             .sip_uri()
             .unwrap();
@@ -413,7 +473,12 @@ mod tests {
         assert!(addr
             .tel_uri()
             .is_some());
-        assert_eq!(addr.param("expires"), Some(Some("3600")));
+        assert_eq!(
+            addr.param("expires")
+                .unwrap()
+                .unwrap(),
+            Some(Cow::from("3600")),
+        );
     }
 
     #[test]
@@ -421,7 +486,12 @@ mod tests {
         let addr: SipHeaderAddr = "<sip:user@host>;lr;tag=abc"
             .parse()
             .unwrap();
-        assert_eq!(addr.param("lr"), Some(None));
+        assert_eq!(
+            addr.param("lr")
+                .unwrap()
+                .unwrap(),
+            None
+        );
         assert_eq!(addr.tag(), Some("abc"));
     }
 
@@ -499,9 +569,24 @@ mod tests {
         let addr: SipHeaderAddr = "<sip:user@host>;Tag=ABC;Expires=3600"
             .parse()
             .unwrap();
-        assert_eq!(addr.param("tag"), Some(Some("ABC")));
-        assert_eq!(addr.param("TAG"), Some(Some("ABC")));
-        assert_eq!(addr.param("expires"), Some(Some("3600")));
+        assert_eq!(
+            addr.param("tag")
+                .unwrap()
+                .unwrap(),
+            Some(Cow::from("ABC")),
+        );
+        assert_eq!(
+            addr.param("TAG")
+                .unwrap()
+                .unwrap(),
+            Some(Cow::from("ABC")),
+        );
+        assert_eq!(
+            addr.param("expires")
+                .unwrap()
+                .unwrap(),
+            Some(Cow::from("3600")),
+        );
     }
 
     #[test]
@@ -551,7 +636,12 @@ mod tests {
             .parse()
             .unwrap();
         let addr = SipHeaderAddr::new(uri).with_param("lr", None::<String>);
-        assert_eq!(addr.param("lr"), Some(None));
+        assert_eq!(
+            addr.param("lr")
+                .unwrap()
+                .unwrap(),
+            None
+        );
         assert_eq!(addr.to_string(), "<sip:proxy@example.com>;lr");
     }
 
@@ -585,6 +675,41 @@ mod tests {
             1
         );
         assert_eq!(addr.tag(), Some("abc"));
+    }
+
+    #[test]
+    fn display_roundtrip_percent_encoded_params() {
+        let input = "<sip:user@esrp.example.com>;serviceurn=urn%3Aservice%3Apolice";
+        let addr: SipHeaderAddr = input
+            .parse()
+            .unwrap();
+        assert_eq!(addr.to_string(), input);
+    }
+
+    #[test]
+    fn param_invalid_utf8_returns_err() {
+        // %C0%80 is an overlong encoding of U+0000, invalid UTF-8
+        let addr: SipHeaderAddr = "<sip:user@host>;data=%C0%80"
+            .parse()
+            .unwrap();
+        assert!(addr
+            .param("data")
+            .unwrap()
+            .is_err());
+        assert_eq!(addr.param_raw("data"), Some(Some("%C0%80")));
+    }
+
+    #[test]
+    fn param_iso_8859_fallback_to_raw() {
+        // %E9 = é in ISO-8859-1, but lone byte is invalid UTF-8
+        let addr: SipHeaderAddr = "<sip:user@host>;name=%E9"
+            .parse()
+            .unwrap();
+        assert!(addr
+            .param("name")
+            .unwrap()
+            .is_err());
+        assert_eq!(addr.param_raw("name"), Some(Some("%E9")));
     }
 
     #[test]

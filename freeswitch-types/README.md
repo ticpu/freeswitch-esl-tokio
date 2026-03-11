@@ -3,11 +3,17 @@
 [![crates.io](https://img.shields.io/crates/v/freeswitch-types)](https://crates.io/crates/freeswitch-types)
 [![docs.rs](https://img.shields.io/docsrs/freeswitch-types)](https://docs.rs/freeswitch-types)
 
-FreeSWITCH protocol types: channel state, events, headers, command builders,
-and variable parsers. No async runtime dependency.
+FreeSWITCH protocol types and general-purpose SIP header parser. No async
+runtime dependency.
 
-Use this crate standalone for CDR parsing, config generation, command building,
-or channel variable validation without pulling in tokio.
+Includes `SipHeaderAddr`, a standalone RFC 3261 `name-addr` parser with
+header-level parameters — usable in any SIP project, not just FreeSWITCH.
+With `default-features = false`, the only dependencies are `sip-uri` and
+`percent-encoding`.
+
+Also provides FreeSWITCH ESL types (channel state, events, commands,
+variables) for CDR parsing, config generation, command building, or
+channel variable validation without pulling in tokio.
 
 For async ESL transport (connecting to FreeSWITCH, sending commands, receiving
 events), see [`freeswitch-esl-tokio`](https://crates.io/crates/freeswitch-esl-tokio)
@@ -17,16 +23,20 @@ which re-exports everything from this crate.
 
 | Module | Contents |
 |--------|----------|
+| `sip_header_addr` | `SipHeaderAddr` — RFC 3261 `name-addr` parser with header-level parameters |
 | `channel` | `ChannelState`, `CallState`, `AnswerState`, `CallDirection`, `HangupCause`, `ChannelTimetable` |
-| `event` | `EslEvent`, `EslEventType`, `EventFormat`, `EslEventPriority` |
 | `headers` | `EventHeader` enum (typed event header names) |
 | `lookup` | `HeaderLookup` trait (typed accessors for any key-value store) |
-| `commands` | `Originate`, `BridgeDialString`, `UuidKill`, `UuidBridge`, endpoint types, `DialString` trait |
 | `variables` | `ChannelVariable`, `SofiaVariable`, `EslArray`, `MultipartBody` |
-| `conference_info` | RFC 4575 `conference-info+xml` types: `ConferenceInfo`, `User`, `Endpoint`, `Media`, `SipDialogId` |
+| `event` | `EslEvent`, `EslEventType`, `EventFormat`, `EslEventPriority` *(requires `esl` feature)* |
+| `commands` | `Originate`, `BridgeDialString`, `UuidKill`, `UuidBridge`, endpoint types *(requires `esl` feature)* |
+| `conference_info` | RFC 4575 `conference-info+xml` types *(requires `conference-info` feature)* |
 
 ## Features
 
+- **`esl`** (enabled by default) — ESL event and command types (`EslEvent`,
+  `Originate`, `Variables`, etc.). Pulls in `indexmap` for ordered header
+  storage. Disable if you only need `SipHeaderAddr` or channel state enums.
 - **`serde`** (enabled by default) — adds `Serialize`/`Deserialize` impls for
   all public types. Disable with `default-features = false` if you only need
   wire-format parsing (`Display`/`FromStr`) without pulling in serde.
@@ -41,14 +51,32 @@ which re-exports everything from this crate.
 freeswitch-types = "1"
 ```
 
-Without serde:
+SIP header parsing only (no FreeSWITCH dependencies):
 
 ```toml
 [dependencies]
 freeswitch-types = { version = "1", default-features = false }
 ```
 
-### Command builders
+### SIP header address parsing
+
+`SipHeaderAddr` parses the `(name-addr / addr-spec) *(SEMI generic-param)`
+production from SIP headers like `From`, `To`, `Contact`, and `Refer-To`.
+It replaces `sip_uri::NameAddr` (deprecated since sip-uri 0.2.0) by
+handling header-level parameters that follow the URI. General-purpose SIP
+— no FreeSWITCH dependency.
+
+```rust
+use freeswitch_types::SipHeaderAddr;
+
+let addr: SipHeaderAddr =
+    r#""Alice" <sip:alice@example.com>;tag=abc123"#.parse().unwrap();
+assert_eq!(addr.display_name(), Some("Alice"));
+assert_eq!(addr.tag(), Some("abc123"));
+assert_eq!(addr.sip_uri().unwrap().user(), Some("alice"));
+```
+
+### Command builders (requires `esl` feature)
 
 ```rust
 use std::time::Duration;

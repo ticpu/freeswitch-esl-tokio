@@ -3,27 +3,27 @@ name = "freeswitch-types"
 version = "0.17.0"
 edition = "2021"
 authors = ["Jérôme Poulin <jeromepoulin@gmail.com>"]
-description = "FreeSWITCH protocol types: channel state, events, commands, variables"
+description = "FreeSWITCH protocol types and general-purpose SIP header parser (RFC 3261 name-addr)"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/ticpu/freeswitch-esl-tokio"
 documentation = "https://docs.rs/freeswitch-types"
-keywords = ["freeswitch", "esl", "voip", "telephony", "types"]
+keywords = ["freeswitch", "sip", "voip", "telephony", "name-addr"]
 categories = ["network-programming", "api-bindings"]
 readme = "README.md"
 rust-version = "1.70"
 exclude = ["CLAUDE.md"]
 
 [features]
-default = ["serde"]
-serde = ["dep:serde", "indexmap/serde"]
+default = ["serde", "esl"]
+serde = ["dep:serde", "indexmap?/serde"]
+esl = ["dep:indexmap"]
 conference-info = ["dep:quick-xml", "serde"]
 
 [dependencies]
 sip-uri = "0.2"
-thiserror = "2.0"
 serde = { version = "1.0", features = ["derive"], optional = true }
 percent-encoding = "2"
-indexmap = "2"
+indexmap = { version = "2", optional = true }
 quick-xml = { version = "0.39", features = ["serialize"], optional = true }
 
 [dev-dependencies]

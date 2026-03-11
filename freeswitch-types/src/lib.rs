@@ -14,12 +14,15 @@ mod macros;
 pub use sip_uri;
 
 pub mod channel;
+#[cfg(feature = "esl")]
 pub mod commands;
 pub mod conference_info;
+#[cfg(feature = "esl")]
 pub mod event;
 pub mod headers;
 pub mod lookup;
 pub mod prelude;
+pub mod sip_header_addr;
 pub mod variables;
 
 /// Default FreeSWITCH ESL port for inbound connections.
@@ -33,20 +36,23 @@ pub use channel::{
     ParseAnswerStateError, ParseCallDirectionError, ParseCallStateError, ParseChannelStateError,
     ParseHangupCauseError, ParseTimetableError, TimetablePrefix,
 };
+#[cfg(feature = "esl")]
 pub use commands::{
     Application, BridgeDialString, DialString, DialplanType, Endpoint, GroupCallOrder, Originate,
     OriginateError, OriginateTarget, ParseDialplanTypeError, ParseGroupCallOrderError, UuidAnswer,
     UuidBridge, UuidDeflect, UuidGetVar, UuidHold, UuidKill, UuidSendDtmf, UuidSetVar,
     UuidTransfer, Variables, VariablesType,
 };
+#[cfg(feature = "esl")]
 pub use event::{
     EslEvent, EslEventPriority, EslEventType, EventFormat, ParseEventFormatError,
     ParseEventTypeError, ParsePriorityError,
 };
 pub use headers::{normalize_header_key, EventHeader, ParseEventHeaderError};
 pub use lookup::HeaderLookup;
+pub use sip_header_addr::{ParseSipHeaderAddrError, SipHeaderAddr};
 pub use variables::{
     ChannelVariable, EslArray, MultipartBody, MultipartItem, ParseChannelVariableError,
-    ParseSipHeaderAddrError, SipCallInfo, SipCallInfoEntry, SipCallInfoError, SipGeolocation,
-    SipGeolocationRef, SipHeaderAddr, VariableName,
+    SipCallInfo, SipCallInfoEntry, SipCallInfoError, SipGeolocation, SipGeolocationRef,
+    VariableName,
 };

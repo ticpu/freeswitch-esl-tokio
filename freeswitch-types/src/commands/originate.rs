@@ -905,22 +905,35 @@ impl FromStr for Originate {
 }
 
 /// Errors from originate command parsing or construction.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum OriginateError {
     /// A single-quoted token was never closed.
-    #[error("unclosed quote at: {0}")]
     UnclosedQuote(String),
     /// General parse failure with a description.
-    #[error("parse error: {0}")]
     ParseError(String),
     /// Inline originate requires at least one application.
-    #[error("inline originate requires at least one application")]
     EmptyInlineApplications,
     /// Extension target cannot use inline dialplan.
-    #[error("extension target is incompatible with inline dialplan")]
     ExtensionWithInlineDialplan,
 }
+
+impl std::fmt::Display for OriginateError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnclosedQuote(s) => write!(f, "unclosed quote at: {s}"),
+            Self::ParseError(s) => write!(f, "parse error: {s}"),
+            Self::EmptyInlineApplications => {
+                f.write_str("inline originate requires at least one application")
+            }
+            Self::ExtensionWithInlineDialplan => {
+                f.write_str("extension target is incompatible with inline dialplan")
+            }
+        }
+    }
+}
+
+impl std::error::Error for OriginateError {}
 
 #[cfg(test)]
 mod tests {
