@@ -20,7 +20,51 @@
 ///
 /// Compact header forms (RFC 3261 §7.3.3) are not supported.
 pub fn extract_header(message: &str, name: &str) -> Option<String> {
-    todo!()
+    let mut values: Vec<String> = Vec::new();
+    let mut current_match = false;
+
+    for line in message.split('\n') {
+        let line = line
+            .strip_suffix('\r')
+            .unwrap_or(line);
+
+        if line.is_empty() {
+            break;
+        }
+
+        if line.starts_with(' ') || line.starts_with('\t') {
+            if current_match {
+                if let Some(last) = values.last_mut() {
+                    last.push(' ');
+                    last.push_str(line.trim_start());
+                }
+            }
+            continue;
+        }
+
+        current_match = false;
+
+        if let Some((hdr_name, hdr_value)) = line.split_once(':') {
+            let hdr_name = hdr_name.trim_end();
+            // RFC 3261: header names are tokens — no whitespace allowed.
+            // This rejects request/status lines like "INVITE sip:..." where
+            // the text before the first colon contains spaces.
+            if !hdr_name.contains(' ') && hdr_name.eq_ignore_ascii_case(name) {
+                current_match = true;
+                values.push(
+                    hdr_value
+                        .trim_start()
+                        .to_string(),
+                );
+            }
+        }
+    }
+
+    if values.is_empty() {
+        None
+    } else {
+        Some(values.join(", "))
+    }
 }
 
 #[cfg(test)]
@@ -69,11 +113,13 @@ o=alice 2890844526 2890844526 IN IP4 pc33.atlanta.example.com\r\n";
 
     #[test]
     fn header_folding() {
-        let msg = "SIP/2.0 200 OK\r\n\
-                   Subject: I know you're there,\r\n\
-                    pick up the phone\r\n\
-                    and talk to me!\r\n\
-                   \r\n";
+        let msg = concat!(
+            "SIP/2.0 200 OK\r\n",
+            "Subject: I know you're there,\r\n",
+            " pick up the phone\r\n",
+            " and talk to me!\r\n",
+            "\r\n",
+        );
         assert_eq!(
             extract_header(msg, "Subject"),
             Some("I know you're there, pick up the phone and talk to me!".into())
@@ -140,11 +186,13 @@ o=alice 2890844526 2890844526 IN IP4 pc33.atlanta.example.com\r\n";
 
     #[test]
     fn folding_on_multiple_occurrence() {
-        let msg = "SIP/2.0 200 OK\r\n\
-                   Via: SIP/2.0/UDP first.example.com\r\n\
-                    ;branch=z9hG4bKaaa\r\n\
-                   Via: SIP/2.0/UDP second.example.com;branch=z9hG4bKbbb\r\n\
-                   \r\n";
+        let msg = concat!(
+            "SIP/2.0 200 OK\r\n",
+            "Via: SIP/2.0/UDP first.example.com\r\n",
+            " ;branch=z9hG4bKaaa\r\n",
+            "Via: SIP/2.0/UDP second.example.com;branch=z9hG4bKbbb\r\n",
+            "\r\n",
+        );
         assert_eq!(
             extract_header(msg, "Via"),
             Some(
@@ -166,10 +214,12 @@ o=alice 2890844526 2890844526 IN IP4 pc33.atlanta.example.com\r\n";
 
     #[test]
     fn tab_folding() {
-        let msg = "SIP/2.0 200 OK\r\n\
-                   Subject: hello\r\n\
-                   \tworld\r\n\
-                   \r\n";
+        let msg = concat!(
+            "SIP/2.0 200 OK\r\n",
+            "Subject: hello\r\n",
+            "\tworld\r\n",
+            "\r\n",
+        );
         assert_eq!(extract_header(msg, "Subject"), Some("hello world".into()));
     }
 }

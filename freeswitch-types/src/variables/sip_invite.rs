@@ -151,6 +151,63 @@ impl SipInviteHeader {
     pub fn is_array_header(&self) -> bool {
         Self::ARRAY_HEADERS.contains(self)
     }
+
+    /// Canonical SIP header name (e.g. `"From"`, `"Call-ID"`).
+    pub fn header_name(&self) -> &'static str {
+        match self {
+            Self::From => "From",
+            Self::To => "To",
+            Self::CallId => "Call-ID",
+            Self::Cseq => "CSeq",
+            Self::Identity => "Identity",
+            Self::Route => "Route",
+            Self::MaxForwards => "Max-Forwards",
+            Self::ProxyRequire => "Proxy-Require",
+            Self::Contact => "Contact",
+            Self::UserAgent => "User-Agent",
+            Self::Subject => "Subject",
+            Self::Priority => "Priority",
+            Self::Organization => "Organization",
+            Self::InReplyTo => "In-Reply-To",
+            Self::AcceptEncoding => "Accept-Encoding",
+            Self::AcceptLanguage => "Accept-Language",
+            Self::Allow => "Allow",
+            Self::Require => "Require",
+            Self::Supported => "Supported",
+            Self::Date => "Date",
+            Self::Timestamp => "Timestamp",
+            Self::Expires => "Expires",
+            Self::MinExpires => "Min-Expires",
+            Self::SessionExpires => "Session-Expires",
+            Self::MinSe => "Min-SE",
+            Self::Privacy => "Privacy",
+            Self::MimeVersion => "MIME-Version",
+            Self::ContentType => "Content-Type",
+            Self::ContentEncoding => "Content-Encoding",
+            Self::ContentLanguage => "Content-Language",
+            Self::ContentDisposition => "Content-Disposition",
+            Self::ContentLength => "Content-Length",
+            Self::Via => "Via",
+            Self::RecordRoute => "Record-Route",
+            Self::ProxyAuthorization => "Proxy-Authorization",
+            Self::CallInfo => "Call-Info",
+            Self::Accept => "Accept",
+            Self::Authorization => "Authorization",
+            Self::AlertInfo => "Alert-Info",
+            Self::PAssertedIdentity => "P-Asserted-Identity",
+            Self::PPreferredIdentity => "P-Preferred-Identity",
+            Self::RemotePartyId => "Remote-Party-ID",
+            Self::ReplyTo => "Reply-To",
+        }
+    }
+
+    /// Extract this header's value from a raw SIP message.
+    ///
+    /// Delegates to [`extract_header`](crate::sip_message::extract_header)
+    /// using the canonical name from [`header_name()`](Self::header_name).
+    pub fn extract_from(&self, message: &str) -> Option<String> {
+        crate::sip_message::extract_header(message, self.header_name())
+    }
 }
 
 #[cfg(test)]
