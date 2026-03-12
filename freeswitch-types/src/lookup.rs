@@ -243,6 +243,12 @@ pub trait HeaderLookup {
     }
 }
 
+impl<T: HeaderLookup> crate::sip_header::SipHeaderLookup for T {
+    fn sip_header_str(&self, name: &str) -> Option<&str> {
+        self.header_str(name)
+    }
+}
+
 impl HeaderLookup for std::collections::HashMap<String, String> {
     fn header_str(&self, name: &str) -> Option<&str> {
         self.get(name)

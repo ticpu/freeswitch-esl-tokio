@@ -10,4 +10,5 @@
 
 pub use crate::headers::EventHeader;
 pub use crate::lookup::HeaderLookup;
+pub use crate::sip_header::{SipHeader, SipHeaderLookup};
 pub use crate::variables::{ChannelVariable, VariableName};

@@ -135,7 +135,7 @@ pub(crate) mod protocol;
 
 // Re-export sub-modules from freeswitch-types for path-based access
 pub use freeswitch_types::{
-    channel, commands, conference_info, event, headers, lookup, prelude, variables,
+    channel, commands, conference_info, event, headers, lookup, prelude, sip_header, variables,
 };
 
 // Re-export domain types from freeswitch-types

@@ -22,6 +22,7 @@ pub mod event;
 pub mod headers;
 pub mod lookup;
 pub mod prelude;
+pub mod sip_header;
 pub mod sip_header_addr;
 pub mod variables;
 
@@ -50,6 +51,7 @@ pub use event::{
 };
 pub use headers::{normalize_header_key, EventHeader, ParseEventHeaderError};
 pub use lookup::HeaderLookup;
+pub use sip_header::{ParseSipHeaderError, SipHeader, SipHeaderLookup};
 pub use sip_header_addr::{ParseSipHeaderAddrError, SipHeaderAddr};
 pub use variables::{
     ChannelVariable, EslArray, MultipartBody, MultipartItem, ParseChannelVariableError,

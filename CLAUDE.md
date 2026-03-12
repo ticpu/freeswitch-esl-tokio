@@ -30,6 +30,16 @@ constructor (`new()` or named constructors). Optional fields use builder
 methods (`with_foo()`). **Always run `cargo build --examples`** after adding
 or modifying public structs to verify external construction still works.
 
+## SIP Modules Are Protocol-Agnostic
+
+Modules under the `sip_*` namespace (`sip_header`, `sip_header_addr`,
+`SipCallInfo`) are pure SIP standard types with no FreeSWITCH coupling.
+Doc comments, module-level docs, and error messages in these modules must
+not reference FreeSWITCH, mod_sofia, ESL, NOTIFY_IN, or any FS-specific
+concepts. FreeSWITCH integration context belongs in `lookup.rs` (the
+`HeaderLookup` trait methods) or `variables/` (e.g. `SipInviteHeader`
+for `sip_i_*` mappings).
+
 ## API Boundary Rules
 
 - **Never expose dependency types in public signatures.** Return `impl Iterator`
