@@ -34,6 +34,16 @@ define_header_enum! {
     }
 }
 
+impl SipHeader {
+    /// Extract this header's value from a raw SIP message.
+    ///
+    /// Delegates to [`extract_header`](crate::sip_message::extract_header)
+    /// using the canonical wire name from [`as_str()`](Self::as_str).
+    pub fn extract_from(&self, message: &str) -> Option<String> {
+        crate::sip_message::extract_header(message, self.as_str())
+    }
+}
+
 /// Trait for looking up standard SIP headers from any key-value store.
 ///
 /// Implementors provide `sip_header_str()` and get all typed accessors as
