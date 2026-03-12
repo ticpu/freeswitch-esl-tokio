@@ -242,6 +242,35 @@ mod tests {
     }
 
     #[test]
+    fn extract_from_sip_message() {
+        let msg = concat!(
+            "INVITE sip:bob@host SIP/2.0\r\n",
+            "Call-Info: <urn:emergency:uid:callid:abc>;purpose=emergency-CallId\r\n",
+            "P-Asserted-Identity: \"Corp\" <sip:+15551234567@198.51.100.1>\r\n",
+            "\r\n",
+        );
+        assert_eq!(
+            SipHeader::CallInfo.extract_from(msg),
+            Some("<urn:emergency:uid:callid:abc>;purpose=emergency-CallId".into())
+        );
+        assert_eq!(
+            SipHeader::PAssertedIdentity.extract_from(msg),
+            Some("\"Corp\" <sip:+15551234567@198.51.100.1>".into())
+        );
+    }
+
+    #[test]
+    fn extract_from_missing() {
+        let msg = concat!(
+            "INVITE sip:bob@host SIP/2.0\r\n",
+            "From: Alice <sip:alice@host>\r\n",
+            "\r\n",
+        );
+        assert_eq!(SipHeader::CallInfo.extract_from(msg), None);
+        assert_eq!(SipHeader::PAssertedIdentity.extract_from(msg), None);
+    }
+
+    #[test]
     fn missing_headers_return_none() {
         let h = headers_with(&[]);
         assert_eq!(h.call_info_raw(), None);

@@ -222,4 +222,84 @@ o=alice 2890844526 2890844526 IN IP4 pc33.atlanta.example.com\r\n";
         );
         assert_eq!(extract_header(msg, "Subject"), Some("hello world".into()));
     }
+
+    // -- Integration pipeline tests: extract_header → existing parsers --
+
+    const NG911_INVITE: &str = concat!(
+        "INVITE sip:urn:service:sos@bcf.example.com SIP/2.0\r\n",
+        "Via: SIP/2.0/TLS proxy.example.com;branch=z9hG4bK776\r\n",
+        "From: \"Caller Name\" <sip:+15551234567@orig.example.com>;tag=abc123\r\n",
+        "To: <sip:urn:service:sos@bcf.example.com>\r\n",
+        "Call-ID: ng911-call-42@orig.example.com\r\n",
+        "P-Asserted-Identity: \"EXAMPLE CO\" <sip:+15551234567@198.51.100.1>\r\n",
+        "Call-Info: <urn:emergency:uid:callid:abc:bcf.example.com>;purpose=emergency-CallId,",
+        "<https://adr.example.com/serviceInfo?t=x>;purpose=EmergencyCallData.ServiceInfo\r\n",
+        "Geolocation: <cid:loc-id-1234>, <https://lis.example.com/held/test>\r\n",
+        "Content-Type: application/sdp\r\n",
+        "\r\n",
+        "v=0\r\n",
+    );
+
+    #[test]
+    fn extract_and_parse_call_info() {
+        use crate::variables::SipCallInfo;
+
+        let raw = extract_header(NG911_INVITE, "Call-Info").unwrap();
+        let ci = SipCallInfo::parse(&raw).unwrap();
+        assert_eq!(ci.len(), 2);
+        assert_eq!(ci.entries()[0].purpose(), Some("emergency-CallId"));
+        assert!(ci
+            .find_by_purpose_suffix("ServiceInfo")
+            .is_some());
+    }
+
+    #[test]
+    fn extract_and_parse_p_asserted_identity() {
+        use crate::sip_header_addr::SipHeaderAddr;
+
+        let raw = extract_header(NG911_INVITE, "P-Asserted-Identity").unwrap();
+        let pai: SipHeaderAddr = raw
+            .parse()
+            .unwrap();
+        assert_eq!(pai.display_name(), Some("EXAMPLE CO"));
+        assert!(pai
+            .uri()
+            .to_string()
+            .contains("+15551234567"));
+    }
+
+    #[test]
+    fn extract_and_parse_geolocation() {
+        use crate::variables::SipGeolocation;
+
+        let raw = extract_header(NG911_INVITE, "Geolocation").unwrap();
+        let geo = SipGeolocation::parse(&raw);
+        assert_eq!(geo.len(), 2);
+        assert_eq!(geo.cid(), Some("loc-id-1234"));
+        assert!(geo
+            .url()
+            .unwrap()
+            .contains("lis.example.com"));
+    }
+
+    #[test]
+    fn extract_and_parse_from_to() {
+        use crate::sip_header_addr::SipHeaderAddr;
+
+        let from_raw = extract_header(NG911_INVITE, "From").unwrap();
+        let from: SipHeaderAddr = from_raw
+            .parse()
+            .unwrap();
+        assert_eq!(from.display_name(), Some("Caller Name"));
+        assert_eq!(from.tag(), Some("abc123"));
+
+        let to_raw = extract_header(NG911_INVITE, "To").unwrap();
+        let to: SipHeaderAddr = to_raw
+            .parse()
+            .unwrap();
+        assert!(to
+            .uri()
+            .to_string()
+            .contains("urn:service:sos"));
+    }
 }
