@@ -24,6 +24,7 @@ pub mod lookup;
 pub mod prelude;
 pub mod sip_header;
 pub mod sip_header_addr;
+pub mod sip_message;
 pub mod variables;
 
 /// Default FreeSWITCH ESL port for inbound connections.
@@ -53,6 +54,7 @@ pub use headers::{normalize_header_key, EventHeader, ParseEventHeaderError};
 pub use lookup::HeaderLookup;
 pub use sip_header::{ParseSipHeaderError, SipHeader, SipHeaderLookup};
 pub use sip_header_addr::{ParseSipHeaderAddrError, SipHeaderAddr};
+pub use sip_message::extract_header;
 pub use variables::{
     ChannelVariable, EslArray, MultipartBody, MultipartItem, ParseChannelVariableError,
     SipCallInfo, SipCallInfoEntry, SipCallInfoError, SipGeolocation, SipGeolocationRef,

@@ -217,6 +217,58 @@ mod tests {
     }
 
     #[test]
+    fn header_name_mapping() {
+        assert_eq!(SipInviteHeader::From.header_name(), "From");
+        assert_eq!(SipInviteHeader::CallId.header_name(), "Call-ID");
+        assert_eq!(SipInviteHeader::Cseq.header_name(), "CSeq");
+        assert_eq!(
+            SipInviteHeader::PAssertedIdentity.header_name(),
+            "P-Asserted-Identity"
+        );
+        assert_eq!(SipInviteHeader::MinSe.header_name(), "Min-SE");
+        assert_eq!(SipInviteHeader::MimeVersion.header_name(), "MIME-Version");
+        assert_eq!(SipInviteHeader::UserAgent.header_name(), "User-Agent");
+        assert_eq!(SipInviteHeader::RecordRoute.header_name(), "Record-Route");
+    }
+
+    #[test]
+    fn extract_from_sip_message() {
+        let msg = "INVITE sip:bob@host SIP/2.0\r\n\
+                   From: Alice <sip:alice@host>;tag=abc\r\n\
+                   To: Bob <sip:bob@host>\r\n\
+                   Call-ID: 12345@host\r\n\
+                   \r\n";
+        assert_eq!(
+            SipInviteHeader::From.extract_from(msg),
+            Some("Alice <sip:alice@host>;tag=abc".into())
+        );
+        assert_eq!(
+            SipInviteHeader::CallId.extract_from(msg),
+            Some("12345@host".into())
+        );
+    }
+
+    #[test]
+    fn extract_from_array_header() {
+        let msg = "INVITE sip:bob@host SIP/2.0\r\n\
+                   Via: SIP/2.0/UDP first.example.com\r\n\
+                   Via: SIP/2.0/UDP second.example.com\r\n\
+                   \r\n";
+        assert_eq!(
+            SipInviteHeader::Via.extract_from(msg),
+            Some("SIP/2.0/UDP first.example.com, SIP/2.0/UDP second.example.com".into())
+        );
+    }
+
+    #[test]
+    fn extract_from_missing() {
+        let msg = "INVITE sip:bob@host SIP/2.0\r\n\
+                   From: Alice <sip:alice@host>\r\n\
+                   \r\n";
+        assert_eq!(SipInviteHeader::Identity.extract_from(msg), None);
+    }
+
+    #[test]
     fn array_headers_classification() {
         assert!(SipInviteHeader::Via.is_array_header());
         assert!(SipInviteHeader::PAssertedIdentity.is_array_header());
