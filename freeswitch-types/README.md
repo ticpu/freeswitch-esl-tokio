@@ -24,10 +24,12 @@ which re-exports everything from this crate.
 | Module | Contents |
 |--------|----------|
 | `sip_header_addr` | `SipHeaderAddr` — RFC 3261 `name-addr` parser with header-level parameters |
+| `sip_message` | `extract_header` — extract header values from raw SIP message text (RFC 3261 §7.3.1: folding, case-insensitive, multi-occurrence) |
+| `sip_header` | `SipHeader` enum, `SipHeaderLookup` trait, `extract_from()` for raw messages |
 | `channel` | `ChannelState`, `CallState`, `AnswerState`, `CallDirection`, `HangupCause`, `ChannelTimetable` |
 | `headers` | `EventHeader` enum (typed event header names) |
 | `lookup` | `HeaderLookup` trait (typed accessors for any key-value store) |
-| `variables` | `ChannelVariable`, `SofiaVariable`, `EslArray`, `MultipartBody` |
+| `variables` | `ChannelVariable`, `SofiaVariable`, `SipInviteHeader` (with `header_name()` and `extract_from()`), `EslArray`, `MultipartBody` |
 | `event` | `EslEvent`, `EslEventType`, `EventFormat`, `EslEventPriority` *(requires `esl` feature)* |
 | `commands` | `Originate`, `BridgeDialString`, `UuidKill`, `UuidBridge`, endpoint types *(requires `esl` feature)* |
 | `conference_info` | RFC 4575 `conference-info+xml` types *(requires `conference-info` feature)* |
@@ -135,6 +137,33 @@ let json = r#"{
 let cmd: Originate = serde_json::from_str(json).unwrap();
 println!("{}", cmd);
 ```
+
+### Raw SIP message header extraction
+
+`extract_header` pulls header values from raw SIP message text, handling
+case-insensitive matching, header folding, and multi-occurrence concatenation
+per RFC 3261 §7.3.1. Pairs naturally with the existing value parsers:
+
+```rust
+use freeswitch_types::{extract_header, SipHeaderAddr};
+use freeswitch_types::variables::SipCallInfo;
+
+let raw_invite = "INVITE sip:sos@bcf.example.com SIP/2.0\r\n\
+    Call-Info: <urn:emergency:uid:callid:abc>;purpose=emergency-CallId\r\n\
+    P-Asserted-Identity: \"Alice\" <sip:+15551234567@example.com>\r\n\
+    \r\n";
+
+let ci_val = extract_header(raw_invite, "Call-Info").unwrap();
+let ci = SipCallInfo::parse(&ci_val).unwrap();
+assert_eq!(ci.entries()[0].purpose(), Some("emergency-CallId"));
+
+let pai_val = extract_header(raw_invite, "P-Asserted-Identity").unwrap();
+let pai: SipHeaderAddr = pai_val.parse().unwrap();
+assert_eq!(pai.display_name(), Some("Alice"));
+```
+
+`SipInviteHeader` and `SipHeader` also provide `extract_from()` for
+convenience when working with typed header enums.
 
 ### Variable parsers
 
