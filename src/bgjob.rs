@@ -230,7 +230,7 @@ impl<'a> BgJobResult<'a> {
 
     /// Parse the result body, handling `+OK`/`-ERR` prefixes.
     ///
-    /// Delegates to [`parse_api_body`](crate::parse_api_body).
+    /// Delegates to [`parse_api_body`].
     pub fn parse_body(&self) -> EslResult<&'a str> {
         parse_api_body(
             self.0

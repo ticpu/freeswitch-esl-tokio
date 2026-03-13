@@ -49,20 +49,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     info!("Subscribing to events...");
-    client
-        .subscribe_events(EventFormat::Plain, EslEventType::CHANNEL_EVENTS)
-        .await?;
-    // Additional non-channel events
-    client
-        .subscribe_events(
-            EventFormat::Plain,
-            &[
-                EslEventType::Dtmf,
-                EslEventType::Heartbeat,
-                EslEventType::BackgroundJob,
-            ],
-        )
-        .await?;
+    if dump_raw {
+        client
+            .subscribe_all_events(EventFormat::Plain)
+            .await?;
+    } else {
+        client
+            .subscribe_events(EventFormat::Plain, EslEventType::CHANNEL_EVENTS)
+            .await?;
+        client
+            .subscribe_events(
+                EventFormat::Plain,
+                &[
+                    EslEventType::Dtmf,
+                    EslEventType::Heartbeat,
+                    EslEventType::BackgroundJob,
+                ],
+            )
+            .await?;
+    }
 
     let mut active_calls: HashMap<String, CallInfo> = HashMap::new();
     let mut event_count = 0u64;

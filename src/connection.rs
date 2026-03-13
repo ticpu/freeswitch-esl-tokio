@@ -1071,7 +1071,26 @@ impl EslClient {
             .await
     }
 
+    /// Subscribe to all events.
+    ///
+    /// Convenience wrapper for `subscribe_events(format, &[EslEventType::All])`.
+    ///
+    /// ```rust,no_run
+    /// # async fn example(client: &freeswitch_esl_tokio::EslClient) -> Result<(), freeswitch_esl_tokio::EslError> {
+    /// use freeswitch_esl_tokio::EventFormat;
+    /// client.subscribe_all_events(EventFormat::Plain).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn subscribe_all_events(&self, format: EventFormat) -> EslResult<()> {
+        self.subscribe_events(format, &[EslEventType::All])
+            .await
+    }
+
     /// Subscribe to events by typed enum variants.
+    ///
+    /// To subscribe to all events, use
+    /// [`subscribe_all_events`](Self::subscribe_all_events).
     ///
     /// For `CUSTOM` event subclasses (e.g., `sofia::register`), use
     /// [`subscribe_events_raw`](Self::subscribe_events_raw) instead — this method
@@ -1113,13 +1132,16 @@ impl EslClient {
 
     /// Subscribe to events using raw event name strings.
     ///
-    /// Use this for event types not covered by `EslEventType`, or for
-    /// forward compatibility with new FreeSWITCH events without a library update.
+    /// Use this for `CUSTOM` subclasses or event types not yet covered by
+    /// [`EslEventType`]. For typed events, prefer
+    /// [`subscribe_events`](Self::subscribe_events) or
+    /// [`subscribe_all_events`](Self::subscribe_all_events).
     ///
     /// ```rust,no_run
     /// # async fn example(client: &freeswitch_esl_tokio::EslClient) -> Result<(), freeswitch_esl_tokio::EslError> {
     /// use freeswitch_esl_tokio::EventFormat;
-    /// client.subscribe_events_raw(EventFormat::Plain, "NOTIFY_IN CHANNEL_CREATE").await?;
+    /// // CUSTOM subclasses require raw strings — the typed API sends bare CUSTOM
+    /// client.subscribe_events_raw(EventFormat::Plain, "CUSTOM sofia::register sofia::unregister").await?;
     /// # Ok(())
     /// # }
     /// ```
@@ -1145,6 +1167,9 @@ impl EslClient {
     }
 
     /// Set event filter using a raw header name string.
+    ///
+    /// Prefer [`filter`](Self::filter) when the header has an [`EventHeader`]
+    /// variant. Use this only for headers not yet covered by the typed enum.
     pub async fn filter_raw(&self, header: &str, value: &str) -> EslResult<()> {
         let cmd = EslCommand::Filter {
             header: header.to_string(),
@@ -1292,8 +1317,9 @@ impl EslClient {
 
     /// Unsubscribe from events using raw event name strings.
     ///
-    /// Use this for event types not covered by `EslEventType`, or for
-    /// forward compatibility with new FreeSWITCH events without a library update.
+    /// Prefer [`nixevent`](Self::nixevent) when all event types have
+    /// [`EslEventType`] variants. Use this only for `CUSTOM` subclasses or
+    /// event types not yet covered by the typed enum.
     pub async fn nixevent_raw(&self, events: &str) -> EslResult<()> {
         let cmd = EslCommand::NixEvent {
             events: events.to_string(),
@@ -1320,6 +1346,10 @@ impl EslClient {
     }
 
     /// Remove an event filter using a raw header name string.
+    ///
+    /// Prefer [`filter_delete`](Self::filter_delete) when the header has an
+    /// [`EventHeader`] variant. Use this only for headers not yet covered by
+    /// the typed enum.
     ///
     /// Without a value, removes all filters for the given header.
     /// With a value, removes only the filter matching that header+value pair.
