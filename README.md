@@ -391,50 +391,65 @@ architecture, all channel/conference command types, and escaping rules.
 All command builder types implement `Serialize`/`Deserialize`, so originate
 and bridge commands can be driven entirely from config files:
 
-```json
-{
-  "endpoint": {
-    "sofia_gateway": {
-      "gateway": "my_provider",
-      "destination": "18005551234"
-    }
-  },
-  "application": {"name": "park"},
-  "timeout_secs": 30
-}
+```yaml
+endpoint: !sofia_gateway
+  gateway: my_provider
+  destination: "18005551234"
+application:
+  name: park
+timeout_secs: 30
 ```
 
 ```rust
-let originate: Originate = serde_json::from_str(json)?;
+let originate: Originate = serde_yml::from_str(yaml)?;
 client.bgapi(&originate.to_string()).await?;
 ```
 
 `Variables` deserializes ergonomically -- a flat map defaults to `Default` scope:
 
-```json
-{"originate_timeout": "600", "sip_h_X-Custom": "value"}
+```yaml
+originate_timeout: "600"
+sip_h_X-Custom: value
 ```
 
 Other scopes use the explicit form:
 
-```json
-{"scope": "enterprise", "vars": {"key": "value"}}
+```yaml
+scope: enterprise
+vars:
+  key: value
 ```
 
-### YAML serialization
+### How endpoint types appear in YAML
 
-The `Endpoint` enum uses serde's externally tagged newtype variants. With
-`serde_json` this produces `{"sofia": {...}}`. YAML libraries that use YAML
-tags for externally tagged enums (e.g. `serde_yml`) will produce:
+The `!sofia_gateway` prefix in the example above is a YAML tag -- it tells
+the deserializer which endpoint type to build from the fields that follow.
+Each variant of the `Endpoint` enum has its own tag:
 
 ```yaml
+# SIP gateway routing
+endpoint: !sofia_gateway
+  gateway: my_provider
+  destination: "18005551234"
+
+# Direct SIP profile routing
 endpoint: !sofia
   profile: internal
   destination: "1000@domain.com"
+
+# Internal loopback
+endpoint: !loopback
+  extension: "9199"
+
+# Directory-based routing
+endpoint: !user
+  name: "1001"
+  domain: domain.com
 ```
 
-This is valid YAML and round-trips correctly, but differs from the
-`{"sofia": {...}}` mapping format that `serde_json` produces.
+This is the format produced by `serde_yml`. JSON libraries represent the
+same data differently (`{"sofia_gateway": {"gateway": ...}}` instead of a
+YAML tag), but both deserialize into the same Rust types.
 
 ## Variable parsers
 
