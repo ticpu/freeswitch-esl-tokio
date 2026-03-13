@@ -86,6 +86,10 @@ impl EslResponse {
     }
 
     /// Body as owned `String`, empty if `None`.
+    #[deprecated(
+        since = "1.5.0",
+        note = "removed in 2.0, use body().unwrap_or_default()"
+    )]
     pub fn body_string(&self) -> String {
         self.body
             .as_ref()

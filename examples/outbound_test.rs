@@ -148,7 +148,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Step 6b: linger (without timeout — not all FS versions support linger <seconds>)
     match client
-        .linger(None)
+        .linger_timeout(None)
         .await
     {
         Ok(()) => {

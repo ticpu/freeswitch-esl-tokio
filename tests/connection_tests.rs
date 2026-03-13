@@ -534,7 +534,7 @@ async fn test_linger_command() {
         let client = client.clone();
         async move {
             client
-                .linger(None)
+                .linger_timeout(None)
                 .await
         }
     });
@@ -559,7 +559,7 @@ async fn test_linger_timeout_command() {
         let client = client.clone();
         async move {
             client
-                .linger(Some(300))
+                .linger_timeout(Some(Duration::from_secs(300)))
                 .await
         }
     });

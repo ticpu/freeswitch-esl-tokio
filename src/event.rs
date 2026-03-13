@@ -24,11 +24,31 @@ pub enum EventFormat {
 
 impl EventFormat {
     /// Determine event format from a Content-Type header value.
+    ///
+    /// Defaults unknown content types to `Plain`, which silently misparsing
+    /// events if FreeSWITCH adds a new format.
+    #[deprecated(
+        since = "1.5.0",
+        note = "silently defaults unknown types to Plain; use try_from_content_type() instead"
+    )]
     pub fn from_content_type(ct: &str) -> Self {
         match ct {
             "text/event-json" => Self::Json,
             "text/event-xml" => Self::Xml,
             _ => Self::Plain,
+        }
+    }
+
+    /// Determine event format from a Content-Type header value.
+    ///
+    /// Returns `Err` for unrecognized content types to avoid silently
+    /// misparsing events if FreeSWITCH adds a new format.
+    pub fn try_from_content_type(ct: &str) -> Result<Self, ParseEventFormatError> {
+        match ct {
+            "text/event-json" => Ok(Self::Json),
+            "text/event-xml" => Ok(Self::Xml),
+            "text/event-plain" => Ok(Self::Plain),
+            _ => Err(ParseEventFormatError(ct.to_string())),
         }
     }
 }
@@ -1096,6 +1116,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_event_format_from_content_type() {
         assert_eq!(
             EventFormat::from_content_type("text/event-json"),
@@ -1113,6 +1134,23 @@ mod tests {
             EventFormat::from_content_type("unknown"),
             EventFormat::Plain
         );
+    }
+
+    #[test]
+    fn test_try_from_content_type() {
+        assert_eq!(
+            EventFormat::try_from_content_type("text/event-json"),
+            Ok(EventFormat::Json)
+        );
+        assert_eq!(
+            EventFormat::try_from_content_type("text/event-xml"),
+            Ok(EventFormat::Xml)
+        );
+        assert_eq!(
+            EventFormat::try_from_content_type("text/event-plain"),
+            Ok(EventFormat::Plain)
+        );
+        assert!(EventFormat::try_from_content_type("unknown").is_err());
     }
 
     // --- EslEvent accessor tests ---

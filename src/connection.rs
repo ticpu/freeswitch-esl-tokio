@@ -1,5 +1,6 @@
 //! Connection management for ESL
 
+use std::borrow::Borrow;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
@@ -23,10 +24,13 @@ use crate::{
     protocol::{EslMessage, EslParser, MessageType},
 };
 
-fn event_types_to_string(events: &[EslEventType]) -> String {
+fn event_types_to_string<T: Borrow<EslEventType>>(events: impl IntoIterator<Item = T>) -> String {
     events
-        .iter()
-        .map(|e| e.to_string())
+        .into_iter()
+        .map(|e| {
+            e.borrow()
+                .to_string()
+        })
         .collect::<Vec<_>>()
         .join(" ")
 }
@@ -128,11 +132,16 @@ struct SharedState {
 /// Options for ESL connection configuration.
 ///
 /// Controls parameters that are fixed at connection time, such as the event
-/// queue capacity. Use [`Default::default()`] for standard settings.
+/// queue capacity and connect timeout. Use [`Default::default()`] for standard settings.
+///
+/// The `event_queue_size` field is public for backward compatibility but will
+/// become private in 2.0. Prefer the [`event_queue_size()`](Self::event_queue_size)
+/// accessor and [`with_event_queue_size()`](Self::with_event_queue_size) builder.
 #[derive(Debug, Clone)]
 pub struct EslConnectOptions {
     /// Capacity of the mpsc channel delivering events. Default: 1000.
     pub event_queue_size: usize,
+    connect_timeout: Duration,
 }
 
 impl EslConnectOptions {
@@ -146,12 +155,29 @@ impl EslConnectOptions {
         self.event_queue_size = size;
         self
     }
+
+    /// Set the timeout for TCP connect and auth handshake.
+    pub fn with_connect_timeout(mut self, timeout: Duration) -> Self {
+        self.connect_timeout = timeout;
+        self
+    }
+
+    /// Capacity of the mpsc channel delivering events. Default: 1000.
+    pub fn event_queue_size(&self) -> usize {
+        self.event_queue_size
+    }
+
+    /// Timeout for TCP connect and each auth handshake read. Default: 2s.
+    pub fn connect_timeout(&self) -> Duration {
+        self.connect_timeout
+    }
 }
 
 impl Default for EslConnectOptions {
     fn default() -> Self {
         Self {
             event_queue_size: MAX_EVENT_QUEUE_SIZE,
+            connect_timeout: Duration::from_millis(DEFAULT_TIMEOUT_MS),
         }
     }
 }
@@ -388,8 +414,25 @@ async fn reader_loop_inner(
                         let format = if ct == Some(CONTENT_TYPE_LOG_DATA) {
                             EventFormat::Plain
                         } else {
-                            ct.map(EventFormat::from_content_type)
-                                .unwrap_or(EventFormat::Plain)
+                            match ct.map(EventFormat::try_from_content_type) {
+                                Some(Ok(f)) => f,
+                                Some(Err(e)) => {
+                                    warn!("Unknown event content type: {}", e);
+                                    if !dispatch_event(
+                                        &event_tx,
+                                        &shared,
+                                        Err(EslError::InvalidEventFormat {
+                                            format: e
+                                                .0
+                                                .clone(),
+                                        }),
+                                    ) {
+                                        return;
+                                    }
+                                    continue;
+                                }
+                                None => EventFormat::Plain,
+                            }
                         };
 
                         let event_result = parser.parse_event(message, format);
@@ -801,15 +844,19 @@ impl EslClient {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn subscribe_events(
+    pub async fn subscribe_events<T: Borrow<EslEventType>>(
         &self,
         format: EventFormat,
-        events: &[EslEventType],
+        events: impl IntoIterator<Item = T>,
     ) -> EslResult<()> {
+        let events: Vec<EslEventType> = events
+            .into_iter()
+            .map(|e| *e.borrow())
+            .collect();
         let events_str = if events.contains(&EslEventType::All) {
             "ALL".to_string()
         } else {
-            event_types_to_string(events)
+            event_types_to_string(&events)
         };
 
         let cmd = EslCommand::Events {
@@ -932,8 +979,23 @@ impl EslClient {
     /// and keeps the socket open so the client can drain remaining events.
     ///
     /// Pass `None` for indefinite linger, or `Some(seconds)` for a timeout.
+    #[deprecated(since = "1.5.0", note = "use linger_timeout(Option<Duration>) instead")]
     pub async fn linger(&self, timeout: Option<u32>) -> EslResult<()> {
         self.send_command_ok(EslCommand::Linger { timeout })
+            .await
+    }
+
+    /// Keep the socket open after the channel hangs up (outbound mode).
+    ///
+    /// Without linger, the socket closes immediately on hangup. With linger,
+    /// FreeSWITCH sends a `text/disconnect-notice` with `Content-Disposition: linger`
+    /// and keeps the socket open so the client can drain remaining events.
+    ///
+    /// Pass `None` for indefinite linger, or `Some(duration)` for a timeout.
+    /// Sub-second precision is truncated to whole seconds by the ESL wire format.
+    pub async fn linger_timeout(&self, timeout: Option<Duration>) -> EslResult<()> {
+        let secs = timeout.map(|d| d.as_secs() as u32);
+        self.send_command_ok(EslCommand::Linger { timeout: secs })
             .await
     }
 

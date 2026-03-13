@@ -50,7 +50,7 @@
 //!     println!("Channel: {}", channel_data.channel_name().unwrap_or("?"));
 //!
 //!     client.myevents(EventFormat::Plain).await?;
-//!     client.linger(None).await?; // keep socket open after hangup
+//!     client.linger_timeout(None).await?; // keep socket open after hangup
 //!     client.resume().await?;     // resume dialplan on disconnect
 //!
 //!     client.send_command(AppCommand::answer()).await?;
