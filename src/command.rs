@@ -597,6 +597,32 @@ impl EslCommand {
     }
 }
 
+/// Parse an API response body, handling `+OK`/`-ERR`/`-USAGE` prefixes.
+///
+/// Returns the meaningful payload after stripping the prefix on success.
+/// Returns [`EslError::CommandFailed`] for `-ERR` and `-USAGE` responses,
+/// and [`EslError::ProtocolError`] for empty bodies.
+pub fn parse_api_body(body: &str) -> EslResult<&str> {
+    let trimmed = body.trim();
+    if trimmed.is_empty() {
+        return Err(EslError::ProtocolError {
+            message: "api response body is empty".into(),
+        });
+    }
+    if let Some(rest) = trimmed.strip_prefix("+OK") {
+        Ok(rest
+            .strip_prefix(' ')
+            .unwrap_or(rest)
+            .trim())
+    } else if trimmed.starts_with("-ERR") || trimmed.starts_with("-USAGE") {
+        Err(EslError::CommandFailed {
+            reply_text: trimmed.to_string(),
+        })
+    } else {
+        Ok(trimmed)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

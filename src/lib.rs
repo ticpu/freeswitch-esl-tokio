@@ -128,6 +128,7 @@
 mod macros;
 
 pub mod app;
+pub mod bgjob;
 pub mod channel;
 pub mod commands;
 pub mod connection;
@@ -143,10 +144,12 @@ pub mod constants;
 pub(crate) mod protocol;
 
 pub use app::dptools::AppCommand;
+pub use bgjob::{BgJobResult, BgJobTracker};
 pub use channel::{
     AnswerState, CallDirection, CallState, ChannelState, ChannelTimetable, ParseTimetableError,
     TimetablePrefix,
 };
+pub use command::parse_api_body;
 pub use command::{CommandBuilder, EslResponse, ReplyStatus};
 pub use commands::{
     Application, ApplicationList, ConferenceDtmf, ConferenceHold, ConferenceMute, DialplanType,
