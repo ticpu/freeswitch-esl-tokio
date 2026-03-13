@@ -56,7 +56,7 @@ pub use sip_header::{ParseSipHeaderError, SipHeader, SipHeaderLookup};
 pub use sip_header_addr::{ParseSipHeaderAddrError, SipHeaderAddr};
 pub use sip_message::extract_header;
 pub use variables::{
-    ChannelVariable, EslArray, MultipartBody, MultipartItem, ParseChannelVariableError,
-    SipCallInfo, SipCallInfoEntry, SipCallInfoError, SipGeolocation, SipGeolocationRef,
-    VariableName,
+    ChannelVariable, EslArray, HistoryInfo, HistoryInfoEntry, HistoryInfoError, HistoryInfoReason,
+    MultipartBody, MultipartItem, ParseChannelVariableError, SipCallInfo, SipCallInfoEntry,
+    SipCallInfoError, SipGeolocation, SipGeolocationRef, VariableName,
 };

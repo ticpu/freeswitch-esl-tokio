@@ -146,29 +146,7 @@ fn parse_entry(raw: &str) -> Result<SipCallInfoEntry, SipCallInfoError> {
     Ok(SipCallInfoEntry { data, metadata })
 }
 
-/// Split comma-separated entries respecting angle-bracket nesting.
-fn split_comma_entries(raw: &str) -> Vec<&str> {
-    let mut entries = Vec::new();
-    let mut depth = 0u32;
-    let mut start = 0;
-
-    for (i, ch) in raw.char_indices() {
-        match ch {
-            '<' => depth += 1,
-            '>' => depth = depth.saturating_sub(1),
-            ',' if depth == 0 => {
-                entries.push(&raw[start..i]);
-                start = i + 1;
-            }
-            _ => {}
-        }
-    }
-    if start < raw.len() {
-        entries.push(&raw[start..]);
-    }
-
-    entries
-}
+use super::split_comma_entries;
 
 impl SipCallInfo {
     /// Parse a raw Call-Info header value. Handles both standard

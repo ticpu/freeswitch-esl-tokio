@@ -5,7 +5,7 @@
 //! any key-value store that can look up headers by name.
 
 use crate::sip_header_addr::{ParseSipHeaderAddrError, SipHeaderAddr};
-use crate::variables::{SipCallInfo, SipCallInfoError};
+use crate::variables::{HistoryInfo, HistoryInfoError, SipCallInfo, SipCallInfoError};
 
 /// Error returned when parsing an unrecognized SIP header name.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -29,6 +29,8 @@ define_header_enum! {
     pub enum SipHeader {
         /// `Call-Info` (RFC 3261 section 20.9).
         CallInfo => "Call-Info",
+        /// `History-Info` (RFC 7044).
+        HistoryInfo => "History-Info",
         /// `P-Asserted-Identity` (RFC 3325).
         PAssertedIdentity => "P-Asserted-Identity",
     }
@@ -93,6 +95,21 @@ pub trait SipHeaderLookup {
         }
     }
 
+    /// Raw `History-Info` header value (RFC 7044).
+    fn history_info_raw(&self) -> Option<&str> {
+        self.sip_header(SipHeader::HistoryInfo)
+    }
+
+    /// Parse the `History-Info` header into a [`HistoryInfo`].
+    ///
+    /// Returns `Ok(None)` if the header is absent, `Err` if present but unparseable.
+    fn history_info(&self) -> Result<Option<HistoryInfo>, HistoryInfoError> {
+        match self.history_info_raw() {
+            Some(s) => HistoryInfo::parse(s).map(Some),
+            None => Ok(None),
+        }
+    }
+
     /// Raw `P-Asserted-Identity` header value (RFC 3325).
     fn p_asserted_identity_raw(&self) -> Option<&str> {
         self.sip_header(SipHeader::PAssertedIdentity)
@@ -119,6 +136,7 @@ mod tests {
     #[test]
     fn display_round_trip() {
         assert_eq!(SipHeader::CallInfo.to_string(), "Call-Info");
+        assert_eq!(SipHeader::HistoryInfo.to_string(), "History-Info");
         assert_eq!(
             SipHeader::PAssertedIdentity.to_string(),
             "P-Asserted-Identity"
@@ -135,6 +153,10 @@ mod tests {
     fn from_str_case_insensitive() {
         assert_eq!("call-info".parse::<SipHeader>(), Ok(SipHeader::CallInfo));
         assert_eq!("CALL-INFO".parse::<SipHeader>(), Ok(SipHeader::CallInfo));
+        assert_eq!(
+            "history-info".parse::<SipHeader>(),
+            Ok(SipHeader::HistoryInfo)
+        );
         assert_eq!(
             "p-asserted-identity".parse::<SipHeader>(),
             Ok(SipHeader::PAssertedIdentity)
@@ -154,7 +176,11 @@ mod tests {
 
     #[test]
     fn from_str_round_trip_all() {
-        let variants = [SipHeader::CallInfo, SipHeader::PAssertedIdentity];
+        let variants = [
+            SipHeader::CallInfo,
+            SipHeader::HistoryInfo,
+            SipHeader::PAssertedIdentity,
+        ];
         for v in variants {
             let wire = v.to_string();
             let parsed: SipHeader = wire
@@ -252,16 +278,58 @@ mod tests {
     }
 
     #[test]
+    fn history_info_raw_lookup() {
+        let h = headers_with(&[(
+            "History-Info",
+            "<sip:alice@esrp.example.com>;index=1,<sip:sos@psap.example.com>;index=1.1",
+        )]);
+        assert!(h
+            .history_info_raw()
+            .unwrap()
+            .contains("esrp.example.com"));
+    }
+
+    #[test]
+    fn history_info_typed() {
+        let h = headers_with(&[(
+            "History-Info",
+            "<sip:alice@esrp.example.com>;index=1,<sip:sos@psap.example.com>;index=1.1",
+        )]);
+        let hi = h
+            .history_info()
+            .unwrap()
+            .unwrap();
+        assert_eq!(hi.len(), 2);
+        assert_eq!(hi.entries()[0].index(), Some("1"));
+        assert_eq!(hi.entries()[1].index(), Some("1.1"));
+    }
+
+    #[test]
+    fn history_info_absent() {
+        let h = headers_with(&[]);
+        assert_eq!(
+            h.history_info()
+                .unwrap(),
+            None
+        );
+    }
+
+    #[test]
     fn extract_from_sip_message() {
         let msg = concat!(
             "INVITE sip:bob@host SIP/2.0\r\n",
             "Call-Info: <urn:emergency:uid:callid:abc>;purpose=emergency-CallId\r\n",
+            "History-Info: <sip:esrp@example.com>;index=1\r\n",
             "P-Asserted-Identity: \"Corp\" <sip:+15551234567@198.51.100.1>\r\n",
             "\r\n",
         );
         assert_eq!(
             SipHeader::CallInfo.extract_from(msg),
             Some("<urn:emergency:uid:callid:abc>;purpose=emergency-CallId".into())
+        );
+        assert_eq!(
+            SipHeader::HistoryInfo.extract_from(msg),
+            Some("<sip:esrp@example.com>;index=1".into())
         );
         assert_eq!(
             SipHeader::PAssertedIdentity.extract_from(msg),
@@ -286,6 +354,12 @@ mod tests {
         assert_eq!(h.call_info_raw(), None);
         assert_eq!(
             h.call_info()
+                .unwrap(),
+            None
+        );
+        assert_eq!(h.history_info_raw(), None);
+        assert_eq!(
+            h.history_info()
                 .unwrap(),
             None
         );
