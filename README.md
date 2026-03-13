@@ -1,17 +1,23 @@
 # freeswitch-esl-tokio
 
-[![CI](https://github.com/ticpu/freeswitch-esl-tokio/actions/workflows/ci.yml/badge.svg)](https://github.com/ticpu/freeswitch-esl-tokio/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/test-count.json)](https://github.com/ticpu/freeswitch-esl-tokio/actions/workflows/ci.yml)
-[![Event Types](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/event-type-count.json)](https://github.com/ticpu/freeswitch-esl-tokio/actions/workflows/ci.yml)
+[![CI](https://github.com/ticpu/freeswitch-esl-tokio/actions/workflows/ci.yml/badge.svg?branch=v1)][ci]
+[![Tests](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/test-count.json)][ci]
+[![Event Types](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/event-type-count.json)][ci]
 [![crates.io](https://img.shields.io/crates/v/freeswitch-esl-tokio)](https://crates.io/crates/freeswitch-esl-tokio)
-[![docs.rs](https://img.shields.io/docsrs/freeswitch-esl-tokio)](https://docs.rs/freeswitch-esl-tokio)
+[![docs.rs](https://img.shields.io/docsrs/freeswitch-esl-tokio)][docs]
+
+[ci]: https://github.com/ticpu/freeswitch-esl-tokio/actions/workflows/ci.yml
+[docs]: https://docs.rs/freeswitch-esl-tokio
 
 Async Rust client for FreeSWITCH
 [ESL](https://developer.signalwire.com/freeswitch/FreeSWITCH-Explained/Client-and-Developer-Interfaces/Event-Socket-Library/).
 Typed events, typed commands, split reader/writer, liveness detection.
 
+> **v1.5** adds deprecation warnings for APIs that change in 2.0 and
+> backports features like `BgJobTracker`. See [Migrating to 2.0](#migrating-to-20).
+
 ```rust
-use freeswitch_esl_tokio::*;
+use freeswitch_esl_tokio::{parse_api_body, *};
 use freeswitch_esl_tokio::commands::*;
 
 #[tokio::main]
@@ -53,8 +59,10 @@ async fn main() -> Result<(), EslError> {
                 break;
             }
             Some(EslEventType::BackgroundJob) => {
-                // BACKGROUND_JOB always has a body
-                println!("bgapi result: {}", event.body().unwrap());
+                match parse_api_body(event.body().unwrap_or("")) {
+                    Ok(data) => println!("bgapi result: {}", data),
+                    Err(e) => eprintln!("bgapi error: {}", e),
+                }
             }
             _ => {}
         }
@@ -71,16 +79,18 @@ tokio = { version = "1.0", features = ["full"] }
 
 ## Features
 
-- **Split reader/writer** — `EslClient` is `Clone + Send`, events arrive on
+- **Split reader/writer** -- `EslClient` is `Clone + Send`, events arrive on
   a separate channel. Send commands from any task without blocking the event loop.
-- **Typed events** — `ChannelState`, `CallDirection`, `EventHeader`,
+- **Typed events** -- `ChannelState`, `CallDirection`, `EventHeader`,
   `ChannelVariable` enums. `HeaderLookup` trait gives typed accessors to any
   key-value store, not just `EslEvent`.
-- **Command builders** — `Originate`, `UuidKill`, `ConferenceDtmf`,
-  dptools — all `Display`/`FromStr`, no transport coupling.
-- **Connection health** — liveness detection, command timeouts (default 5s),
+- **Command builders** -- `Originate`, `UuidKill`, `ConferenceDtmf`,
+  dptools -- all `Display`/`FromStr`, no transport coupling.
+- **Background job tracking** -- `BgJobTracker` correlates `bgapi` Job-UUIDs
+  with `BACKGROUND_JOB` events, with optional caller context for dispatch.
+- **Connection health** -- liveness detection, command timeouts (default 5s),
   `is_connection_error()` / `is_recoverable()` error classification.
-- **Correct wire format** — two-part framing, percent-decoded headers,
+- **Correct wire format** -- two-part framing, percent-decoded headers,
   Content-Type detection. Matches `mod_event_socket.c`.
 
 ## Architecture
@@ -101,18 +111,17 @@ Background reader task
 '- broadcasts ConnectionStatus on disconnect
 ```
 
-See [docs/design-rationale.md](docs/design-rationale.md) for the full
-architecture story.
+See [docs/design-rationale.md](docs/design-rationale.md) for the full story.
 
 ## Usage
 
-### Connect and run a command
+### Inbound connection
 
 ```rust
 let (client, mut events) = EslClient::connect("localhost", 8021, "ClueCon").await?;
 
 let response = client.api("status").await?;
-println!("{}", response.body_string());
+println!("{}", response.body().unwrap_or("No body"));
 ```
 
 Multi-tenant with per-user ACL:
@@ -159,28 +168,51 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### Background API calls
 
-`api()` blocks until FreeSWITCH finishes the command (subject to command
-timeout). `bgapi()` returns immediately with a Job-UUID; the result arrives
-as a `BACKGROUND_JOB` event:
+`api()` **blocks the entire ESL socket** until FreeSWITCH finishes the
+command -- no events are delivered and no other commands can be sent on the
+connection until it returns. Use `bgapi()` for anything that may take time
+(originate, conference operations, bulk queries). `bgapi()` returns
+immediately with a Job-UUID; the result arrives as a `BACKGROUND_JOB` event.
+
+`BgJobTracker` handles the Job-UUID correlation so you don't have to
+maintain a pending-jobs HashMap yourself:
 
 ```rust
+use freeswitch_esl_tokio::BgJobTracker;
+
 client.subscribe_events(EventFormat::Plain, &[
     EslEventType::BackgroundJob,
 ]).await?;
 
-// bgapi queues the command and returns immediately with a Job-UUID
-let response = client.bgapi("sofia xmlstatus profile internal").await?;
-let job_uuid = response.job_uuid().expect("bgapi returns Job-UUID");
+let mut bg = BgJobTracker::new();
+bg.send(&client, "sofia xmlstatus profile internal").await?;
 
-// The result arrives later as a BACKGROUND_JOB event
 while let Some(Ok(event)) = events.recv().await {
-    if event.is_event_type(EslEventType::BackgroundJob)
-        && event.job_uuid() == Some(&job_uuid)
-    {
-        // BACKGROUND_JOB always has a body; most other event types don't
-        println!("{}", event.body().unwrap());
+    if let Some(((), result)) = bg.try_complete(&event) {
+        match result.parse_body() {
+            Ok(data) => println!("{}", data),
+            Err(e) => eprintln!("command failed: {}", e),
+        }
         break;
     }
+}
+```
+
+Attach caller context to each job for dispatch without a separate map.
+The context is returned alongside the result:
+
+```rust
+let mut bg: BgJobTracker<String> = BgJobTracker::new();
+
+for uuid in &channel_uuids {
+    bg.bgapi(&client, &format!("uuid_dump {uuid}"), uuid.clone()).await?;
+}
+
+while let Some(Ok(event)) = events.recv().await {
+    if let Some((channel_uuid, result)) = bg.try_complete(&event) {
+        println!("dump for {}: {:?}", channel_uuid, result.body());
+    }
+    // ... handle other events
 }
 ```
 
@@ -190,7 +222,7 @@ FreeSWITCH connects to your application via the `socket` dialplan app.
 After accepting, send `connect` to establish the session:
 
 ```rust
-use freeswitch_esl_tokio::{EslClient, AppCommand, EventFormat};
+use freeswitch_esl_tokio::{EslClient, AppCommand, EventFormat, HeaderLookup};
 use tokio::net::TcpListener;
 
 let listener = TcpListener::bind("0.0.0.0:8040").await?;
@@ -203,7 +235,7 @@ println!("Channel: {}", channel_data.channel_name().unwrap());
 
 // Subscribe, enable linger, resume dialplan
 client.myevents(EventFormat::Plain).await?;
-client.linger(None).await?;
+client.linger_timeout(None).await?;
 client.resume().await?;
 
 // Control the call
@@ -272,7 +304,7 @@ architecture, all channel/conference command types, and escaping rules.
 ```rust
 use freeswitch_esl_tokio::variables::{EslArray, MultipartBody};
 
-// ARRAY:: delimited values
+// ARRAY:: delimited values (used by FreeSWITCH for repeating SIP headers)
 let arr = EslArray::parse("ARRAY::item1|:item2|:item3").unwrap();
 assert_eq!(arr.items(), &["item1", "item2", "item3"]);
 
@@ -290,7 +322,7 @@ let pidf = body.by_mime_type("application/pidf+xml");
 instead of returning raw strings:
 
 ```rust
-use freeswitch_esl_tokio::{ChannelState, CallDirection};
+use freeswitch_esl_tokio::{ChannelState, CallDirection, HeaderLookup};
 
 // Typed enums parsed from headers, no string matching needed
 if let Some(state) = event.channel_state() {
@@ -301,16 +333,19 @@ if let Some(state) = event.channel_state() {
     }
 }
 
-// All accessors return Option: None if the header is absent from this event
+// String accessors return Option<&str>: None if the header is absent
 let cid = event.caller_id_number();     // Option<&str>
+// Typed accessors also return Option (2.0 changes these to return Result)
 let direction = event.call_direction(); // Option<CallDirection>
 let cause = event.hangup_cause();       // Option<&str>
 ```
 
+### Channel timetable
+
 Call lifecycle timestamps via `ChannelTimetable`:
 
 ```rust
-use freeswitch_esl_tokio::TimetablePrefix;
+use freeswitch_esl_tokio::{HeaderLookup, TimetablePrefix};
 
 // Extracts Caller-Channel-*-Time headers from the event
 let timetable = event.caller_timetable()?;
@@ -325,6 +360,8 @@ if let Some(tt) = timetable {
 }
 ```
 
+### Header and variable enums
+
 Compile-time header and variable name enums via `HeaderLookup`:
 
 ```rust
@@ -335,10 +372,10 @@ let uid = event.header(EventHeader::UniqueId);             // Option<&str>
 let codec = event.variable(ChannelVariable::ReadCodec);    // Option<&str>
 ```
 
-### Custom channel tracker
+### Custom channel tracker with `HeaderLookup`
 
 The `HeaderLookup` trait lets any `HashMap<String, String>` wrapper share
-the same typed accessors as `EslEvent`. Implement two methods, get ~17
+the same typed accessors as `EslEvent`. Implement two methods, get all typed
 accessors for free:
 
 ```rust
@@ -365,6 +402,26 @@ impl HeaderLookup for TrackedChannel {
 
 See `cargo run --example channel_tracker` for a complete reference
 implementation using `HeaderLookup` for channel lifecycle monitoring.
+
+## Migrating to 2.0
+
+v1.5 introduces deprecation warnings for APIs that change in 2.0:
+
+| v1 (deprecated) | v2 replacement | Reason |
+|---|---|---|
+| `linger(Option<u32>)` | `linger_timeout(Option<Duration>)` | Duration for all timeouts |
+| `body_string()` | `body().unwrap_or_default()` | Unnecessary convenience |
+| `EventFormat::from_content_type()` | `EventFormat::try_from_content_type()` | Returns `Result` instead of silently defaulting |
+
+Additional breaking changes in 2.0 (no deprecation path in 1.x):
+
+- `EslError::JsonError` and `XmlError` payloads change from dependency types to `String`
+  (already done in 1.5 to stop leaking `serde_json::Error` / `quick_xml::Error`)
+- `EslConnectOptions::event_queue_size` field becomes private (use `event_queue_size()` accessor)
+- `DisconnectReason::ServerNotice` becomes a struct variant with `controlled_session_uuid` and `body` fields
+- `HeaderLookup` typed accessors return `Result<Option<T>, ParseErr>` instead of `Option<T>`
+- `Originate` uses builder pattern instead of struct literal construction
+- `HashMap` replaced by `IndexMap` for header storage (preserves insertion order)
 
 ## Development
 

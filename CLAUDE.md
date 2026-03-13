@@ -188,11 +188,48 @@ A future **wrapper crate** will own the typed command-and-response layer:
 **Do not add response parsing or high-level command methods to `EslClient`.**
 Keep the boundary clean — `EslClient` sends strings and returns `EslResponse`.
 
+## v1.5 Backports and Deprecations
+
+This branch (v1) receives backports from 2.0 and deprecation warnings to
+ease migration. Last backport base: master commit 1c4adfa (fix: add
+BgJobTracker cleanup helpers). Key changes in v1.5:
+
+**Backported from 2.0:**
+
+- `BgJobTracker` (`src/bgjob.rs`) -- bgapi Job-UUID correlation with optional
+  caller context. Imported with `crate::` paths instead of `freeswitch_types::`.
+  (7135fe4)
+- `parse_api_body()` (`src/command.rs`) -- `+OK`/`-ERR`/`-USAGE` prefix parsing.
+  (7135fe4)
+- `EslConnectOptions::with_connect_timeout()` / `connect_timeout()` accessor.
+  (79bc32d)
+- `subscribe_events()` widened to `impl IntoIterator` (backward compatible).
+  (79bc32d)
+- XML parser rewrite for quick-xml 0.39 (text accumulator + GeneralRef handling).
+  (0426e06)
+- `EslError::JsonError`/`XmlError` wrapped as `String` (stops leaking dep types).
+  (0426e06)
+
+**Deprecated (use the replacement before upgrading to 2.0):**
+
+- `linger(Option<u32>)` -> `linger_timeout(Option<Duration>)` (79bc32d)
+- `body_string()` -> `body().unwrap_or_default()` (79bc32d)
+- `EventFormat::from_content_type()` -> `try_from_content_type()` (79bc32d)
+
+**2.0 breaking changes with no deprecation path in 1.x:**
+
+- `DisconnectReason::ServerNotice` becomes struct variant
+- `EslConnectOptions::event_queue_size` field becomes private
+- `HeaderLookup` typed accessors return `Result<Option<T>>` not `Option<T>`
+- `Originate` switches from struct literal to builder pattern
+- `HashMap` -> `IndexMap` for header storage
+
 ## Source Layout
 
 ```
 src/
 ├── lib.rs                 # Public API re-exports
+├── bgjob.rs               # BgJobTracker — bgapi Job-UUID correlation
 ├── connection.rs          # EslClient, EslEventStream, connect()/accept_outbound()
 ├── protocol.rs            # Wire format parser (framing, percent-decoding)
 ├── buffer.rs              # Streaming read buffer with Content-Length framing
