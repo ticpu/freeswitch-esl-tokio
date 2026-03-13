@@ -410,7 +410,7 @@ v1.5 introduces deprecation warnings for APIs that change in 2.0:
 | v1 (deprecated) | v2 replacement | Reason |
 |---|---|---|
 | `linger(Option<u32>)` | `linger_timeout(Option<Duration>)` | Duration for all timeouts |
-| `body_string()` | `body().unwrap_or_default()` | Unnecessary convenience |
+| `body_string()` | `body().unwrap_or_default()` | `body()` returns `Option` to accurately represent absent vs empty body |
 | `EventFormat::from_content_type()` | `EventFormat::try_from_content_type()` | Returns `Result` instead of silently defaulting |
 
 Additional breaking changes in 2.0 (no deprecation path in 1.x):
