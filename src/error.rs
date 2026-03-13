@@ -73,12 +73,18 @@ pub enum EslError {
     },
 
     /// JSON parsing error
+    ///
+    /// Prior to 2.0, this variant held `serde_json::Error` directly.
+    /// It now wraps the error as a `String` to avoid leaking dependency types.
     #[error("JSON parsing error: {0}")]
-    JsonError(#[from] serde_json::Error),
+    JsonError(String),
 
-    /// XML parsing error  
+    /// XML parsing error
+    ///
+    /// Prior to 2.0, this variant held `quick_xml::Error` directly.
+    /// It now wraps the error as a `String` to avoid leaking dependency types.
     #[error("XML parsing error: {0}")]
-    XmlError(#[from] quick_xml::Error),
+    XmlError(String),
 
     /// UTF-8 conversion error
     #[error("UTF-8 conversion error: {0}")]
@@ -146,6 +152,18 @@ pub enum EslError {
     /// Originate command builder error
     #[error("Originate error: {0}")]
     Originate(#[from] OriginateError),
+}
+
+impl From<serde_json::Error> for EslError {
+    fn from(e: serde_json::Error) -> Self {
+        Self::JsonError(e.to_string())
+    }
+}
+
+impl From<quick_xml::Error> for EslError {
+    fn from(e: quick_xml::Error) -> Self {
+        Self::XmlError(e.to_string())
+    }
 }
 
 impl EslError {
