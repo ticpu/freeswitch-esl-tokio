@@ -141,7 +141,8 @@ struct SharedState {
 pub struct EslConnectOptions {
     /// Capacity of the mpsc channel delivering events. Default: 1000.
     pub event_queue_size: usize,
-    connect_timeout: Duration,
+    /// Timeout for TCP connect and each auth handshake read. Default: 2s.
+    pub connect_timeout: Duration,
 }
 
 impl EslConnectOptions {
@@ -844,19 +845,15 @@ impl EslClient {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn subscribe_events<T: Borrow<EslEventType>>(
+    pub async fn subscribe_events(
         &self,
         format: EventFormat,
-        events: impl IntoIterator<Item = T>,
+        events: &[EslEventType],
     ) -> EslResult<()> {
-        let events: Vec<EslEventType> = events
-            .into_iter()
-            .map(|e| *e.borrow())
-            .collect();
         let events_str = if events.contains(&EslEventType::All) {
             "ALL".to_string()
         } else {
-            event_types_to_string(&events)
+            event_types_to_string(events)
         };
 
         let cmd = EslCommand::Events {
