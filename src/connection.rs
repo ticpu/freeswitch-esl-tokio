@@ -1182,6 +1182,48 @@ impl EslClient {
         Ok(())
     }
 
+    /// Apply an [`EventSubscription`](freeswitch_types::EventSubscription) by sending its filters and event command.
+    ///
+    /// Sends each filter via [`filter_raw`](Self::filter_raw), then subscribes
+    /// to the configured events. Does nothing if the subscription is empty.
+    ///
+    /// The caller retains ownership of the subscription for use during
+    /// reconnection.
+    pub async fn apply_subscription(
+        &self,
+        sub: &freeswitch_types::EventSubscription,
+    ) -> EslResult<()> {
+        for (header, value) in sub.filters() {
+            self.filter_raw(header, value)
+                .await?;
+        }
+        if let Some(events_str) = sub.to_event_string() {
+            let cmd = EslCommand::Events {
+                format: sub
+                    .format()
+                    .to_string(),
+                events: events_str,
+            };
+            self.send_command_ok(cmd)
+                .await?;
+        }
+        Ok(())
+    }
+
+    /// Clear all existing subscriptions and filters, then apply the given subscription.
+    ///
+    /// Equivalent to calling [`noevents`](Self::noevents),
+    /// [`filter_delete_all`](Self::filter_delete_all), then
+    /// [`apply_subscription`](Self::apply_subscription).
+    pub async fn resubscribe(&self, sub: &freeswitch_types::EventSubscription) -> EslResult<()> {
+        self.noevents()
+            .await?;
+        self.filter_delete_all()
+            .await?;
+        self.apply_subscription(sub)
+            .await
+    }
+
     /// Execute application on channel.
     pub async fn execute(
         &self,

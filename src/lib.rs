@@ -142,9 +142,10 @@ pub use freeswitch_types::{
 pub use freeswitch_types::{
     AnswerState, Application, BridgeDialString, CallDirection, CallState, ChannelState,
     ChannelTimetable, ChannelVariable, DialString, DialplanType, Endpoint, EslArray, EslEvent,
-    EslEventPriority, EslEventType, EventFormat, EventHeader, GroupCallOrder, HangupCause,
-    HeaderLookup, MultipartBody, MultipartItem, Originate, OriginateError, OriginateTarget,
-    ParseAnswerStateError, ParseCallDirectionError, ParseCallStateError, ParseChannelStateError,
+    EslEventPriority, EslEventType, EventFormat, EventHeader, EventSubscription,
+    EventSubscriptionError, GroupCallOrder, HangupCause, HeaderLookup, MultipartBody,
+    MultipartItem, Originate, OriginateError, OriginateTarget, ParseAnswerStateError,
+    ParseCallDirectionError, ParseCallStateError, ParseChannelStateError,
     ParseChannelVariableError, ParseDialplanTypeError, ParseEventFormatError,
     ParseEventHeaderError, ParseEventTypeError, ParseGroupCallOrderError, ParseHangupCauseError,
     ParsePriorityError, ParseTimetableError, TimetablePrefix, UuidAnswer, UuidBridge, UuidDeflect,

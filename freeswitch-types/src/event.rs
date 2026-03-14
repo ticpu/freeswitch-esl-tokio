@@ -394,6 +394,367 @@ impl fmt::Display for ParseEventTypeError {
 
 impl std::error::Error for ParseEventTypeError {}
 
+/// Error returned when an [`EventSubscription`] builder method receives invalid input.
+///
+/// Custom subclasses and filter values are validated against ESL wire-safety
+/// constraints: no newlines, carriage returns, or (for subclasses) spaces.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EventSubscriptionError(pub String);
+
+impl fmt::Display for EventSubscriptionError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "invalid event subscription: {}", self.0)
+    }
+}
+
+impl std::error::Error for EventSubscriptionError {}
+
+/// Declarative description of an ESL event subscription.
+///
+/// Captures the event format, event types, custom subclasses, and filters
+/// as a single unit. Useful for config-driven subscriptions and reconnection
+/// patterns where the caller needs to rebuild subscriptions from a saved
+/// description.
+///
+/// # Wire safety
+///
+/// Builder methods validate inputs against ESL wire injection risks.
+/// Custom subclasses reject `\n`, `\r`, spaces, and empty strings.
+/// Filter headers and values reject `\n` and `\r`.
+///
+/// # Example
+///
+/// ```rust
+/// use freeswitch_types::{EventSubscription, EventFormat, EslEventType, EventHeader};
+///
+/// let sub = EventSubscription::new(EventFormat::Plain)
+///     .events(EslEventType::CHANNEL_EVENTS)
+///     .event(EslEventType::Heartbeat)
+///     .custom_subclass("sofia::register").unwrap()
+///     .filter(EventHeader::CallDirection, "inbound").unwrap();
+///
+/// assert!(!sub.is_empty());
+/// assert!(!sub.is_all());
+/// ```
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct EventSubscription {
+    format: EventFormat,
+    events: Vec<EslEventType>,
+    custom_subclasses: Vec<String>,
+    filters: Vec<(String, String)>,
+}
+
+/// Validates that a custom subclass token is safe for ESL wire use.
+fn validate_custom_subclass(s: &str) -> Result<(), EventSubscriptionError> {
+    if s.is_empty() {
+        return Err(EventSubscriptionError(
+            "custom subclass cannot be empty".into(),
+        ));
+    }
+    if s.contains('\n') || s.contains('\r') {
+        return Err(EventSubscriptionError(format!(
+            "custom subclass contains newline: {:?}",
+            s
+        )));
+    }
+    if s.contains(' ') {
+        return Err(EventSubscriptionError(format!(
+            "custom subclass contains space: {:?}",
+            s
+        )));
+    }
+    Ok(())
+}
+
+/// Validates that a filter header or value has no newline characters.
+fn validate_filter_field(field: &str, label: &str) -> Result<(), EventSubscriptionError> {
+    if field.contains('\n') || field.contains('\r') {
+        return Err(EventSubscriptionError(format!(
+            "filter {} contains newline: {:?}",
+            label, field
+        )));
+    }
+    Ok(())
+}
+
+impl EventSubscription {
+    /// Create an empty subscription with the given format.
+    pub fn new(format: EventFormat) -> Self {
+        Self {
+            format,
+            events: Vec::new(),
+            custom_subclasses: Vec::new(),
+            filters: Vec::new(),
+        }
+    }
+
+    /// Create a subscription for all events.
+    pub fn all(format: EventFormat) -> Self {
+        Self {
+            format,
+            events: vec![EslEventType::All],
+            custom_subclasses: Vec::new(),
+            filters: Vec::new(),
+        }
+    }
+
+    /// Add a single event type.
+    pub fn event(mut self, event: EslEventType) -> Self {
+        self.events
+            .push(event);
+        self
+    }
+
+    /// Add multiple event types (e.g. from group constants like `EslEventType::CHANNEL_EVENTS`).
+    pub fn events<T: IntoIterator<Item = impl std::borrow::Borrow<EslEventType>>>(
+        mut self,
+        events: T,
+    ) -> Self {
+        self.events
+            .extend(
+                events
+                    .into_iter()
+                    .map(|e| *e.borrow()),
+            );
+        self
+    }
+
+    /// Add a custom subclass (e.g. `"sofia::register"`).
+    ///
+    /// Returns `Err` if the subclass contains spaces, newlines, or is empty.
+    pub fn custom_subclass(
+        mut self,
+        subclass: impl Into<String>,
+    ) -> Result<Self, EventSubscriptionError> {
+        let s = subclass.into();
+        validate_custom_subclass(&s)?;
+        self.custom_subclasses
+            .push(s);
+        Ok(self)
+    }
+
+    /// Add multiple custom subclasses.
+    ///
+    /// Returns `Err` on the first invalid subclass.
+    pub fn custom_subclasses(
+        mut self,
+        subclasses: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Result<Self, EventSubscriptionError> {
+        for s in subclasses {
+            let s = s.into();
+            validate_custom_subclass(&s)?;
+            self.custom_subclasses
+                .push(s);
+        }
+        Ok(self)
+    }
+
+    /// Add a filter with a typed header.
+    ///
+    /// The header enum is always valid; only the value is validated.
+    pub fn filter(
+        self,
+        header: crate::headers::EventHeader,
+        value: impl Into<String>,
+    ) -> Result<Self, EventSubscriptionError> {
+        let v = value.into();
+        validate_filter_field(&v, "value")?;
+        let mut s = self;
+        s.filters
+            .push((
+                header
+                    .as_str()
+                    .to_string(),
+                v,
+            ));
+        Ok(s)
+    }
+
+    /// Add a filter with raw header and value strings.
+    ///
+    /// Both header and value are validated against newline injection.
+    pub fn filter_raw(
+        self,
+        header: impl Into<String>,
+        value: impl Into<String>,
+    ) -> Result<Self, EventSubscriptionError> {
+        let h = header.into();
+        let v = value.into();
+        validate_filter_field(&h, "header")?;
+        validate_filter_field(&v, "value")?;
+        let mut s = self;
+        s.filters
+            .push((h, v));
+        Ok(s)
+    }
+
+    /// Change the event format.
+    pub fn with_format(mut self, format: EventFormat) -> Self {
+        self.format = format;
+        self
+    }
+
+    /// The event format.
+    pub fn format(&self) -> EventFormat {
+        self.format
+    }
+
+    /// Mutable reference to the event format.
+    pub fn format_mut(&mut self) -> &mut EventFormat {
+        &mut self.format
+    }
+
+    /// The subscribed event types.
+    pub fn event_types(&self) -> &[EslEventType] {
+        &self.events
+    }
+
+    /// Mutable access to the event types list.
+    pub fn event_types_mut(&mut self) -> &mut Vec<EslEventType> {
+        &mut self.events
+    }
+
+    /// The subscribed custom subclasses.
+    pub fn custom_subclass_list(&self) -> &[String] {
+        &self.custom_subclasses
+    }
+
+    /// Mutable access to the custom subclasses list.
+    pub fn custom_subclasses_mut(&mut self) -> &mut Vec<String> {
+        &mut self.custom_subclasses
+    }
+
+    /// The event filters as (header, value) pairs.
+    pub fn filters(&self) -> &[(String, String)] {
+        &self.filters
+    }
+
+    /// Mutable access to the filters list.
+    pub fn filters_mut(&mut self) -> &mut Vec<(String, String)> {
+        &mut self.filters
+    }
+
+    /// Whether the subscription includes all events.
+    pub fn is_all(&self) -> bool {
+        self.events
+            .contains(&EslEventType::All)
+    }
+
+    /// Whether the subscription has no events and no custom subclasses.
+    pub fn is_empty(&self) -> bool {
+        self.events
+            .is_empty()
+            && self
+                .custom_subclasses
+                .is_empty()
+    }
+
+    /// Build the event string for the ESL `event` command.
+    ///
+    /// Returns `None` if no events or custom subclasses are configured.
+    /// Returns `Some("ALL")` if `EslEventType::All` is present.
+    /// Otherwise returns space-separated event names with custom subclasses
+    /// appended after a `CUSTOM` token.
+    pub fn to_event_string(&self) -> Option<String> {
+        if self
+            .events
+            .contains(&EslEventType::All)
+        {
+            return Some("ALL".to_string());
+        }
+
+        let mut parts: Vec<&str> = self
+            .events
+            .iter()
+            .map(|e| e.as_str())
+            .collect();
+
+        if !self
+            .custom_subclasses
+            .is_empty()
+        {
+            if !self
+                .events
+                .contains(&EslEventType::Custom)
+            {
+                parts.push("CUSTOM");
+            }
+            for sc in &self.custom_subclasses {
+                parts.push(sc.as_str());
+            }
+        }
+
+        if parts.is_empty() {
+            None
+        } else {
+            Some(parts.join(" "))
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+mod event_subscription_serde {
+    use super::*;
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Serialize, Deserialize)]
+    struct EventSubscriptionRaw {
+        format: EventFormat,
+        #[serde(default)]
+        events: Vec<EslEventType>,
+        #[serde(default)]
+        custom_subclasses: Vec<String>,
+        #[serde(default)]
+        filters: Vec<(String, String)>,
+    }
+
+    impl TryFrom<EventSubscriptionRaw> for EventSubscription {
+        type Error = EventSubscriptionError;
+
+        fn try_from(raw: EventSubscriptionRaw) -> Result<Self, Self::Error> {
+            for sc in &raw.custom_subclasses {
+                validate_custom_subclass(sc)?;
+            }
+            for (h, v) in &raw.filters {
+                validate_filter_field(h, "header")?;
+                validate_filter_field(v, "value")?;
+            }
+            Ok(EventSubscription {
+                format: raw.format,
+                events: raw.events,
+                custom_subclasses: raw.custom_subclasses,
+                filters: raw.filters,
+            })
+        }
+    }
+
+    impl Serialize for EventSubscription {
+        fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+            let raw = EventSubscriptionRaw {
+                format: self.format,
+                events: self
+                    .events
+                    .clone(),
+                custom_subclasses: self
+                    .custom_subclasses
+                    .clone(),
+                filters: self
+                    .filters
+                    .clone(),
+            };
+            raw.serialize(serializer)
+        }
+    }
+
+    impl<'de> Deserialize<'de> for EventSubscription {
+        fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+            let raw = EventSubscriptionRaw::deserialize(deserializer)?;
+            EventSubscription::try_from(raw).map_err(serde::de::Error::custom)
+        }
+    }
+}
+
 /// Event priority levels matching FreeSWITCH `esl_priority_t`
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -1430,5 +1791,212 @@ mod tests {
         assert!(event
             .call_direction()
             .is_err());
+    }
+
+    // --- EventSubscription tests ---
+
+    #[test]
+    fn new_creates_empty() {
+        let sub = EventSubscription::new(EventFormat::Plain);
+        assert!(sub.is_empty());
+        assert!(!sub.is_all());
+        assert_eq!(sub.format(), EventFormat::Plain);
+        assert!(sub
+            .event_types()
+            .is_empty());
+        assert!(sub
+            .custom_subclass_list()
+            .is_empty());
+        assert!(sub
+            .filters()
+            .is_empty());
+    }
+
+    #[test]
+    fn all_creates_all() {
+        let sub = EventSubscription::all(EventFormat::Json);
+        assert!(sub.is_all());
+        assert!(!sub.is_empty());
+        assert_eq!(sub.to_event_string(), Some("ALL".to_string()));
+    }
+
+    #[test]
+    fn event_string_typed_only() {
+        let sub = EventSubscription::new(EventFormat::Plain)
+            .event(EslEventType::ChannelCreate)
+            .event(EslEventType::ChannelAnswer);
+        assert_eq!(
+            sub.to_event_string(),
+            Some("CHANNEL_CREATE CHANNEL_ANSWER".to_string())
+        );
+    }
+
+    #[test]
+    fn event_string_custom_only() {
+        let sub = EventSubscription::new(EventFormat::Plain)
+            .custom_subclass("sofia::register")
+            .unwrap()
+            .custom_subclass("sofia::unregister")
+            .unwrap();
+        assert_eq!(
+            sub.to_event_string(),
+            Some("CUSTOM sofia::register sofia::unregister".to_string())
+        );
+    }
+
+    #[test]
+    fn event_string_mixed() {
+        let sub = EventSubscription::new(EventFormat::Plain)
+            .event(EslEventType::Heartbeat)
+            .custom_subclass("sofia::register")
+            .unwrap();
+        assert_eq!(
+            sub.to_event_string(),
+            Some("HEARTBEAT CUSTOM sofia::register".to_string())
+        );
+    }
+
+    #[test]
+    fn event_string_custom_not_duplicated() {
+        let sub = EventSubscription::new(EventFormat::Plain)
+            .event(EslEventType::Custom)
+            .custom_subclass("sofia::register")
+            .unwrap();
+        // Should not have "CUSTOM" twice
+        assert_eq!(
+            sub.to_event_string(),
+            Some("CUSTOM sofia::register".to_string())
+        );
+    }
+
+    #[test]
+    fn event_string_empty_is_none() {
+        let sub = EventSubscription::new(EventFormat::Plain);
+        assert_eq!(sub.to_event_string(), None);
+    }
+
+    #[test]
+    fn filters_preserve_order() {
+        let sub = EventSubscription::new(EventFormat::Plain)
+            .filter(EventHeader::CallDirection, "inbound")
+            .unwrap()
+            .filter_raw("X-Custom", "value1")
+            .unwrap()
+            .filter(EventHeader::ChannelState, "CS_EXECUTE")
+            .unwrap();
+        assert_eq!(
+            sub.filters(),
+            &[
+                ("Call-Direction".to_string(), "inbound".to_string()),
+                ("X-Custom".to_string(), "value1".to_string()),
+                ("Channel-State".to_string(), "CS_EXECUTE".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn builder_chain() {
+        let sub = EventSubscription::new(EventFormat::Plain)
+            .events(EslEventType::CHANNEL_EVENTS)
+            .event(EslEventType::Heartbeat)
+            .custom_subclass("sofia::register")
+            .unwrap()
+            .filter(EventHeader::CallDirection, "inbound")
+            .unwrap()
+            .with_format(EventFormat::Json);
+
+        assert_eq!(sub.format(), EventFormat::Json);
+        assert!(!sub.is_empty());
+        assert!(!sub.is_all());
+        assert!(sub
+            .event_types()
+            .contains(&EslEventType::ChannelCreate));
+        assert!(sub
+            .event_types()
+            .contains(&EslEventType::Heartbeat));
+        assert_eq!(sub.custom_subclass_list(), &["sofia::register"]);
+        assert_eq!(
+            sub.filters()
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn serde_round_trip_subscription() {
+        let sub = EventSubscription::new(EventFormat::Plain)
+            .event(EslEventType::ChannelCreate)
+            .event(EslEventType::Heartbeat)
+            .custom_subclass("sofia::register")
+            .unwrap()
+            .filter(EventHeader::CallDirection, "inbound")
+            .unwrap();
+
+        let json = serde_json::to_string(&sub).unwrap();
+        let deserialized: EventSubscription = serde_json::from_str(&json).unwrap();
+        assert_eq!(sub, deserialized);
+    }
+
+    #[test]
+    fn serde_rejects_invalid_subclass() {
+        let json =
+            r#"{"format":"Plain","events":[],"custom_subclasses":["bad subclass"],"filters":[]}"#;
+        let result: Result<EventSubscription, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+        let err = result
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("space"), "error should mention space: {err}");
+    }
+
+    #[test]
+    fn serde_rejects_newline_in_filter() {
+        let json = r#"{"format":"Plain","events":[],"custom_subclasses":[],"filters":[["Header","val\n"]]}"#;
+        let result: Result<EventSubscription, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+        let err = result
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("newline"),
+            "error should mention newline: {err}"
+        );
+    }
+
+    #[test]
+    fn custom_subclass_rejects_space() {
+        let result = EventSubscription::new(EventFormat::Plain).custom_subclass("bad subclass");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn custom_subclass_rejects_newline() {
+        let result = EventSubscription::new(EventFormat::Plain).custom_subclass("bad\nsubclass");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn custom_subclass_rejects_empty() {
+        let result = EventSubscription::new(EventFormat::Plain).custom_subclass("");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn filter_raw_rejects_newline_in_header() {
+        let result = EventSubscription::new(EventFormat::Plain).filter_raw("Bad\nHeader", "value");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn filter_raw_rejects_newline_in_value() {
+        let result = EventSubscription::new(EventFormat::Plain).filter_raw("Header", "bad\nvalue");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn filter_typed_rejects_newline_in_value() {
+        let result = EventSubscription::new(EventFormat::Plain)
+            .filter(EventHeader::CallDirection, "bad\nvalue");
+        assert!(result.is_err());
     }
 }

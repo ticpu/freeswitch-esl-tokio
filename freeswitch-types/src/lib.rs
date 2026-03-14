@@ -47,8 +47,8 @@ pub use commands::{
 };
 #[cfg(feature = "esl")]
 pub use event::{
-    EslEvent, EslEventPriority, EslEventType, EventFormat, ParseEventFormatError,
-    ParseEventTypeError, ParsePriorityError,
+    EslEvent, EslEventPriority, EslEventType, EventFormat, EventSubscription,
+    EventSubscriptionError, ParseEventFormatError, ParseEventTypeError, ParsePriorityError,
 };
 pub use headers::{normalize_header_key, EventHeader, ParseEventHeaderError};
 pub use lookup::HeaderLookup;
