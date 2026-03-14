@@ -82,6 +82,65 @@ sees disconnection through:
 Reconnection is the caller's responsibility. This keeps the library predictable
 — the caller controls backoff strategy, re-subscription, and state recovery.
 
+### Auto-reconnect and the ESL event model
+
+Early on we considered adding auto-reconnect with backoff, the way most
+client libraries do. The more we looked at it, the clearer it became that
+ESL's event-driven nature makes transparent reconnection fundamentally
+unsound — not just for this library, but for any ESL transport layer.
+
+The core issue is that ESL is a stateful, event-driven protocol with no
+replay capability. There are no sequence numbers, no gap detection, no way
+to ask FreeSWITCH "what did I miss while I was gone." Events that fired
+during the disconnect window are gone. A call tracker that missed a
+CHANNEL_DESTROY now has a ghost channel in its map. One that missed a
+CHANNEL_CREATE doesn't know a call exists. The transport layer can reconnect
+the TCP socket and re-subscribe to events, but it cannot reconstruct the
+application state that was lost — only the caller knows that it needs to
+re-dump active channels via `show channels`, re-query registrations, or
+reconcile its internal maps.
+
+Then there are commands in flight. If bytes were written to the socket but
+the reply never came back, did FreeSWITCH execute the command? An originate
+might have succeeded — a call is now ringing with nobody tracking it. A
+uuid_kill might have gone through and the channel is already gone. The
+transport cannot make the right call here. Retry? Skip? That depends on
+whether the command is idempotent and what application-level cleanup is
+needed. Only the caller has that context.
+
+`bgapi` makes it worse. Each bgapi command returns a Job-UUID immediately;
+the actual result arrives later as a BACKGROUND_JOB event on the same
+connection. After reconnection, the new connection has a new event stream.
+Those BACKGROUND_JOB events for commands sent on the old connection will
+never arrive. The transport is stuck choosing between fabricating an error
+response (lying), blocking forever (leaking), or silently dropping the
+pending job (losing data). None of these are acceptable.
+
+We looked at how `cgrates/fsock` (the Go ESL library used by cgrates and
+fsagent) handles this, and it confirms all three failure modes. Pending
+bgapi channels block forever — the old channel map is abandoned when a new
+`FSConn` is created, so callers waiting on `<-out` never receive a value.
+In-flight `Send()` calls get `context.DeadlineExceeded` instead of a
+disconnection error, so the caller cannot distinguish "command timed out
+but connection is fine" from "connection died mid-command." Event handlers
+get no notification of the reconnection at all — they just see a gap in
+events with no way to detect it. On top of that, the reconnect handler
+takes a read lock while performing write operations on the connection
+pointer, creating a data race with concurrent readers.
+
+The alternative we chose — return a connection error, let the caller
+reconnect and rebuild state from a known-good starting point — is more
+work for the caller but produces correct behavior. The `reconnecting_client`
+example shows the pattern. In practice though, production ESL workloads
+(call tracking, CDR generation, active call control) cannot tolerate an
+event gap at all — the only scenario where the ESL connection drops without
+FreeSWITCH also restarting is a bug or a network partition, and in both
+cases the application state is already compromised. This is exactly the
+problem that drove the re-exec mechanism (`teardown_for_reexec`): preserve
+the authenticated TCP socket across binary upgrades so the event stream is
+never interrupted, because reconnecting and rebuilding is not good enough
+when you are the system of record for active calls.
+
 ## Correct wire format
 
 The ESL `text/event-plain` format uses two-part framing: an outer envelope
