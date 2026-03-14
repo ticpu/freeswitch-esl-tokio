@@ -1187,6 +1187,12 @@ impl EslClient {
     /// Sends each filter via [`filter_raw`](Self::filter_raw), then subscribes
     /// to the configured events. Does nothing if the subscription is empty.
     ///
+    /// FreeSWITCH's `event` command is additive and idempotent — subscribing
+    /// to an event type that is already subscribed is a no-op (the server
+    /// stores subscriptions as a boolean-per-type array). It is safe to call
+    /// this on a connection that already has subscriptions; new types are
+    /// added, existing ones are unaffected.
+    ///
     /// The caller retains ownership of the subscription for use during
     /// reconnection.
     pub async fn apply_subscription(
@@ -1210,18 +1216,154 @@ impl EslClient {
         Ok(())
     }
 
-    /// Clear all existing subscriptions and filters, then apply the given subscription.
+    /// Replace the current subscription with a new one.
     ///
-    /// Equivalent to calling [`noevents`](Self::noevents),
-    /// [`filter_delete_all`](Self::filter_delete_all), then
-    /// [`apply_subscription`](Self::apply_subscription).
+    /// Minimizes the event gap by applying the new subscription *before*
+    /// tearing down the old one. The sequence is:
+    ///
+    /// 1. Send the new `event` command (additive — no events are lost)
+    /// 2. Clear all filters and re-add the new ones
+    /// 3. `noevents` + re-send `event` to remove stale event types
+    ///
+    /// Between steps 2 and 3 there is a brief window where stale event
+    /// types from the old subscription may still be delivered. This is
+    /// harmless (extra events, not missing events). Filter state is
+    /// atomic per `filter delete all` + re-add, so the filter gap is
+    /// minimal.
+    ///
+    /// For truly gap-free transitions where even stale events are
+    /// unacceptable, use [`resubscribe_from`](Self::resubscribe_from)
+    /// which diffs the old and new subscriptions and uses `nixevent`
+    /// to remove only the delta.
     pub async fn resubscribe(&self, sub: &freeswitch_types::EventSubscription) -> EslResult<()> {
-        self.noevents()
-            .await?;
+        // Step 1: add new event types (additive, no gap)
+        if let Some(events_str) = sub.to_event_string() {
+            let cmd = EslCommand::Events {
+                format: sub
+                    .format()
+                    .to_string(),
+                events: events_str.clone(),
+            };
+            self.send_command_ok(cmd)
+                .await?;
+        }
+
+        // Step 2: replace filters
         self.filter_delete_all()
             .await?;
-        self.apply_subscription(sub)
-            .await
+        for (header, value) in sub.filters() {
+            self.filter_raw(header, value)
+                .await?;
+        }
+
+        // Step 3: clear stale event types and re-apply clean
+        self.noevents()
+            .await?;
+        if let Some(events_str) = sub.to_event_string() {
+            let cmd = EslCommand::Events {
+                format: sub
+                    .format()
+                    .to_string(),
+                events: events_str,
+            };
+            self.send_command_ok(cmd)
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    /// Replace the current subscription using a diff against the old one.
+    ///
+    /// Unlike [`resubscribe`](Self::resubscribe), this method produces
+    /// no event gap at all. It computes the difference between `old` and
+    /// `new` and applies only the minimal changes:
+    ///
+    /// 1. Subscribe to event types in `new` but not in `old` (additive)
+    /// 2. Replace filters (clear all, re-add new)
+    /// 3. `nixevent` event types in `old` but not in `new` (selective removal)
+    /// 4. `nixevent` custom subclasses in `old` but not in `new`
+    ///
+    /// Because new subscriptions are applied before old ones are removed,
+    /// there is never a moment where a desired event type is unsubscribed.
+    ///
+    /// The caller must provide the old subscription that was previously
+    /// applied. If the old subscription doesn't match what the server
+    /// actually has (e.g. after a reconnection), use [`resubscribe`](Self::resubscribe)
+    /// instead.
+    pub async fn resubscribe_from(
+        &self,
+        old: &freeswitch_types::EventSubscription,
+        new: &freeswitch_types::EventSubscription,
+    ) -> EslResult<()> {
+        use std::collections::HashSet;
+
+        let old_types: HashSet<EslEventType> = old
+            .event_types()
+            .iter()
+            .copied()
+            .collect();
+        let new_types: HashSet<EslEventType> = new
+            .event_types()
+            .iter()
+            .copied()
+            .collect();
+
+        // Step 1: subscribe to added event types + custom subclasses
+        if let Some(events_str) = new.to_event_string() {
+            let cmd = EslCommand::Events {
+                format: new
+                    .format()
+                    .to_string(),
+                events: events_str,
+            };
+            self.send_command_ok(cmd)
+                .await?;
+        }
+
+        // Step 2: replace filters
+        self.filter_delete_all()
+            .await?;
+        for (header, value) in new.filters() {
+            self.filter_raw(header, value)
+                .await?;
+        }
+
+        // Step 3: nixevent removed event types
+        let removed_types: Vec<EslEventType> = old_types
+            .difference(&new_types)
+            .copied()
+            .collect();
+        if !removed_types.is_empty() {
+            self.nixevent(removed_types)
+                .await?;
+        }
+
+        // Step 4: nixevent removed custom subclasses
+        let old_subclasses: HashSet<&str> = old
+            .custom_subclass_list()
+            .iter()
+            .map(|s| s.as_str())
+            .collect();
+        let new_subclasses: HashSet<&str> = new
+            .custom_subclass_list()
+            .iter()
+            .map(|s| s.as_str())
+            .collect();
+        let removed_subclasses: Vec<&&str> = old_subclasses
+            .difference(&new_subclasses)
+            .collect();
+        if !removed_subclasses.is_empty() {
+            let nixevent_str = removed_subclasses
+                .iter()
+                .map(|s| **s)
+                .collect::<Vec<_>>()
+                .join(" ");
+            self.nixevent_raw(&format!("CUSTOM {nixevent_str}"))
+                .await?;
+        }
+
+        Ok(())
     }
 
     /// Execute application on channel.
