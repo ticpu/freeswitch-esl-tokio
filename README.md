@@ -154,24 +154,29 @@ let (client, mut events) =
 ### Event loop with liveness detection
 
 ```rust
-use freeswitch_esl_tokio::{EslClient, EslEventType, EventFormat};
+use freeswitch_esl_tokio::{
+    EslClient, EslEventType, EventFormat, EventHeader, EventSubscription,
+};
 use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Build subscription once, reuse on every (re)connection
+    let subscription = EventSubscription::new(EventFormat::Plain)
+        .event(EslEventType::Heartbeat)
+        .event(EslEventType::ChannelAnswer)
+        .event(EslEventType::ChannelHangup)
+        .filter(EventHeader::CallDirection, "inbound")?;
+
     let (client, mut events) = EslClient::connect("localhost", 8021, "ClueCon").await?;
 
     // Without liveness detection, a dead TCP connection hangs silently.
     // With it, the library fires Disconnected(HeartbeatExpired) after the timeout.
     client.set_liveness_timeout(Duration::from_secs(60));
 
-    // Subscribe to HEARTBEAT so FreeSWITCH sends periodic traffic even when
-    // no calls are active, this is what the liveness timer watches for
-    client.subscribe_events(EventFormat::Plain, &[
-        EslEventType::Heartbeat,
-        EslEventType::ChannelAnswer,
-        EslEventType::ChannelHangup,
-    ]).await?;
+    // apply_subscription sends filters and event commands in one call.
+    // HEARTBEAT gives the liveness timer periodic traffic even with no calls.
+    client.apply_subscription(&subscription).await?;
 
     // recv() returns None when the reader task exits (disconnect, EOF, or
     // liveness timeout). Some(Err(_)) is a parse error on a single event,
@@ -198,11 +203,12 @@ immediately with a Job-UUID; the result arrives as a `BACKGROUND_JOB` event.
 maintain a pending-jobs HashMap yourself:
 
 ```rust
-use freeswitch_esl_tokio::BgJobTracker;
+use freeswitch_esl_tokio::{BgJobTracker, EventSubscription};
 
-client.subscribe_events(EventFormat::Plain, &[
-    EslEventType::BackgroundJob,
-]).await?;
+client.apply_subscription(
+    &EventSubscription::new(EventFormat::Plain)
+        .event(EslEventType::BackgroundJob),
+).await?;
 
 let mut bg = BgJobTracker::new();
 bg.send(&client, "sofia xmlstatus profile internal").await?;
@@ -403,6 +409,22 @@ timeout_secs: 30
 ```rust
 let originate: Originate = serde_yml::from_str(yaml)?;
 client.bgapi(&originate.to_string()).await?;
+```
+
+`EventSubscription` also serializes, so subscriptions can live in config files:
+
+```yaml
+format: Plain
+events:
+- CHANNEL_CREATE
+- CHANNEL_ANSWER
+- CHANNEL_HANGUP_COMPLETE
+- HEARTBEAT
+custom_subclasses:
+- "sofia::register"
+# Each filter is a (header, value) tuple
+filters:
+- [Call-Direction, inbound]
 ```
 
 `Variables` deserializes ergonomically -- a flat map defaults to `Default` scope:

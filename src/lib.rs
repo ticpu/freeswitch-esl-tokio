@@ -98,22 +98,33 @@
 //!
 //! ## Event Subscription
 //!
+//! [`EventSubscription`] captures format, event types, custom subclasses, and
+//! filters as a single reusable unit. Build one from code or deserialize from
+//! YAML/JSON, then apply it to any connection:
+//!
 //! ```rust,no_run
 //! use freeswitch_esl_tokio::{
-//!     EslClient, EslEventType, EventFormat, HeaderLookup, DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT,
+//!     EslClient, EslEventType, EventFormat, EventHeader, EventSubscription,
+//!     HeaderLookup, DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT,
 //! };
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     let (client, mut events) = EslClient::connect("localhost", DEFAULT_ESL_PORT, DEFAULT_ESL_PASSWORD).await?;
+//!     // Build once, reuse on every (re)connection
+//!     let subscription = EventSubscription::new(EventFormat::Plain)
+//!         .event(EslEventType::ChannelAnswer)
+//!         .event(EslEventType::ChannelHangup)
+//!         .event(EslEventType::Heartbeat)
+//!         .custom_subclass("sofia::register")?
+//!         .filter(EventHeader::CallDirection, "inbound")?;
 //!
-//!     client.subscribe_events(EventFormat::Plain, &[
-//!         EslEventType::ChannelAnswer,
-//!         EslEventType::ChannelHangup
-//!     ]).await?;
+//!     let (client, mut events) = EslClient::connect(
+//!         "localhost", DEFAULT_ESL_PORT, DEFAULT_ESL_PASSWORD,
+//!     ).await?;
+//!
+//!     client.apply_subscription(&subscription).await?;
 //!
 //!     while let Some(Ok(event)) = events.recv().await {
-//!         // Typed accessors parse headers into enums automatically
 //!         if let Ok(Some(state)) = event.channel_state() {
 //!             println!("{:?}: {}", event.event_type(), state);
 //!         }

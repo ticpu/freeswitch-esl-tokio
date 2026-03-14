@@ -17,8 +17,8 @@ use std::time::Duration;
 
 use freeswitch_esl_tokio::prelude::*;
 use freeswitch_esl_tokio::{
-    EslClient, EslError, EslEvent, EslEventType, EventFormat, DEFAULT_ESL_PASSWORD,
-    DEFAULT_ESL_PORT,
+    EslClient, EslError, EslEvent, EslEventType, EventFormat, EventSubscription,
+    DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT,
 };
 use tracing::{error, info, warn};
 
@@ -44,12 +44,19 @@ async fn main() {
     let password =
         std::env::var("ESL_PASSWORD").unwrap_or_else(|_| DEFAULT_ESL_PASSWORD.to_string());
 
+    // Build the subscription once, reuse on every reconnection.
+    // EventSubscription is pure data -- no connection state, safe to Clone.
+    let subscription = EventSubscription::new(EventFormat::Plain)
+        .event(EslEventType::ChannelAnswer)
+        .event(EslEventType::ChannelHangupComplete)
+        .event(EslEventType::Heartbeat);
+
     let mut backoff = BACKOFF_INITIAL;
 
     loop {
         info!("connecting to {}:{}", host, port);
 
-        match run_session(&host, port, &password).await {
+        match run_session(&host, port, &password, &subscription).await {
             Ok(()) => {
                 info!("clean disconnect, exiting");
                 return;
@@ -76,22 +83,23 @@ async fn main() {
 }
 
 /// Single ESL session: connect, subscribe, process events until disconnect.
-async fn run_session(host: &str, port: u16, password: &str) -> Result<(), EslError> {
+async fn run_session(
+    host: &str,
+    port: u16,
+    password: &str,
+    subscription: &EventSubscription,
+) -> Result<(), EslError> {
     let (client, mut events) = EslClient::connect(host, port, password).await?;
     info!("connected");
 
     // Reset backoff on successful connection (caller does this implicitly
     // by re-entering the loop, but subscribe failure should not reset it).
 
+    // apply_subscription sends filters and event commands in one call.
+    // The subscription object is reused on every reconnection -- no need
+    // to rebuild event lists each time.
     client
-        .subscribe_events(
-            EventFormat::Plain,
-            &[
-                EslEventType::ChannelAnswer,
-                EslEventType::ChannelHangupComplete,
-                EslEventType::Heartbeat,
-            ],
-        )
+        .apply_subscription(subscription)
         .await?;
 
     while let Some(result) = events

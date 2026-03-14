@@ -16,7 +16,7 @@
 //!   cargo run --example event_filter -- -u admin@default -p secret -e ALL
 
 use freeswitch_esl_tokio::{
-    EslClient, EslError, EslEventType, EventFormat, EventHeader, HeaderLookup,
+    EslClient, EslError, EslEventType, EventFormat, EventHeader, EventSubscription, HeaderLookup,
     DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT,
 };
 
@@ -337,17 +337,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         EventFormat::Plain
     };
 
-    eprintln!("Subscribing to events: {:?}", args.events);
-    client
-        .subscribe_events(format, &event_types)
-        .await?;
-
+    // Build an EventSubscription combining events and filters into one unit
+    let mut sub = EventSubscription::new(format).events(event_types);
     if let (Some(header), Some(value)) = (&args.filter_header, &args.filter_value) {
-        eprintln!("Applying filter: {} = {}", header, value);
-        client
-            .filter_raw(header, value)
-            .await?;
+        sub = sub.filter_raw(header, value)?;
+        eprintln!(
+            "Subscribing to events: {:?} with filter {}={}",
+            args.events, header, value
+        );
+    } else {
+        eprintln!("Subscribing to events: {:?}", args.events);
     }
+    client
+        .apply_subscription(&sub)
+        .await?;
 
     eprintln!("Listening for events... (Ctrl+C to exit)\n");
 
