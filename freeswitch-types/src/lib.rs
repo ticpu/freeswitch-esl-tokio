@@ -7,6 +7,23 @@
 //! For async ESL transport (connecting to FreeSWITCH, sending commands, receiving events),
 //! see the [`freeswitch-esl-tokio`](https://docs.rs/freeswitch-esl-tokio) crate which
 //! re-exports everything from this crate.
+//!
+//! # Upcoming changes in 0.20
+//!
+//! The general-purpose SIP header parsing functionality has been extracted to the
+//! standalone [`sip-header`](https://crates.io/crates/sip-header) crate. In version 0.20,
+//! module paths will change and some types will be re-exported rather than defined locally.
+//!
+//! To prepare for 0.20, use the crate-root re-exports rather than module paths:
+//!
+//! - `freeswitch_types::SipCallInfo` instead of `freeswitch_types::variables::SipCallInfo`
+//! - `freeswitch_types::SipHeaderAddr` instead of `freeswitch_types::sip_header_addr::SipHeaderAddr`
+//! - `freeswitch_types::HistoryInfo` instead of `freeswitch_types::variables::HistoryInfo`
+//! - `freeswitch_types::SipGeolocation` instead of `freeswitch_types::variables::SipGeolocation`
+//!
+//! Code importing these types from crate-root re-exports will continue to work across the
+//! 0.19 → 0.20 transition. Code importing from module paths may break when those modules
+//! are removed or reorganized.
 
 #[macro_use]
 mod macros;

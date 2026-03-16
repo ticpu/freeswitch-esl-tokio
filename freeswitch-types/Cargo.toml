@@ -1,6 +1,6 @@
 [package]
 name = "freeswitch-types"
-version = "0.19.0"
+version = "0.19.1"
 edition = "2021"
 authors = ["Jérôme Poulin <jeromepoulin@gmail.com>"]
 description = "FreeSWITCH protocol types and general-purpose SIP header parser (RFC 3261 name-addr)"

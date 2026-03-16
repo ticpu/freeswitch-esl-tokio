@@ -312,21 +312,21 @@ impl IntoIterator for HistoryInfo {
 mod tests {
     use super::*;
 
-    // -- Real-world examples from FreeSWITCH NG9-1-1 logs --
+    // -- NG9-1-1 routing chain examples --
 
     const EXAMPLE_1: &str = "\
-<sip:cauca1@esrp.qc.core.ng.911bell.ca?Reason=RouteAction%3Bcause%3D200%3Btext%3D%22Normal+Next+Hop%22>;index=1,\
-<sip:sos@cauca1.qc.psap.ng.911bell.ca>;index=2";
+<sip:user1@esrp.qc.core.ng.example.com?Reason=RouteAction%3Bcause%3D200%3Btext%3D%22Normal+Next+Hop%22>;index=1,\
+<sip:sos@user1.qc.psap.ng.example.com>;index=2";
 
     const EXAMPLE_2: &str = "\
-<sip:lsrg.core.ng.911bell.ca?Reason=SIP%3Bcause%3D200%3Btext%3D%22Legacy+routing%22>;index=1,\
-<sip:cauca1@esrp.mb.core.ng.911bell.ca;lr;transport=udp?Reason=RouteAction%3Bcause%3D200%3Btext%3D%22Normal+Next+Hop%22>;index=1.1,\
-<sip:sos@cauca1.qc.psap.ng.911bell.ca>;index=1.2";
+<sip:lsrg.core.ng.example.com?Reason=SIP%3Bcause%3D200%3Btext%3D%22Legacy+routing%22>;index=1,\
+<sip:user1@esrp.mb.core.ng.example.com;lr;transport=udp?Reason=RouteAction%3Bcause%3D200%3Btext%3D%22Normal+Next+Hop%22>;index=1.1,\
+<sip:sos@user1.qc.psap.ng.example.com>;index=1.2";
 
-    // Bracket-wrapped format from FreeSWITCH logs
+    // Bracket-wrapped format from logs
     const EXAMPLE_BRACKETED: &str = "\
-[<sip:lsrg.core.ng.911bell.ca?Reason=SIP%3Bcause%3D200%3Btext%3D%22Legacy+routing%22>;index=1,\
-<sip:sos@cauca1.qc.psap.ng.911bell.ca>;index=1.2]";
+[<sip:lsrg.core.ng.example.com?Reason=SIP%3Bcause%3D200%3Btext%3D%22Legacy+routing%22>;index=1,\
+<sip:sos@user1.qc.psap.ng.example.com>;index=1.2]";
 
     // -- Entry count tests --
 
@@ -402,11 +402,11 @@ mod tests {
         let sip = hi.entries()[0]
             .sip_uri()
             .unwrap();
-        assert_eq!(sip.user(), Some("cauca1"));
+        assert_eq!(sip.user(), Some("user1"));
         assert_eq!(
             sip.host()
                 .to_string(),
-            "esrp.qc.core.ng.911bell.ca"
+            "esrp.qc.core.ng.example.com"
         );
     }
 
@@ -420,7 +420,7 @@ mod tests {
         assert_eq!(
             sip.host()
                 .to_string(),
-            "lsrg.core.ng.911bell.ca"
+            "lsrg.core.ng.example.com"
         );
     }
 
@@ -430,11 +430,11 @@ mod tests {
         let sip = hi.entries()[1]
             .sip_uri()
             .unwrap();
-        assert_eq!(sip.user(), Some("cauca1"));
+        assert_eq!(sip.user(), Some("user1"));
         assert_eq!(
             sip.host()
                 .to_string(),
-            "esrp.mb.core.ng.911bell.ca"
+            "esrp.mb.core.ng.example.com"
         );
         assert!(sip
             .param("lr")
