@@ -300,14 +300,39 @@ impl FromStr for Variables {
 
         let mut inner = IndexMap::new();
         if !inner_str.is_empty() {
-            // Split on commas not preceded by backslash
-            for part in split_unescaped_commas(inner_str) {
-                let (key, value) = part
-                    .split_once('=')
+            if let Some(rest) = inner_str.strip_prefix("^^") {
+                let sep = rest
+                    .chars()
+                    .next()
                     .ok_or_else(|| {
-                        OriginateError::ParseError(format!("missing = in variable: {}", part))
+                        OriginateError::ParseError("^^ without separator character".into())
                     })?;
-                inner.insert(key.to_string(), unescape_value(value));
+                let (_, close) = vars_type.delimiters();
+                if sep == close || sep == '=' {
+                    return Err(OriginateError::ParseError(format!(
+                        "invalid ^^ separator: '{sep}'"
+                    )));
+                }
+                let var_str = &rest[sep.len_utf8()..];
+                if !var_str.is_empty() {
+                    for part in var_str.split(sep) {
+                        let (key, value) = part
+                            .split_once('=')
+                            .ok_or_else(|| {
+                                OriginateError::ParseError(format!("missing = in variable: {part}"))
+                            })?;
+                        inner.insert(key.to_string(), value.to_string());
+                    }
+                }
+            } else {
+                for part in split_unescaped_commas(inner_str) {
+                    let (key, value) = part
+                        .split_once('=')
+                        .ok_or_else(|| {
+                            OriginateError::ParseError(format!("missing = in variable: {part}"))
+                        })?;
+                    inner.insert(key.to_string(), unescape_value(value));
+                }
             }
         }
 
@@ -1093,12 +1118,12 @@ mod tests {
 
     #[test]
     fn variables_caret_caret_values_with_commas() {
-        let vars: Variables = "[^^:sip_h_X-Call-Info=<urn:foo>;purpose=bar|:<urn:baz>:other=val]"
+        let vars: Variables = "[^^|sip_h_X-Call-Info=<urn:foo>;purpose=bar,<urn:baz>|other=val]"
             .parse()
             .unwrap();
         assert_eq!(
             vars.get("sip_h_X-Call-Info"),
-            Some("<urn:foo>;purpose=bar|:<urn:baz>")
+            Some("<urn:foo>;purpose=bar,<urn:baz>")
         );
         assert_eq!(vars.get("other"), Some("val"));
     }
