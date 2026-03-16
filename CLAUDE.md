@@ -84,7 +84,8 @@ Follow existing patterns in the codebase for `impl Into<String>`, `Duration`,
 
 The FreeSWITCH C source tree is at `$FREESWITCH_SOURCE`. If the env var
 is not set, ask the user for the path. Use it to verify wire protocol
-behavior, event header handling, and SIP/ESL internals.
+behavior, event header handling, and SIP/ESL internals. If tasking an
+agent resolve the variable and give the value to the agent.
 
 ## Build & Test Workflow
 
@@ -255,3 +256,8 @@ until proven otherwise. Never work around a test failure by removing the
 triggering input (e.g. dropping a timeout value, switching to a simpler
 endpoint). If the library produces a command that FreeSWITCH rejects, the
 serialization is wrong — fix the serializer, not the test.
+
+## Test Data
+
+Tests and examples must use sanitized domains (`example.com`, `pbx.example.com`,
+`10.0.0.1`, `192.0.2.x`) — never real production or internal domains.

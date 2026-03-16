@@ -1045,6 +1045,94 @@ mod tests {
         assert_eq!(split_unescaped_commas(r"a\\\,b"), vec![r"a\\\,b"]);
     }
 
+    #[test]
+    fn variables_caret_caret_separator() {
+        let vars: Variables =
+            "[^^:sip_invite_domain=pbx.example.com:presence_id=1211@pbx.example.com]"
+                .parse()
+                .unwrap();
+        assert_eq!(vars.scope(), VariablesType::Channel);
+        assert_eq!(vars.get("sip_invite_domain"), Some("pbx.example.com"));
+        assert_eq!(vars.get("presence_id"), Some("1211@pbx.example.com"));
+    }
+
+    #[test]
+    fn variables_caret_caret_display_uses_canonical_comma() {
+        let vars: Variables = "[^^:a=1:b=2]"
+            .parse()
+            .unwrap();
+        assert_eq!(vars.to_string(), "[a=1,b=2]");
+    }
+
+    #[test]
+    fn variables_caret_caret_default_scope() {
+        let vars: Variables = "{^^|x=1|y=2}"
+            .parse()
+            .unwrap();
+        assert_eq!(vars.scope(), VariablesType::Default);
+        assert_eq!(vars.get("x"), Some("1"));
+        assert_eq!(vars.get("y"), Some("2"));
+    }
+
+    #[test]
+    fn variables_caret_caret_enterprise_scope() {
+        let vars: Variables = "<^^;a=1;b=2>"
+            .parse()
+            .unwrap();
+        assert_eq!(vars.scope(), VariablesType::Enterprise);
+        assert_eq!(vars.get("a"), Some("1"));
+    }
+
+    #[test]
+    fn variables_caret_caret_no_unescape() {
+        let vars: Variables = r"[^^:key=val\,ue:other=x]"
+            .parse()
+            .unwrap();
+        assert_eq!(vars.get("key"), Some(r"val\,ue"));
+    }
+
+    #[test]
+    fn variables_caret_caret_values_with_commas() {
+        let vars: Variables = "[^^:sip_h_X-Call-Info=<urn:foo>;purpose=bar|:<urn:baz>:other=val]"
+            .parse()
+            .unwrap();
+        assert_eq!(
+            vars.get("sip_h_X-Call-Info"),
+            Some("<urn:foo>;purpose=bar|:<urn:baz>")
+        );
+        assert_eq!(vars.get("other"), Some("val"));
+    }
+
+    #[test]
+    fn variables_caret_caret_empty_vars() {
+        let vars: Variables = "[^^:]"
+            .parse()
+            .unwrap();
+        assert!(vars.is_empty());
+        assert_eq!(vars.scope(), VariablesType::Channel);
+    }
+
+    #[test]
+    fn variables_caret_caret_missing_separator() {
+        assert!("[^^]"
+            .parse::<Variables>()
+            .is_err());
+    }
+
+    #[test]
+    fn variables_caret_caret_closing_bracket_as_sep() {
+        assert!("[^^]]"
+            .parse::<Variables>()
+            .is_err());
+    }
+
+    #[test]
+    fn variables_caret_caret_equals_as_sep() {
+        assert!("[^^=a=1]"
+            .parse::<Variables>()
+            .is_err());
+    }
+
     // --- Endpoint ---
 
     #[test]
