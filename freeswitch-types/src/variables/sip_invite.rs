@@ -20,7 +20,7 @@ impl std::fmt::Display for ParseSipInviteHeaderError {
 
 impl std::error::Error for ParseSipInviteHeaderError {}
 
-define_header_enum! {
+sip_header::define_header_enum! {
     error_type: ParseSipInviteHeaderError,
     /// Raw SIP INVITE headers preserved verbatim as channel variables.
     ///
@@ -203,10 +203,10 @@ impl SipInviteHeader {
 
     /// Extract this header's value from a raw SIP message.
     ///
-    /// Delegates to [`extract_header`](crate::sip_message::extract_header)
+    /// Delegates to [`extract_header`](sip_header::extract_header)
     /// using the canonical name from [`header_name()`](Self::header_name).
     pub fn extract_from(&self, message: &str) -> Option<String> {
-        crate::sip_message::extract_header(message, self.header_name())
+        sip_header::extract_header(message, self.header_name())
     }
 }
 

@@ -12,7 +12,7 @@ impl std::fmt::Display for ParseChannelVariableError {
 
 impl std::error::Error for ParseChannelVariableError {}
 
-define_header_enum! {
+sip_header::define_header_enum! {
     error_type: ParseChannelVariableError,
     /// Core FreeSWITCH channel variable names (the part after the `variable_` prefix).
     ///

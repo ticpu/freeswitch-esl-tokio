@@ -12,7 +12,7 @@ impl std::fmt::Display for ParseEventHeaderError {
 
 impl std::error::Error for ParseEventHeaderError {}
 
-define_header_enum! {
+sip_header::define_header_enum! {
     error_type: ParseEventHeaderError,
     /// Top-level header names that appear in FreeSWITCH ESL events.
     ///

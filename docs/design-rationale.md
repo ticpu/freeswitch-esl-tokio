@@ -551,3 +551,119 @@ return `Option<&str>`. The result is always consumed in the same event loop
 iteration. The tracker lives in `freeswitch-esl-tokio` rather than
 `freeswitch-types` because its `bgapi()` convenience method calls
 `EslClient::bgapi()`.
+
+## Extracting sip-header: why RFC types don't belong in freeswitch-types
+
+About 42% of `freeswitch-types` by line count (~4,300 lines) is pure RFC
+SIP standard code with zero FreeSWITCH coupling: the `SipHeaderAddr`
+name-addr parser (RFC 3261), `SipCallInfo` (RFC 3261 §20.9), `HistoryInfo`
+(RFC 7044), `SipGeolocation` (RFC 6442), the `SipHeaderLookup` trait, SIP
+message header extraction, and the full RFC 4575 conference-info XML
+parser. These modules were written under a strict "no FreeSWITCH references
+in sip_* modules" policy and have clean module boundaries — but they live
+in a crate named `freeswitch-types`.
+
+The problem surfaced through `eido`, the NG9-1-1 (NENA-STA-024.1a) library.
+`eido` depends on `freeswitch-types` solely for `SipCallInfo`,
+`SipCallInfoEntry`, `SipGeolocation`, `SipGeolocationRef`, `SipHeaderAddr`,
+and `sip_uri` — all RFC-standard SIP types. It uses zero FreeSWITCH-specific
+types: no `EslEventType`, no `ChannelState`, no `Originate`, no
+`HeaderLookup`. Anyone building NG9-1-1 tooling against a non-FreeSWITCH
+BCF — or just building a SIP Call-Info parser for a testing harness — has to
+pull in ESL event types, channel state machines, and originate command
+builders they will never use, from a crate whose name signals "this is for
+FreeSWITCH users."
+
+The solution is extracting the RFC-pure modules into a standalone
+`sip-header` crate (MIT OR Apache-2.0, matching `sip-uri`). This creates a
+layered ecosystem: `sip-uri` handles URI parsing (RFC 3261 addr-spec),
+`sip-header` handles header-level parsing (name-addr with header params,
+Call-Info, History-Info, Geolocation, conference-info), and
+`freeswitch-types` re-exports everything while adding ESL protocol types,
+channel state, and command builders on top.
+
+### The ARRAY encoding problem
+
+The extraction is not a simple file move because of `EslArray`. FreeSWITCH
+encodes multi-value SIP headers using a proprietary pipe-delimited format:
+`ARRAY::value1|:value2|:value3`. Both `SipCallInfo::parse()` and
+`HistoryInfo::parse()` currently import `EslArray` to detect and split this
+format alongside standard RFC comma-separated values. `HistoryInfo::parse()`
+also strips `[...]` bracket wrapping from FreeSWITCH log output.
+
+These are FreeSWITCH transport encoding details leaking into RFC-pure
+parsers. The question was whether to inline the trivial ARRAY detection
+(3 lines of prefix check) to keep `parse()` handling both formats
+transparently, or to make `parse()` strictly RFC-only.
+
+The pragmatic argument for inlining: it's 3 lines, no dependency, and the
+`SipHeaderLookup` trait's default methods call `parse()` — if `parse()` is
+RFC-only, then `HashMap` users with ESL data get parse failures on ARRAY
+values, and Rust's orphan rules prevent `freeswitch-types` from overriding
+the `HashMap` impl that `sip-header` provides.
+
+The purity argument won. Making `parse()` RFC-only forces the design to be
+honest about the abstraction boundary: a `HashMap<String, String>` holding
+ESL data is not the same thing as a `HashMap` holding standard SIP headers.
+The difference is real — ESL values can be ARRAY-encoded, bracket-wrapped,
+and carry `variable_` prefixed keys. Papering over this with "parse both
+formats" hides a transport distinction that callers need to reason about.
+
+### EslHeaders: making the transport boundary visible
+
+The clean solution is a newtype. `EslHeaders` wraps a `HashMap` and
+overrides the `SipHeaderLookup` default methods with ARRAY-aware parsing
+and bracket stripping. The type makes visible what was previously hidden:
+
+| Type | `call_info()` handles | `variable_str()` | ARRAY decoding |
+|------|----------------------|-------------------|----------------|
+| `HashMap<String, String>` | RFC comma-separated | no | no |
+| `EslHeaders` | RFC + ARRAY + brackets | yes (`variable_` prefix) | yes |
+
+This is not an extra abstraction — it is the correct abstraction. If
+`sip-header` had existed from day one, `freeswitch-types` would have
+naturally created `EslHeaders` to bridge ESL's encoding quirks to the
+standard SIP parsing API. The extraction retroactively creates the layering
+that should have been there all along.
+
+`sip-header` provides `SipCallInfo::from_entries()` and
+`HistoryInfo::from_entries()` that accept `impl IntoIterator<Item = &str>`,
+so `EslHeaders` can split via `EslArray` and pass pre-split entries without
+`sip-header` knowing anything about the ARRAY format.
+
+### HeaderLookup as a supertrait
+
+Currently `freeswitch-types` bridges the two traits with a blanket impl:
+
+```rust
+impl<T: HeaderLookup> SipHeaderLookup for T {
+    fn sip_header_str(&self, name: &str) -> Option<&str> {
+        self.header_str(name)
+    }
+}
+```
+
+After extraction, `SipHeaderLookup` lives in `sip-header` and `HashMap`
+gets its impl there. A blanket `impl<T: HeaderLookup> SipHeaderLookup for T`
+in `freeswitch-types` would conflict with `sip-header`'s `HashMap` impl
+(Rust coherence). The fix: `HeaderLookup: SipHeaderLookup` as a supertrait.
+Any `HeaderLookup` implementor must also provide `SipHeaderLookup` — for
+`HashMap` this comes from `sip-header`, for `EslHeaders` it comes from
+`freeswitch-types` with ARRAY overrides, and for custom ESL event types it
+is implemented manually.
+
+### What moves, what stays
+
+**Moves to sip-header:** `SipHeaderAddr`, `SipHeader` enum,
+`SipHeaderLookup` trait, `SipCallInfo`, `HistoryInfo`, `SipGeolocation`,
+`extract_header()`, the `define_header_enum!` macro,
+`split_comma_entries()`, and `conference_info/*` (feature-gated on `xml`).
+
+**Stays in freeswitch-types:** `EslArray`, `EslHeaders` (new),
+`SipInviteHeader` (FS `sip_i_*` variable names), `MultipartBody` (100%
+ARRAY format), `HeaderLookup` trait, `EventHeader`, `ChannelVariable`,
+`SofiaVariable`, all channel state types, and all command builders.
+
+`freeswitch-types` re-exports everything from `sip-header` for backward
+compatibility. Existing users see no API change — all types remain
+importable from `freeswitch_types::`.

@@ -7,24 +7,26 @@
 //! For async ESL transport (connecting to FreeSWITCH, sending commands, receiving events),
 //! see the [`freeswitch-esl-tokio`](https://docs.rs/freeswitch-esl-tokio) crate which
 //! re-exports everything from this crate.
+//!
+//! # SIP header types
+//!
+//! General-purpose SIP header parsing is provided by the
+//! [`sip-header`](https://docs.rs/sip-header) crate, re-exported here for convenience.
+//! Types like [`SipHeaderAddr`], [`SipCallInfo`], [`HistoryInfo`], and [`SipGeolocation`]
+//! are available from the crate root.
 
-#[macro_use]
-mod macros;
-
-pub use sip_uri;
+pub use sip_header;
+pub use sip_header::define_header_enum;
+pub use sip_header::sip_uri;
 
 pub mod channel;
 #[cfg(feature = "esl")]
 pub mod commands;
-pub mod conference_info;
 #[cfg(feature = "esl")]
 pub mod event;
 pub mod headers;
 pub mod lookup;
 pub mod prelude;
-pub mod sip_header;
-pub mod sip_header_addr;
-pub mod sip_message;
 pub mod variables;
 
 /// Default FreeSWITCH ESL port for inbound connections.
@@ -52,11 +54,12 @@ pub use event::{
 };
 pub use headers::{normalize_header_key, EventHeader, ParseEventHeaderError};
 pub use lookup::HeaderLookup;
-pub use sip_header::{ParseSipHeaderError, SipHeader, SipHeaderLookup};
-pub use sip_header_addr::{ParseSipHeaderAddrError, SipHeaderAddr};
-pub use sip_message::extract_header;
+pub use sip_header::{
+    extract_header, HistoryInfo, HistoryInfoEntry, HistoryInfoError, HistoryInfoReason,
+    ParseSipHeaderAddrError, ParseSipHeaderError, SipCallInfo, SipCallInfoEntry, SipCallInfoError,
+    SipGeolocation, SipGeolocationRef, SipHeader, SipHeaderAddr, SipHeaderLookup,
+};
 pub use variables::{
-    ChannelVariable, EslArray, HistoryInfo, HistoryInfoEntry, HistoryInfoError, HistoryInfoReason,
-    MultipartBody, MultipartItem, ParseChannelVariableError, SipCallInfo, SipCallInfoEntry,
-    SipCallInfoError, SipGeolocation, SipGeolocationRef, VariableName,
+    ChannelVariable, EslArray, MultipartBody, MultipartItem, ParseChannelVariableError,
+    VariableName,
 };
