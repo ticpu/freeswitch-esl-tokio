@@ -35,9 +35,10 @@ impl fmt::Debug for Secret {
 ///   raw data with no prefix — returned as-is.
 /// - **Errors** (`-ERR …`, `-USAGE: …`) produce [`EslError::CommandFailed`].
 ///
-/// All successful values are trimmed of leading/trailing whitespace.
-/// Returns [`EslError::ProtocolError`] if the body is empty or
-/// whitespace-only.
+/// A trailing `\n` (the standard FreeSWITCH API output terminator) is
+/// stripped; all other content is preserved verbatim.
+/// Returns [`EslError::ProtocolError`] if the body is empty after
+/// stripping.
 ///
 /// This is the same parser used by [`EslResponse::api_result`]. Use it
 /// directly on [`EslEvent::body`](freeswitch_types::EslEvent::body) for
@@ -55,21 +56,26 @@ impl fmt::Debug for Secret {
 /// # }
 /// ```
 pub fn parse_api_body(body: &str) -> EslResult<&str> {
-    let trimmed = body.trim();
-    if trimmed.is_empty() {
+    // Strip the trailing \n that FreeSWITCH appends to API output.
+    let body = body
+        .strip_suffix('\n')
+        .unwrap_or(body);
+    let body = body
+        .strip_suffix('\r')
+        .unwrap_or(body);
+    if body.is_empty() {
         return Err(EslError::protocol_error("api response body is empty"));
     }
-    if let Some(rest) = trimmed.strip_prefix("+OK") {
+    if let Some(rest) = body.strip_prefix("+OK") {
         Ok(rest
             .strip_prefix(' ')
-            .unwrap_or(rest)
-            .trim())
-    } else if trimmed.starts_with("-ERR") || trimmed.starts_with("-USAGE") {
+            .unwrap_or(rest))
+    } else if body.starts_with("-ERR") || body.starts_with("-USAGE") {
         Err(EslError::CommandFailed {
-            reply_text: trimmed.to_string(),
+            reply_text: body.to_string(),
         })
     } else {
-        Ok(trimmed)
+        Ok(body)
     }
 }
 
@@ -184,7 +190,6 @@ impl EslResponse {
     pub fn event_uuid(&self) -> Option<&str> {
         self.reply_text()
             .and_then(|t| t.strip_prefix("+OK "))
-            .map(|s| s.trim())
             .filter(|s| !s.is_empty())
     }
 
@@ -716,18 +721,10 @@ impl EslCommand {
     /// (zero allocation).
     pub fn redact_wire<'a>(&self, wire: &'a str) -> Cow<'a, str> {
         match self {
-            EslCommand::Auth { .. } => Cow::Owned(
-                Self::format_simple_command("auth", &["[REDACTED]"])
-                    .strip_suffix(HEADER_TERMINATOR)
-                    .unwrap_or_default()
-                    .to_owned(),
-            ),
-            EslCommand::UserAuth { user, .. } => Cow::Owned(
-                Self::format_simple_command("userauth", &[&format!("{}:[REDACTED]", user)])
-                    .strip_suffix(HEADER_TERMINATOR)
-                    .unwrap_or_default()
-                    .to_owned(),
-            ),
+            EslCommand::Auth { .. } => Cow::Owned("auth [REDACTED]".into()),
+            EslCommand::UserAuth { user, .. } => {
+                Cow::Owned(format!("userauth {}:[REDACTED]", user))
+            }
             _ => Cow::Borrowed(
                 wire.strip_suffix(HEADER_TERMINATOR)
                     .unwrap_or(wire),
@@ -1406,8 +1403,9 @@ mod tests {
 
     #[test]
     fn parse_api_body_whitespace_only() {
-        let err = parse_api_body("  \n").unwrap_err();
-        assert!(matches!(err, EslError::ProtocolError { .. }));
+        // Only trailing \n is stripped; other whitespace is preserved verbatim
+        let data = parse_api_body("  \n").unwrap();
+        assert_eq!(data, "  ");
     }
 
     // --- api_result() tests ---
