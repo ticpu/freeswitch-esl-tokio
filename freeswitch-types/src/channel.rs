@@ -3,7 +3,7 @@
 use std::fmt;
 use std::str::FromStr;
 
-/// Channel state from `switch_channel_state_t` — carried in the `Channel-State` header
+/// Channel state from `switch_channel_state_t` -- carried in the `Channel-State` header
 /// as a string (`CS_ROUTING`) and in `Channel-State-Number` as an integer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -113,7 +113,7 @@ impl FromStr for ChannelState {
     }
 }
 
-/// Call state from `switch_channel_callstate_t` — carried in the `Channel-Call-State` header.
+/// Call state from `switch_channel_callstate_t` -- carried in the `Channel-Call-State` header.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
@@ -700,7 +700,7 @@ pub struct ChannelTimetable {
 /// Header prefix identifying which call leg's timetable to extract.
 ///
 /// FreeSWITCH emits timetable headers as `{prefix}-Channel-Created-Time`, etc.
-/// The prefix varies by context — `Caller` for the primary leg, `Other-Leg`
+/// The prefix varies by context -- `Caller` for the primary leg, `Other-Leg`
 /// for the bridged party, `Channel` in outbound ESL mode, etc.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

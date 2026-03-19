@@ -35,7 +35,7 @@ pub const CONTENT_TYPE_TEXT_EVENT_XML: &str = "text/event-xml";
 /// Content-Type for log/data messages (FreeSWITCH log forwarding).
 pub const CONTENT_TYPE_LOG_DATA: &str = "log/data";
 
-/// Protocol framing header names (not event payload — these stay as constants).
+/// Protocol framing header names (not event payload -- these stay as constants).
 pub const HEADER_CONTENT_TYPE: &str = "Content-Type";
 /// Protocol framing header: body length.
 pub const HEADER_CONTENT_LENGTH: &str = "Content-Length";

@@ -109,15 +109,12 @@ async fn run_session(
         match result {
             Ok(event) => handle_event(&event),
             Err(e) if e.is_recoverable() => {
-                // Connection still alive, log and continue
                 warn!("recoverable event error: {}", e);
             }
             Err(e) => return Err(e),
         }
     }
 
-    // events.recv() returned None -- reader task exited.
-    // Check why the connection closed.
     match events.status() {
         freeswitch_esl_tokio::ConnectionStatus::Disconnected(reason) => {
             info!("disconnected: {:?}", reason);

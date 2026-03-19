@@ -17,7 +17,7 @@ use crate::variables::VariableName;
 
 /// Trait for looking up ESL headers and channel variables from any key-value store.
 ///
-/// Implementors provide two methods — `header_str(&str)` and `variable_str(&str)` —
+/// Implementors provide two methods -- `header_str(&str)` and `variable_str(&str)` --
 /// and get all typed accessors (`channel_state()`, `call_direction()`, `timetable()`,
 /// etc.) as default implementations.
 ///
@@ -135,7 +135,7 @@ pub trait HeaderLookup {
         self.header(EventHeader::EventSubclass)
     }
 
-    /// `pl_data` header — SIP NOTIFY body content from `NOTIFY_IN` events.
+    /// `pl_data` header -- SIP NOTIFY body content from `NOTIFY_IN` events.
     ///
     /// Contains the JSON payload (already percent-decoded by the ESL parser).
     /// For NG9-1-1 events this is the inner object without the wrapper key
@@ -144,14 +144,14 @@ pub trait HeaderLookup {
         self.header(EventHeader::PlData)
     }
 
-    /// `event` header — SIP event package name from `NOTIFY_IN` events.
+    /// `event` header -- SIP event package name from `NOTIFY_IN` events.
     ///
     /// Examples: `emergency-AbandonedCall`, `emergency-ServiceState`.
     fn sip_event(&self) -> Option<&str> {
         self.header(EventHeader::SipEvent)
     }
 
-    /// `gateway_name` header — gateway that received a SIP NOTIFY.
+    /// `gateway_name` header -- gateway that received a SIP NOTIFY.
     fn gateway_name(&self) -> Option<&str> {
         self.header(EventHeader::GatewayName)
     }

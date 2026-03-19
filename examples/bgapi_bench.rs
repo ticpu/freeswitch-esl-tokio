@@ -5,8 +5,8 @@
 //! (send → BACKGROUND_JOB event arrival).
 //!
 //! Environment variables:
-//! - `ESL_HOST` / `ESL_PORT` / `ESL_PASSWORD` — connection parameters
-//! - `BENCH_COUNT` — number of bgapi commands (default: 1000)
+//! - `ESL_HOST` / `ESL_PORT` / `ESL_PASSWORD` -- connection parameters
+//! - `BENCH_COUNT` -- number of bgapi commands (default: 1000)
 //!
 //! Run with: `cargo run --release --example bgapi_bench`
 
@@ -44,17 +44,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let timeout_ms = 5000 + (n as u64 * 50);
     client.set_command_timeout(Duration::from_millis(timeout_ms));
 
-    // Warmup — verify connectivity
     client
         .api("status")
         .await?;
 
-    // Subscribe to BACKGROUND_JOB before sending any bgapi
     client
         .subscribe_events(EventFormat::Plain, [EslEventType::BackgroundJob])
         .await?;
 
-    // Event collector task: records (job_uuid → arrival_instant)
+    // Collector records (job_uuid -> arrival_instant)
     let (done_tx, done_rx) = oneshot::channel::<()>();
     let collector = tokio::spawn(async move {
         let mut arrivals: HashMap<String, Instant> = HashMap::with_capacity(n);
@@ -82,14 +80,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 _ = &mut done_signal, if !sends_complete => {
                     sends_complete = true;
-                    // keep draining events until we have all N
+                    // drain remaining events
                 }
             }
         }
         arrivals
     });
 
-    // Send phase: fire N bgapi commands, record (job_uuid, send_instant)
     let mut send_times: Vec<(String, Instant, Duration)> = Vec::with_capacity(n);
     let send_phase_start = Instant::now();
 
@@ -108,24 +105,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let send_phase = send_phase_start.elapsed();
 
-    // Signal sends are complete
     let _ = done_tx.send(());
 
-    // Wait for all BACKGROUND_JOB events
     let recv_phase_start = Instant::now();
     let arrivals = collector.await?;
     let recv_phase = recv_phase_start.elapsed();
 
     let total = send_phase + recv_phase;
 
-    // Compute send latencies
     let mut send_lats: Vec<Duration> = send_times
         .iter()
         .map(|(_, _, d)| *d)
         .collect();
     send_lats.sort();
 
-    // Compute round-trip latencies (send_instant → event arrival)
     let mut rtts: Vec<Duration> = send_times
         .iter()
         .filter_map(|(uuid, sent_at, _)| {
@@ -138,7 +131,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let received = rtts.len();
 
-    // Print results
     println!("bench=rust n={n}");
     println!("received={received}");
     println!("send_phase_ms={}", send_phase.as_millis());

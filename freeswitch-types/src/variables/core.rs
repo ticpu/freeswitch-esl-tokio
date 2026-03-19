@@ -17,7 +17,7 @@ sip_header::define_header_enum! {
     /// Core FreeSWITCH channel variable names (the part after the `variable_` prefix).
     ///
     /// Use with [`HeaderLookup::variable()`](crate::HeaderLookup::variable) for type-safe lookups. Only includes
-    /// variables set by the FreeSWITCH core — module-specific variables (SIP,
+    /// variables set by the FreeSWITCH core -- module-specific variables (SIP,
     /// conference, etc.) belong in separate enums.
     pub enum ChannelVariable {
         // --- Identity ---

@@ -98,7 +98,7 @@ sip_header::define_header_enum! {
 /// **Strategy:**
 /// 1. Known [`EventHeader`] variants are matched first (case-insensitive) and
 ///    returned in their canonical wire form (e.g. `unique-id` → `Unique-ID`).
-/// 2. Unknown keys containing underscores are returned **unchanged** — these
+/// 2. Unknown keys containing underscores are returned **unchanged** -- these
 ///    are channel variables (`variable_*`) or `sip_h_*` passthrough headers
 ///    where the suffix preserves the original SIP header casing.
 /// 3. Unknown dash-separated keys are Title-Cased to match FreeSWITCH's

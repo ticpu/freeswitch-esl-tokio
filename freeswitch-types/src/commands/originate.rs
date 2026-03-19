@@ -65,19 +65,19 @@ impl FromStr for DialplanType {
 
 /// Scope for channel variables in an originate command.
 ///
-/// - `Enterprise` (`<>`) — applies across all threads (`:_:` separated)
-/// - `Default` (`{}`) — applies to all channels in this originate
-/// - `Channel` (`[]`) — applies only to one specific channel
+/// - `Enterprise` (`<>`) -- applies across all threads (`:_:` separated)
+/// - `Default` (`{}`) -- applies to all channels in this originate
+/// - `Channel` (`[]`) -- applies only to one specific channel
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "lowercase"))]
 #[non_exhaustive]
 pub enum VariablesType {
-    /// `<>` scope — applies across all `:_:` separated threads.
+    /// `<>` scope -- applies across all `:_:` separated threads.
     Enterprise,
-    /// `{}` scope — applies to all channels in this originate.
+    /// `{}` scope -- applies to all channels in this originate.
     Default,
-    /// `[]` scope — applies to one specific channel.
+    /// `[]` scope -- applies to one specific channel.
     Channel,
 }
 
@@ -368,7 +368,7 @@ fn split_unescaped_commas(s: &str) -> Vec<&str> {
     parts
 }
 
-// Endpoint is now defined in endpoint.rs — re-exported via pub use below.
+// Endpoint is now defined in endpoint.rs -- re-exported via pub use below.
 pub use super::endpoint::Endpoint;
 
 /// A single dialplan application with optional arguments.

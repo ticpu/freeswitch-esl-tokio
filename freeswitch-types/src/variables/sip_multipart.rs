@@ -29,21 +29,33 @@ impl MultipartItem {
 pub struct MultipartBody(Vec<MultipartItem>);
 
 impl MultipartBody {
-    /// Parse a `variable_sip_multipart` value. Returns `None` if not `ARRAY::` formatted.
-    pub fn parse(s: &str) -> Option<Self> {
-        let array = EslArray::parse(s)?;
-        let items = array
-            .items()
-            .iter()
-            .filter_map(|entry| {
-                let (mime_type, data) = entry.split_once(':')?;
-                Some(MultipartItem {
-                    mime_type: mime_type.to_string(),
-                    data: data.to_string(),
-                })
-            })
-            .collect();
-        Some(Self(items))
+    /// Parse a `variable_sip_multipart` value.
+    ///
+    /// Returns `Ok(None)` if the input is not `ARRAY::` formatted.
+    /// Returns `Err` if an ARRAY entry is malformed (missing `:`
+    /// separator between MIME type and body).
+    pub fn parse(s: &str) -> Result<Option<Self>, String> {
+        let array = match EslArray::parse(s) {
+            Some(a) => a,
+            None => return Ok(None),
+        };
+        let mut items = Vec::with_capacity(
+            array
+                .items()
+                .len(),
+        );
+        for entry in array.items() {
+            let (mime_type, data) = entry
+                .split_once(':')
+                .ok_or_else(|| {
+                    format!("malformed multipart ARRAY entry (missing ':'): {}", entry)
+                })?;
+            items.push(MultipartItem {
+                mime_type: mime_type.to_string(),
+                data: data.to_string(),
+            });
+        }
+        Ok(Some(Self(items)))
     }
 
     /// All parsed parts.
@@ -104,7 +116,9 @@ mod tests {
     fn parse_multipart_body() {
         let input =
             "ARRAY::application/sdp:v=0\r\no=...|:application/pidf+xml:<presence>...</presence>";
-        let body = MultipartBody::parse(input).unwrap();
+        let body = MultipartBody::parse(input)
+            .unwrap()
+            .unwrap();
         assert_eq!(
             body.items()
                 .len(),
@@ -119,7 +133,9 @@ mod tests {
     #[test]
     fn by_mime_type_filtering() {
         let input = "ARRAY::text/plain:hello|:application/pidf+xml:<pidf/>|:text/plain:world";
-        let body = MultipartBody::parse(input).unwrap();
+        let body = MultipartBody::parse(input)
+            .unwrap()
+            .unwrap();
 
         let pidf = body.by_mime_type("application/pidf+xml");
         assert_eq!(pidf, vec!["<pidf/>"]);
@@ -133,19 +149,15 @@ mod tests {
 
     #[test]
     fn non_array_returns_none() {
-        assert!(MultipartBody::parse("not an array").is_none());
+        assert!(MultipartBody::parse("not an array")
+            .unwrap()
+            .is_none());
     }
 
     #[test]
-    fn malformed_entries_skipped() {
+    fn malformed_entry_is_error() {
         let input = "ARRAY::application/sdp:v=0|:no-colon-here|:text/plain:ok";
-        let body = MultipartBody::parse(input).unwrap();
-        assert_eq!(
-            body.items()
-                .len(),
-            2
-        );
-        assert_eq!(body.items()[0].mime_type, "application/sdp");
-        assert_eq!(body.items()[1].mime_type, "text/plain");
+        let err = MultipartBody::parse(input).unwrap_err();
+        assert!(err.contains("no-colon-here"));
     }
 }

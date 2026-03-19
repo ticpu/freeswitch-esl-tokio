@@ -6,8 +6,8 @@
 //! # Architecture
 //!
 //! The library uses a split reader/writer design:
-//! - [`EslClient`] (Clone + Send) — send commands from any task
-//! - [`EslEventStream`] — receive events from a background reader task
+//! - [`EslClient`] (Clone + Send) -- send commands from any task
+//! - [`EslEventStream`] -- receive events from a background reader task
 //!
 //! # Examples
 //!
@@ -44,7 +44,7 @@
 //!
 //!     let (client, mut events) = EslClient::accept_outbound(&listener).await?;
 //!
-//!     // First command must be connect_session — establishes the session
+//!     // First command must be connect_session -- establishes the session
 //!     // and returns all channel variables as headers.
 //!     let channel_data = client.connect_session().await?;
 //!     // HeaderLookup trait provides typed header access via EventHeader enum
@@ -74,7 +74,7 @@
 //!
 //! ## Command Builders
 //!
-//! Typed builders for common API commands — no raw string assembly needed:
+//! Typed builders for common API commands -- no raw string assembly needed:
 //!
 //! ```rust
 //! use std::time::Duration;

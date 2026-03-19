@@ -689,7 +689,7 @@ async fn reader_loop_inner(
                 return;
             }
             Err(_) => {
-                // Timeout — check liveness
+                // Timeout -- check liveness
                 let threshold_ms = shared
                     .liveness_timeout_ms
                     .load(Ordering::Relaxed);
@@ -960,7 +960,7 @@ impl EslClient {
         let command_str = command.to_wire_format()?;
         debug!(">> {}", command.redact_wire(&command_str));
 
-        // Lock writer — serializes concurrent commands and holds through reply.
+        // Lock writer -- serializes concurrent commands and holds through reply.
         let mut writer = self
             .writer
             .lock()
@@ -1024,7 +1024,7 @@ impl EslClient {
     /// Execute API command synchronously.
     ///
     /// **Warning: this blocks the entire ESL socket.** FreeSWITCH processes
-    /// `api` commands inline — no events are delivered and no other commands
+    /// `api` commands inline -- no events are delivered and no other commands
     /// can be sent on this connection until the command finishes. For commands
     /// that may take a long time (`originate`, `conference`, bulk operations),
     /// use [`bgapi`](Self::bgapi) instead so events keep flowing.
@@ -1052,7 +1052,7 @@ impl EslClient {
     /// Execute background API command.
     ///
     /// Returns immediately with a `Job-UUID` in the response. The actual result
-    /// arrives later as a [`EslEventType::BackgroundJob`] event — subscribe to it
+    /// arrives later as a [`EslEventType::BackgroundJob`] event -- subscribe to it
     /// and correlate via [`HeaderLookup::job_uuid()`](crate::HeaderLookup::job_uuid) / [`EslResponse::job_uuid`]:
     ///
     /// ```rust,no_run
@@ -1093,7 +1093,7 @@ impl EslClient {
     /// [`subscribe_all_events`](Self::subscribe_all_events).
     ///
     /// For `CUSTOM` event subclasses (e.g., `sofia::register`), use
-    /// [`subscribe_events_raw`](Self::subscribe_events_raw) instead — this method
+    /// [`subscribe_events_raw`](Self::subscribe_events_raw) instead -- this method
     /// sends bare `CUSTOM` which subscribes to **all** custom events:
     ///
     /// ```rust,no_run
@@ -1140,7 +1140,7 @@ impl EslClient {
     /// ```rust,no_run
     /// # async fn example(client: &freeswitch_esl_tokio::EslClient) -> Result<(), freeswitch_esl_tokio::EslError> {
     /// use freeswitch_esl_tokio::EventFormat;
-    /// // CUSTOM subclasses require raw strings — the typed API sends bare CUSTOM
+    /// // CUSTOM subclasses require raw strings -- the typed API sends bare CUSTOM
     /// client.subscribe_events_raw(EventFormat::Plain, "CUSTOM sofia::register sofia::unregister").await?;
     /// # Ok(())
     /// # }
@@ -1187,7 +1187,7 @@ impl EslClient {
     /// Sends each filter via [`filter_raw`](Self::filter_raw), then subscribes
     /// to the configured events. Does nothing if the subscription is empty.
     ///
-    /// FreeSWITCH's `event` command is additive and idempotent — subscribing
+    /// FreeSWITCH's `event` command is additive and idempotent -- subscribing
     /// to an event type that is already subscribed is a no-op (the server
     /// stores subscriptions as a boolean-per-type array). It is safe to call
     /// this on a connection that already has subscriptions; new types are
@@ -1221,7 +1221,7 @@ impl EslClient {
     /// Minimizes the event gap by applying the new subscription *before*
     /// tearing down the old one. The sequence is:
     ///
-    /// 1. Send the new `event` command (additive — no events are lost)
+    /// 1. Send the new `event` command (additive -- no events are lost)
     /// 2. Clear all filters and re-add the new ones
     /// 3. `noevents` + re-send `event` to remove stale event types
     ///
@@ -1567,7 +1567,7 @@ impl EslClient {
     /// the raw variable value directly in `Reply-Text` with no `+OK`/`-ERR`
     /// prefix. A non-existent variable returns an empty string (never `-ERR`).
     /// This method reads the raw Reply-Text; do not use `into_result()` on
-    /// the response — it would misclassify the bare value as
+    /// the response -- it would misclassify the bare value as
     /// [`UnexpectedReply`](crate::EslError::UnexpectedReply).
     pub async fn getvar(&self, name: &str) -> EslResult<String> {
         let cmd = EslCommand::GetVar {
@@ -1653,7 +1653,7 @@ impl EslClient {
     /// and all other methods that send a command and await a reply.
     ///
     /// If increased for long-running `api()` calls, also increase or disable
-    /// the liveness timeout — `api` blocks the socket, starving the liveness timer.
+    /// the liveness timeout -- `api` blocks the socket, starving the liveness timer.
     pub fn set_command_timeout(&self, duration: Duration) {
         self.shared
             .command_timeout_ms
@@ -1810,7 +1810,7 @@ impl EslEventStream {
     ///
     /// Returns `Err(EslError::QueueFull)` if events were dropped because the
     /// application was not draining events fast enough. This is a one-time
-    /// notification per overflow episode — subsequent calls return real events.
+    /// notification per overflow episode -- subsequent calls return real events.
     /// Parse errors from the reader task are also surfaced here.
     pub async fn recv(&mut self) -> Option<Result<EslEvent, EslError>> {
         self.rx

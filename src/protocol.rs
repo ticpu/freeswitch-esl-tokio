@@ -159,7 +159,7 @@ impl EslParser {
                         .get(HEADER_CONTENT_TYPE)
                         .ok_or_else(|| {
                             EslError::protocol_error(
-                                "Missing Content-Type header — likely protocol desync",
+                                "Missing Content-Type header -- likely protocol desync",
                             )
                         })?;
                     let message_type = MessageType::from_content_type(content_type);
@@ -879,7 +879,7 @@ mod tests {
     #[test]
     fn test_crlf_header_terminator_not_matched() {
         // ESL uses \n\n, not \r\n\r\n. If something injects \r\n line endings,
-        // the parser must not hang — but it won't find the terminator either.
+        // the parser must not hang -- but it won't find the terminator either.
         // This documents the current behavior: \r\n\r\n is NOT recognized as
         // a header terminator, so the message stays incomplete.
         let mut parser = EslParser::new();
@@ -944,7 +944,7 @@ mod tests {
         // Content-Length: 2 but body is "Hello" (5 bytes). The parser trusts
         // Content-Length and reads only 2 bytes, leaving "llo" in the buffer.
         // The next parse attempt sees "llo" as the start of a new message,
-        // which won't have a valid header terminator — so it returns None.
+        // which won't have a valid header terminator -- so it returns None.
         let mut parser = EslParser::new();
         let data = b"Content-Type: api/response\nContent-Length: 2\n\nHello";
 
@@ -958,7 +958,7 @@ mod tests {
         assert_eq!(message.message_type, MessageType::ApiResponse);
         assert_eq!(message.body, Some("He".to_string()));
 
-        // Leftover "llo" is now junk in the buffer — next parse finds nothing
+        // Leftover "llo" is now junk in the buffer -- next parse finds nothing
         let next = parser
             .parse_message()
             .unwrap();
@@ -993,7 +993,7 @@ mod tests {
         // "llo" + msg2 bytes = "lloContent-Type: auth/request\n\n"
         // The parser finds \n\n and parses "lloContent-Type: auth/request"
         // as key="lloContent-Type" value="auth/request". No real Content-Type
-        // header exists, so the parser returns a protocol error — signaling
+        // header exists, so the parser returns a protocol error -- signaling
         // the caller to disconnect.
         assert!(
             second.is_err(),

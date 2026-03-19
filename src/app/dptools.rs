@@ -10,7 +10,7 @@ use crate::commands::originate::DialplanType;
 ///
 /// Each method returns a `sendmsg`/`execute` command ready for
 /// [`EslClient::send_command()`](crate::EslClient::send_command).
-/// The `uuid` field is `None` — set it on the command or pass it to `sendmsg()`.
+/// The `uuid` field is `None` -- set it on the command or pass it to `sendmsg()`.
 pub struct AppCommand;
 
 impl AppCommand {

@@ -8,7 +8,9 @@
 
 use freeswitch_esl_tokio::commands::endpoint::LoopbackEndpoint;
 use freeswitch_esl_tokio::commands::originate::{Application, Endpoint, Originate};
-use freeswitch_esl_tokio::{EslClient, EslEventType, EventFormat, DEFAULT_ESL_PASSWORD};
+use freeswitch_esl_tokio::{
+    EslClient, EslEventType, EventFormat, EventHeader, HeaderLookup, DEFAULT_ESL_PASSWORD,
+};
 use std::time::Duration;
 use tokio::net::TcpListener;
 
@@ -97,13 +99,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         Ok(resp) => {
             let channel = resp
-                .header("Channel-Name")
+                .header_str(EventHeader::ChannelName.as_str())
                 .unwrap_or("(unknown)");
+            // Control and Socket-Mode are connect-response headers without typed accessors
             let control = resp
-                .header("Control")
+                .header_str("Control")
                 .unwrap_or("(missing)");
             let mode = resp
-                .header("Socket-Mode")
+                .header_str("Socket-Mode")
                 .unwrap_or("(missing)");
             step_ok(&format!(
                 "connect session (channel: {}, control: {}, mode: {})",

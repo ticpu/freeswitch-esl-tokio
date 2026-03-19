@@ -937,7 +937,7 @@ impl EslEvent {
     /// Sets the `priority` header carried on the event.
     ///
     /// FreeSWITCH stores this as metadata but does **not** use it for dispatch
-    /// ordering — all events are delivered FIFO regardless of priority.
+    /// ordering -- all events are delivered FIFO regardless of priority.
     pub fn set_priority(&mut self, priority: EslEventPriority) {
         self.set_header(EventHeader::Priority.as_str(), priority.to_string());
     }

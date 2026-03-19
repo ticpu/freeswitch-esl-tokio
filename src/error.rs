@@ -3,9 +3,9 @@
 //! All fallible operations in this crate return [`EslResult<T>`].  Errors are
 //! classified into two axes for caller convenience:
 //!
-//! - **Connection errors** ([`EslError::is_connection_error`]) — the TCP session
+//! - **Connection errors** ([`EslError::is_connection_error`]) -- the TCP session
 //!   is dead and the caller should reconnect.
-//! - **Recoverable errors** ([`EslError::is_recoverable`]) — the command failed
+//! - **Recoverable errors** ([`EslError::is_recoverable`]) -- the command failed
 //!   but the connection is still usable (e.g., timeout, command rejected).
 
 use crate::commands::OriginateError;

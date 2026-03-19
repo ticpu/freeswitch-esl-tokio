@@ -495,7 +495,7 @@ if let Some(raw) = pai {
 }
 
 // SIP multipart body extraction
-let body = MultipartBody::parse(raw_multipart).unwrap();
+let body = MultipartBody::parse(raw_multipart).unwrap().unwrap();
 let pidf = body.by_mime_type("application/pidf+xml");
 ```
 

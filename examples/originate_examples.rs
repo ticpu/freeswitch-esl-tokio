@@ -50,9 +50,8 @@ fn print_endpoint_examples() {
 
     println!("\n-- SofiaGateway: sofia/gateway/name/destination --");
 
-    // Application::simple(name) creates a no-arg application
     let cmd = Originate::application(
-        // SofiaGateway::new(gw, dest) -- use .with_profile("external") to qualify as profile::gateway
+        // .with_profile("external") qualifies as profile::gateway
         Endpoint::SofiaGateway(SofiaGateway::new("my_provider", "18005551234")),
         Application::simple("park"),
     )

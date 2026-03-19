@@ -30,9 +30,9 @@ impl fmt::Debug for Secret {
 /// FreeSWITCH API commands return results in varying formats:
 ///
 /// - **Action commands** (`originate`, `uuid_kill`, …) prefix success
-///   with `+OK` — this function strips it and returns the payload.
+///   with `+OK` -- this function strips it and returns the payload.
 /// - **Query commands** (`show channels as json`, `uuid_dump`, …) return
-///   raw data with no prefix — returned as-is.
+///   raw data with no prefix -- returned as-is.
 /// - **Errors** (`-ERR …`, `-USAGE: …`) produce [`EslError::CommandFailed`].
 ///
 /// A trailing `\n` (the standard FreeSWITCH API output terminator) is
@@ -199,10 +199,10 @@ impl EslResponse {
     /// The format varies by command:
     ///
     /// - **Action commands** (`originate`, `uuid_kill`, `uuid_setvar`, …)
-    ///   return `+OK <data>` on success — this method strips the prefix
+    ///   return `+OK <data>` on success -- this method strips the prefix
     ///   and returns the payload.
     /// - **Query commands** (`show channels as json`, `uuid_dump`,
-    ///   `uuid_getvar`, `status`, …) return raw data with no prefix —
+    ///   `uuid_getvar`, `status`, …) return raw data with no prefix --
     ///   this method returns the body as-is.
     /// - **Error responses** (`-ERR <message>`, `-USAGE: <usage>`)
     ///   return [`EslError::CommandFailed`].
@@ -407,7 +407,7 @@ impl ExecuteOptions {
 
 /// ESL command types for the wire protocol.
 ///
-/// Most users won't construct these directly — use [`EslClient`](crate::EslClient)
+/// Most users won't construct these directly -- use [`EslClient`](crate::EslClient)
 /// methods or [`AppCommand`](crate::AppCommand) instead. This enum is public so
 /// that [`send_command()`](crate::EslClient::send_command) callers can name the type.
 #[derive(Clone, Debug)]
