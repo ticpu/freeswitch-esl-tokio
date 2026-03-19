@@ -45,9 +45,10 @@ for `sip_i_*` mappings).
 - **Never expose dependency types in public signatures.** Return `impl Iterator`
   (not `indexmap::map::Iter`), wrap dependency errors (not `#[from] serde_json::Error`).
   A dependency major-version bump becomes a semver break if its types leak.
-  **Exception:** `sip-uri` is an accepted public dependency of `freeswitch-types`
+  **Exceptions:** `sip-uri` is an accepted public dependency of `freeswitch-types`
   (same author, narrow scope, stable). The `pub use sip_uri;` re-export and
-  `SipHeaderAddr` returning `sip_uri::Uri` are intentional.
+  `SipHeaderAddr` returning `sip_uri::Uri` are intentional. `indexmap` is treated
+  as a basic collection type (like `HashMap`) and may appear in public signatures.
 - **`pub(crate)` modules can still leak types.** If a public function returns a
   type from a `pub(crate)` module, that type is visible but unnameable by callers.
   Either re-export the type or don't return it.
