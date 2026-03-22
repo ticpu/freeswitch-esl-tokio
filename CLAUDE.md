@@ -121,6 +121,7 @@ This is a two-crate workspace. `freeswitch-esl-tokio` depends on
 cargo fmt --all
 cargo clippy --workspace --release -- -D warnings
 cargo test --workspace --release
+cargo test --test live_freeswitch -- --ignored
 cargo build --workspace --release
 cargo build --examples
 cargo semver-checks check-release -p freeswitch-types
@@ -137,7 +138,9 @@ cargo publish -p freeswitch-esl-tokio
 
 **Never `cargo publish` without completing these steps first:**
 
-1. Create signed annotated tags (`git tag -as`)
+1. Create signed annotated tags (`git tag -as`) with a brief changelog
+   in the tag message (use `git log --oneline <previous-tag>..HEAD` to
+   generate it)
 2. Push the tags (`git push --tags`)
 3. Wait for CI to pass on the tagged commit
 4. Only then `cargo publish` (types first, then ESL)

@@ -4,7 +4,7 @@ resolver = "2"
 
 [package]
 name = "freeswitch-esl-tokio"
-version = "2.0.0-beta.5"
+version = "2.0.0-beta.6"
 edition = "2021"
 authors = ["Jérôme Poulin <jeromepoulin@gmail.com>"]
 description = "FreeSWITCH Event Socket Library (ESL) client for Rust"
@@ -20,8 +20,8 @@ exclude = ["CLAUDE.md", "hooks/", "tests/", "docs/"]
 [dependencies]
 freeswitch-types = { path = "freeswitch-types", version = "0.21" }
 indexmap = "2"
-tokio = { version = "1.0", features = ["net", "io-util", "rt", "rt-multi-thread", "sync", "time", "macros"] }
-bytes = "1.0"
+tokio = { version = "1.47", features = ["net", "io-util", "rt", "rt-multi-thread", "sync", "time", "macros"] }
+bytes = "1.11"
 thiserror = "2.0"
 serde_json = "1.0"
 quick-xml = { version = "0.39", features = ["serialize"] }
