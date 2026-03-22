@@ -578,6 +578,15 @@ async fn reader_loop_inner(
                 .remaining_bytes()
                 .to_vec();
             debug!("Re-exec drain complete, {} residual bytes", residual.len());
+            // Broadcast ReexecTeardown BEFORE returning so the status watch is
+            // updated before event_tx is dropped. Without this, consumers that
+            // see recv()→None and check events.status() would find stale
+            // Connected and treat it as an unexpected connection loss.
+            let _ = shared
+                .status_tx
+                .send(ConnectionStatus::Disconnected(
+                    DisconnectReason::ReexecTeardown,
+                ));
             if let Some(tx) = reexec
                 .result_tx
                 .take()

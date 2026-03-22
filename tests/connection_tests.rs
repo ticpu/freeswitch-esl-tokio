@@ -964,7 +964,7 @@ mod reexec {
 
     #[tokio::test]
     async fn teardown_returns_valid_fd_and_residual() {
-        let (_mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
+        let (_mock, client, events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
         let result = client
             .teardown_for_reexec()
@@ -984,6 +984,12 @@ mod reexec {
         assert!(!client.is_connected());
         assert_eq!(
             client.status(),
+            ConnectionStatus::Disconnected(DisconnectReason::ReexecTeardown)
+        );
+        // Event stream must also see ReexecTeardown — this is what downstream
+        // consumers check when the event channel closes.
+        assert_eq!(
+            events.status(),
             ConnectionStatus::Disconnected(DisconnectReason::ReexecTeardown)
         );
     }
@@ -1191,6 +1197,56 @@ mod reexec {
         let options = EslConnectOptions::new().with_event_queue_size(10);
         let (client, _events) = EslClient::adopt_stream_with_options(stream, &[], options).unwrap();
         assert!(client.is_connected());
+    }
+
+    #[tokio::test]
+    async fn sequential_teardown_adopt_teardown() {
+        use std::os::unix::io::FromRawFd;
+
+        let (_mock, client, events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
+
+        // First teardown
+        let (fd, residual) = client
+            .teardown_for_reexec()
+            .await
+            .expect("first teardown failed");
+        assert_eq!(
+            events.status(),
+            ConnectionStatus::Disconnected(DisconnectReason::ReexecTeardown)
+        );
+
+        // Prevent EslClient from closing the fd on drop (as documented).
+        // In production the process calls exec(), destroying the old runtime.
+        std::mem::forget(client);
+
+        // dup() the fd so the new TcpStream gets a fresh reactor registration
+        // (the original fd is still registered by the forgotten OwnedWriteHalf).
+        let new_fd = unsafe { libc::dup(fd) };
+        assert!(
+            new_fd >= 0,
+            "dup() failed: {}",
+            std::io::Error::last_os_error()
+        );
+        // Close the original fd that was leaked by mem::forget
+        unsafe { libc::close(fd) };
+
+        let std_stream = unsafe { std::net::TcpStream::from_raw_fd(new_fd) };
+        std_stream
+            .set_nonblocking(true)
+            .expect("set_nonblocking failed");
+        let stream = tokio::net::TcpStream::from_std(std_stream).expect("from_std failed");
+        let (client2, events2) = EslClient::adopt_stream(stream, &residual).unwrap();
+        assert!(client2.is_connected());
+
+        // Second teardown
+        let (_fd2, _residual2) = client2
+            .teardown_for_reexec()
+            .await
+            .expect("second teardown failed");
+        assert_eq!(
+            events2.status(),
+            ConnectionStatus::Disconnected(DisconnectReason::ReexecTeardown)
+        );
     }
 }
 
