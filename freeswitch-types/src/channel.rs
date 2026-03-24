@@ -937,6 +937,25 @@ mod tests {
         assert_eq!(ChannelState::CsNone.as_number(), 13);
     }
 
+    #[test]
+    fn channel_state_ordering_follows_lifecycle() {
+        assert!(ChannelState::CsNew < ChannelState::CsInit);
+        assert!(ChannelState::CsInit < ChannelState::CsRouting);
+        assert!(ChannelState::CsRouting < ChannelState::CsExecute);
+        assert!(ChannelState::CsExecute < ChannelState::CsHangup);
+        assert!(ChannelState::CsHangup < ChannelState::CsReporting);
+        assert!(ChannelState::CsReporting < ChannelState::CsDestroy);
+    }
+
+    #[test]
+    fn channel_state_teardown_check() {
+        assert!(ChannelState::CsHangup >= ChannelState::CsHangup);
+        assert!(ChannelState::CsReporting >= ChannelState::CsHangup);
+        assert!(ChannelState::CsDestroy >= ChannelState::CsHangup);
+        assert!(!(ChannelState::CsExecute >= ChannelState::CsHangup));
+        assert!(!(ChannelState::CsPark >= ChannelState::CsHangup));
+    }
+
     // --- CallState tests ---
 
     #[test]
