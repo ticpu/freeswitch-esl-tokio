@@ -61,5 +61,5 @@ pub use sip_header::{
 };
 pub use variables::{
     ChannelVariable, EslArray, MultipartBody, MultipartItem, ParseChannelVariableError,
-    VariableName,
+    SipHeaderPrefix, SipPassthroughHeader, VariableName,
 };

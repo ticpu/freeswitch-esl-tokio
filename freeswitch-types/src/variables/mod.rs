@@ -3,14 +3,16 @@
 
 mod core;
 mod esl_array;
-mod sip_invite;
 mod sip_multipart;
+mod sip_passthrough;
 mod sofia;
 
 pub use self::core::{ChannelVariable, ParseChannelVariableError};
 pub use esl_array::EslArray;
-pub use sip_invite::{ParseSipInviteHeaderError, SipInviteHeader};
 pub use sip_multipart::{MultipartBody, MultipartItem};
+pub use sip_passthrough::{
+    InvalidHeaderName, ParseSipPassthroughError, SipHeaderPrefix, SipPassthroughHeader,
+};
 pub use sofia::{ParseSofiaVariableError, SofiaVariable};
 
 /// Trait for typed channel variable name enums.
@@ -33,11 +35,5 @@ impl VariableName for ChannelVariable {
 impl VariableName for SofiaVariable {
     fn as_str(&self) -> &str {
         SofiaVariable::as_str(self)
-    }
-}
-
-impl VariableName for SipInviteHeader {
-    fn as_str(&self) -> &str {
-        SipInviteHeader::as_str(self)
     }
 }

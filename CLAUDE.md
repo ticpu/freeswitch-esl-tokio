@@ -37,8 +37,8 @@ Modules under the `sip_*` namespace (`sip_header`, `sip_header_addr`,
 Doc comments, module-level docs, and error messages in these modules must
 not reference FreeSWITCH, mod_sofia, ESL, NOTIFY_IN, or any FS-specific
 concepts. FreeSWITCH integration context belongs in `lookup.rs` (the
-`HeaderLookup` trait methods) or `variables/` (e.g. `SipInviteHeader`
-for `sip_i_*` mappings).
+`HeaderLookup` trait methods) or `variables/` (e.g. `SipPassthroughHeader`
+for `sip_h_*`/`sip_i_*` mappings).
 
 ## API Boundary Rules
 
@@ -87,6 +87,24 @@ The FreeSWITCH C source tree is at `$FREESWITCH_SOURCE`. If the env var
 is not set, ask the user for the path. Use it to verify wire protocol
 behavior, event header handling, and SIP/ESL internals. If tasking an
 agent resolve the variable and give the value to the agent.
+
+## Public Type Rename/Removal Checklist
+
+When renaming, removing, or replacing a public type, update **all** of
+these locations (not just the Rust source):
+
+- `freeswitch-types/src/variables/mod.rs` — module declaration and re-exports
+- `freeswitch-types/src/lib.rs` — crate root re-exports
+- `src/lib.rs` (freeswitch-esl-tokio) — ESL crate re-exports
+- `freeswitch-types/README.md` — module table and code examples
+- `README.md` — badges, code examples, file path references, hooks list
+- `CLAUDE.md` — any references to the old type name
+- `docs/design-rationale.md` — update or add section explaining the change
+- `examples/*.rs` — update imports and usage to the new typed API
+- `hooks/*.sh` — update scripts that grep for the old type or file
+- `tests/*.rs` — update any direct usage (raw strings in tests are fine)
+
+Run `grep -r OldTypeName --include='*.{rs,md,toml,sh}'` to catch stragglers.
 
 ## Build & Test Workflow
 

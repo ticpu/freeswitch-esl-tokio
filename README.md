@@ -9,7 +9,7 @@
 |---|---|
 | [![EslEventType][evt-badge]][ci] [![HangupCause][hc-badge]][ci] | [![EventHeader][eh-badge]][docs] [![ChannelVariable][cv-badge]][docs] |
 | [![ChannelState][cs-badge]][ci] [![CallState][ccs-badge]][ci] | [![HeaderLookup][hl-badge]][docs] |
-| [![SipInviteHeader][sih-badge]][ci] | [![SofiaVariable][sv-badge]][docs] |
+| [![SipPassthroughHeader][sph-badge]][ci] | [![SofiaVariable][sv-badge]][docs] |
 
 [ci]: https://github.com/ticpu/freeswitch-esl-tokio/actions/workflows/ci.yml
 [docs]: https://docs.rs/freeswitch-esl-tokio
@@ -21,7 +21,7 @@
 [eh-badge]: https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/event-header-count.json
 [cv-badge]: https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/channel-var-count.json
 [hl-badge]: https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/header-lookup-count.json
-[sih-badge]: https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/sip-invite-header-count.json
+[sph-badge]: https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/sip-invite-header-count.json
 [sv-badge]: https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/sofia-variable-count.json
 
 Async Rust client for FreeSWITCH
@@ -476,16 +476,17 @@ YAML tag), but both deserialize into the same Rust types.
 ## Variable parsers
 
 ```rust
-use freeswitch_esl_tokio::variables::{EslArray, MultipartBody, SipInviteHeader};
+use freeswitch_esl_tokio::variables::{EslArray, MultipartBody, SipPassthroughHeader};
 use freeswitch_esl_tokio::HeaderLookup;
+use sip_header::SipHeader;
 
 // ARRAY:: delimited values (used by FreeSWITCH for repeating SIP headers)
 let arr = EslArray::parse("ARRAY::item1|:item2|:item3").unwrap();
 assert_eq!(arr.items(), &["item1", "item2", "item3"]);
 
-// Raw SIP INVITE headers (requires parse-all-invite-headers on the sofia profile)
-// ARRAY headers like P-Asserted-Identity may have multiple values
-let pai = event.variable(SipInviteHeader::PAssertedIdentity);
+// SIP passthrough headers: typed access to sip_i_*, sip_h_*, sip_rh_*, etc.
+// Reading incoming INVITE headers (requires parse-all-invite-headers on the sofia profile)
+let pai = event.variable(SipPassthroughHeader::invite(SipHeader::PAssertedIdentity));
 if let Some(raw) = pai {
     if let Some(arr) = EslArray::parse(raw) {
         for identity in arr.items() {
@@ -494,13 +495,16 @@ if let Some(raw) = pai {
     }
 }
 
+// Setting outgoing SIP headers via channel variables
+vars.insert(SipPassthroughHeader::request(SipHeader::CallInfo), "<sip:example.com>;answer-after=0");
+
 // SIP multipart body extraction
 let body = MultipartBody::parse(raw_multipart).unwrap().unwrap();
 let pidf = body.by_mime_type("application/pidf+xml");
 ```
 
 > Verified in [`variables/esl_array.rs`](freeswitch-types/src/variables/esl_array.rs),
-> [`variables/sip_invite.rs`](freeswitch-types/src/variables/sip_invite.rs), and
+> [`variables/sip_passthrough.rs`](freeswitch-types/src/variables/sip_passthrough.rs), and
 > [`variables/sip_multipart.rs`](freeswitch-types/src/variables/sip_multipart.rs).
 
 ## Typed event accessors
@@ -618,7 +622,7 @@ The pre-commit hook enforces:
 - `cargo clippy -- -D warnings` -- lint warnings as errors
 - `RUSTDOCFLAGS="-D missing_docs" cargo doc` -- all public items documented
 - `hooks/check-event-types.sh` -- `EslEventType` enum matches C ESL `EVENT_NAMES[]`
-- `hooks/check-sip-invite-headers.sh` -- `SipInviteHeader` enum matches `sofia_parse_all_invite_headers()`
+- `hooks/check-sip-invite-headers.sh` -- `SipPassthroughHeader` wire format matches `sofia_parse_all_invite_headers()`
 
 ### Testing
 

@@ -20,8 +20,8 @@ use std::time::Duration;
 
 use freeswitch_esl_tokio::{
     parse_api_body, Application, DialplanType, Endpoint, EslClient, EslError, EslEventType,
-    EventFormat, EventHeader, HeaderLookup, Originate, Variables, VariablesType,
-    DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT,
+    EventFormat, EventHeader, HeaderLookup, Originate, SipPassthroughHeader, Variables,
+    VariablesType, DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT,
 };
 use tracing::{error, info};
 
@@ -179,7 +179,11 @@ fn print_endpoint_examples() {
 
     let mut vars = Variables::new(VariablesType::Channel);
     vars.insert("originate_timeout", "20");
-    vars.insert("sip_h_X-Tenant", "acme");
+    // Typed SIP passthrough header -- produces "sip_h_X-Tenant" on the wire
+    vars.insert(
+        SipPassthroughHeader::request_raw("X-Tenant").unwrap(),
+        "acme",
+    );
     let cmd = Originate::application(
         Endpoint::Sofia(
             SofiaEndpoint::new("external", "sip:alice@carrier.example.com").with_variables(vars),

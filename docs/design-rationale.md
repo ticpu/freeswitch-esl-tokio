@@ -660,10 +660,44 @@ is implemented manually.
 `split_comma_entries()`, and `conference_info/*` (feature-gated on `xml`).
 
 **Stays in freeswitch-types:** `EslArray`, `EslHeaders` (new),
-`SipInviteHeader` (FS `sip_i_*` variable names), `MultipartBody` (100%
-ARRAY format), `HeaderLookup` trait, `EventHeader`, `ChannelVariable`,
-`SofiaVariable`, all channel state types, and all command builders.
+`SipPassthroughHeader` (FS `sip_h_*`/`sip_i_*`/etc. variable names),
+`MultipartBody` (100% ARRAY format), `HeaderLookup` trait,
+`EventHeader`, `ChannelVariable`, `SofiaVariable`, all channel state
+types, and all command builders.
 
 `freeswitch-types` re-exports everything from `sip-header` for backward
 compatibility. Existing users see no API change — all types remain
 importable from `freeswitch_types::`.
+
+## Unified SIP passthrough headers over per-prefix enums
+
+FreeSWITCH exposes SIP headers as channel variables through six prefixes:
+`sip_i_` (incoming INVITE), `sip_h_` (outgoing request), `sip_rh_`
+(outgoing response), `sip_ph_` (provisional response), `sip_bye_h_`
+(BYE), and `sip_nobye_h_` (suppress on BYE). The first implementation
+only covered `sip_i_*` via a fixed `SipInviteHeader` enum with ~32
+variants. The other five prefixes had no typed support — users had to
+pass raw strings like `"sip_h_Call-Info"` to `variable_str()`.
+
+This was both incomplete and the wrong shape. A fixed enum cannot
+cover the open-ended nature of SIP headers: `X-*` custom headers,
+extension RFCs, and vendor-specific headers all pass through the same
+`sip_h_*` mechanism. Meanwhile the typed `SipHeader` catalog in the
+`sip-header` crate already enumerates all IANA-registered headers.
+Duplicating that catalog as `SipInviteHeader` variants created a
+maintenance burden (keeping two lists in sync) with no extra value.
+
+`SipPassthroughHeader` unifies all six prefixes into one struct that
+pairs a `SipHeaderPrefix` with a header name. The header name comes
+from either `SipHeader` (for known headers) or a raw string (for custom
+headers, validated against `\n`/`\r` injection). The struct pre-computes
+the wire variable name and implements `VariableName` for use with
+`HeaderLookup::variable()`.
+
+The key asymmetry: the `sip_i_` prefix uses a lossy wire format
+(lowercase, hyphens replaced by underscores: `sip_i_call_info`), while
+all other prefixes preserve the canonical SIP header casing
+(`sip_h_Call-Info`). `FromStr` reverses the `sip_i_` transformation by
+trying `SipHeader::from_str` on the re-hyphenated suffix. For unknown
+headers the reversal is lossy — original casing is lost — but this is
+inherent to FreeSWITCH's wire format, not a library limitation.

@@ -157,9 +157,10 @@ pub use freeswitch_types::{
     ParseCallDirectionError, ParseCallStateError, ParseChannelStateError,
     ParseChannelVariableError, ParseDialplanTypeError, ParseEventFormatError,
     ParseEventHeaderError, ParseEventTypeError, ParseGroupCallOrderError, ParseHangupCauseError,
-    ParsePriorityError, ParseTimetableError, TimetablePrefix, UuidAnswer, UuidBridge, UuidDeflect,
-    UuidGetVar, UuidHold, UuidKill, UuidSendDtmf, UuidSetVar, UuidTransfer, VariableName,
-    Variables, VariablesType, DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT,
+    ParsePriorityError, ParseTimetableError, SipHeaderPrefix, SipPassthroughHeader,
+    TimetablePrefix, UuidAnswer, UuidBridge, UuidDeflect, UuidGetVar, UuidHold, UuidKill,
+    UuidSendDtmf, UuidSetVar, UuidTransfer, VariableName, Variables, VariablesType,
+    DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT,
 };
 
 pub use app::dptools::AppCommand;
