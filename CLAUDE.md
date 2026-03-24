@@ -3,6 +3,15 @@
 This is a **library-first** crate. There is an examples/ folder buildable binaries
 `Cargo.lock` is gitignored per Cargo convention for libraries.
 
+## Enum Variant Ordering — Append Only
+
+New variants on public enums without `#[repr(...)]` **must be appended at
+the end**. Inserting in the middle shifts implicit discriminant values,
+which `cargo semver-checks` flags as a breaking change (callers using
+`as isize` casts see different values). Grouping by category is fine
+within a single commit that introduces the enum, but subsequent additions
+always go at the tail.
+
 ## `#[non_exhaustive]` Policy
 
 All public enums and public structs **with public fields** have
