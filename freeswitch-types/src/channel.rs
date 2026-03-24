@@ -114,7 +114,7 @@ impl FromStr for ChannelState {
 }
 
 /// Call state from `switch_channel_callstate_t` -- carried in the `Channel-Call-State` header.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 #[allow(missing_docs)]
