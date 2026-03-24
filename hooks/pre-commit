@@ -54,9 +54,15 @@ if ! "$SCRIPT_DIR/check-call-states.sh"; then
     exit 1
 fi
 
-echo "Checking SipInviteHeader against sofia.c..."
+echo "Checking SIP header coverage against sofia.c..."
 if ! "$SCRIPT_DIR/check-sip-invite-headers.sh"; then
-    echo "❌ SipInviteHeader enum is out of sync with FreeSWITCH. Update freeswitch-types/src/variables/sip_invite.rs."
+    echo "❌ SipHeader enum (sip-header crate) is missing headers used by FreeSWITCH sofia.c."
+    exit 1
+fi
+
+echo "Checking CoreMediaVariable against set_stats()..."
+if ! "$SCRIPT_DIR/check-core-media-vars.sh"; then
+    echo "❌ CoreMediaVariable enum is out of sync with FreeSWITCH. Update freeswitch-types/src/variables/core_media.rs."
     exit 1
 fi
 

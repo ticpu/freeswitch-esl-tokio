@@ -43,6 +43,7 @@ jobs:
           HANGUP_CAUSE_COUNT=$(hooks/check-hangup-causes.sh 2>&1 | parse_count) || true
           CHANNEL_STATE_COUNT=$(hooks/check-channel-states.sh 2>&1 | parse_count) || true
           CALL_STATE_COUNT=$(hooks/check-call-states.sh 2>&1 | parse_count) || true
+          CORE_MEDIA_VAR_COUNT=$(hooks/check-core-media-vars.sh 2>&1 | parse_count) || true
 
           if [ -z "$EVENT_TYPE_COUNT" ]; then
             echo "::warning::C source not available, skipping enum counts"
@@ -55,6 +56,7 @@ jobs:
           echo "HANGUP_CAUSE_COUNT=${HANGUP_CAUSE_COUNT}" >> "$GITHUB_ENV"
           echo "CHANNEL_STATE_COUNT=${CHANNEL_STATE_COUNT}" >> "$GITHUB_ENV"
           echo "CALL_STATE_COUNT=${CALL_STATE_COUNT}" >> "$GITHUB_ENV"
+          echo "CORE_MEDIA_VAR_COUNT=${CORE_MEDIA_VAR_COUNT}" >> "$GITHUB_ENV"
 
       - name: Count typed enum variants
         run: |
@@ -179,6 +181,17 @@ jobs:
           filename: sofia-variable-count.json
           label: SofiaVariable
           message: "${{ env.SOFIA_VARIABLE_COUNT }}"
+          color: blue
+
+      - name: Update CoreMediaVariable badge
+        if: github.ref == 'refs/heads/master' && github.event_name == 'push' && env.C_SOURCE_AVAILABLE == 'true'
+        uses: schneegans/dynamic-badges-action@v1.7.0
+        with:
+          auth: ${{ secrets.GIST_SECRET }}
+          gistID: def178758b6a88effff310aca87b6b50
+          filename: core-media-var-count.json
+          label: CoreMediaVariable
+          message: "${{ env.CORE_MEDIA_VAR_COUNT }}"
           color: blue
 
       - name: Build

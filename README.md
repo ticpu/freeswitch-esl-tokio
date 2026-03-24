@@ -10,6 +10,7 @@
 | [![EslEventType][evt-badge]][ci] [![HangupCause][hc-badge]][ci] | [![EventHeader][eh-badge]][docs] [![ChannelVariable][cv-badge]][docs] |
 | [![ChannelState][cs-badge]][ci] [![CallState][ccs-badge]][ci] | [![HeaderLookup][hl-badge]][docs] |
 | [![SipPassthroughHeader][sph-badge]][ci] | [![SofiaVariable][sv-badge]][docs] |
+| [![CoreMediaVariable][cmv-badge]][ci] | |
 
 [ci]: https://github.com/ticpu/freeswitch-esl-tokio/actions/workflows/ci.yml
 [docs]: https://docs.rs/freeswitch-esl-tokio
@@ -23,6 +24,7 @@
 [hl-badge]: https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/header-lookup-count.json
 [sph-badge]: https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/sip-invite-header-count.json
 [sv-badge]: https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/sofia-variable-count.json
+[cmv-badge]: https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/core-media-var-count.json
 
 Async Rust client for FreeSWITCH
 [ESL](https://developer.signalwire.com/freeswitch/FreeSWITCH-Explained/Client-and-Developer-Interfaces/Event-Socket-Library/).

@@ -150,17 +150,17 @@ pub use freeswitch_types::{channel, commands, event, headers, lookup, prelude, v
 // Re-export domain types from freeswitch-types
 pub use freeswitch_types::{
     AnswerState, Application, BridgeDialString, CallDirection, CallState, ChannelState,
-    ChannelTimetable, ChannelVariable, DialString, DialplanType, Endpoint, EslArray, EslEvent,
-    EslEventPriority, EslEventType, EventFormat, EventHeader, EventSubscription,
-    EventSubscriptionError, GroupCallOrder, HangupCause, HeaderLookup, MultipartBody,
-    MultipartItem, Originate, OriginateError, OriginateTarget, ParseAnswerStateError,
-    ParseCallDirectionError, ParseCallStateError, ParseChannelStateError,
-    ParseChannelVariableError, ParseDialplanTypeError, ParseEventFormatError,
-    ParseEventHeaderError, ParseEventTypeError, ParseGroupCallOrderError, ParseHangupCauseError,
-    ParsePriorityError, ParseTimetableError, SipHeaderPrefix, SipPassthroughHeader,
-    TimetablePrefix, UuidAnswer, UuidBridge, UuidDeflect, UuidGetVar, UuidHold, UuidKill,
-    UuidSendDtmf, UuidSetVar, UuidTransfer, VariableName, Variables, VariablesType,
-    DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT,
+    ChannelTimetable, ChannelVariable, CoreMediaVariable, DialString, DialplanType, Endpoint,
+    EslArray, EslEvent, EslEventPriority, EslEventType, EventFormat, EventHeader,
+    EventSubscription, EventSubscriptionError, GroupCallOrder, HangupCause, HeaderLookup,
+    MultipartBody, MultipartItem, Originate, OriginateError, OriginateTarget,
+    ParseAnswerStateError, ParseCallDirectionError, ParseCallStateError, ParseChannelStateError,
+    ParseChannelVariableError, ParseCoreMediaVariableError, ParseDialplanTypeError,
+    ParseEventFormatError, ParseEventHeaderError, ParseEventTypeError, ParseGroupCallOrderError,
+    ParseHangupCauseError, ParsePriorityError, ParseTimetableError, SipHeaderPrefix,
+    SipPassthroughHeader, TimetablePrefix, UuidAnswer, UuidBridge, UuidDeflect, UuidGetVar,
+    UuidHold, UuidKill, UuidSendDtmf, UuidSetVar, UuidTransfer, VariableName, Variables,
+    VariablesType, DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT,
 };
 
 pub use app::dptools::AppCommand;

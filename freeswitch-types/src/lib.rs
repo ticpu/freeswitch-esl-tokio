@@ -60,6 +60,7 @@ pub use sip_header::{
     SipGeolocation, SipGeolocationRef, SipHeader, SipHeaderAddr, SipHeaderLookup,
 };
 pub use variables::{
-    ChannelVariable, EslArray, MultipartBody, MultipartItem, ParseChannelVariableError,
-    SipHeaderPrefix, SipPassthroughHeader, VariableName,
+    ChannelVariable, CoreMediaVariable, EslArray, MultipartBody, MultipartItem,
+    ParseChannelVariableError, ParseCoreMediaVariableError, SipHeaderPrefix, SipPassthroughHeader,
+    VariableName,
 };

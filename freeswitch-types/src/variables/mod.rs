@@ -2,12 +2,14 @@
 //! variable name enums.
 
 mod core;
+mod core_media;
 mod esl_array;
 mod sip_multipart;
 mod sip_passthrough;
 mod sofia;
 
 pub use self::core::{ChannelVariable, ParseChannelVariableError};
+pub use core_media::{CoreMediaVariable, ParseCoreMediaVariableError};
 pub use esl_array::EslArray;
 pub use sip_multipart::{MultipartBody, MultipartItem};
 pub use sip_passthrough::{
@@ -35,5 +37,11 @@ impl VariableName for ChannelVariable {
 impl VariableName for SofiaVariable {
     fn as_str(&self) -> &str {
         SofiaVariable::as_str(self)
+    }
+}
+
+impl VariableName for CoreMediaVariable {
+    fn as_str(&self) -> &str {
+        CoreMediaVariable::as_str(self)
     }
 }
