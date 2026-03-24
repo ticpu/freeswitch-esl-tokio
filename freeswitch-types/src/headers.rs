@@ -84,6 +84,12 @@ sip_header::define_header_enum! {
         FreeswitchVersion => "FreeSWITCH-Version",
         FreeswitchDomain => "FreeSWITCH-Domain",
         FreeswitchUser => "FreeSWITCH-User",
+
+        // --- Application (from switch_core_session.c) ---
+        Application => "Application",
+        ApplicationData => "Application-Data",
+        ApplicationResponse => "Application-Response",
+        ApplicationUuid => "Application-UUID",
     }
 }
 
@@ -351,6 +357,10 @@ mod tests {
             EventHeader::ChannelVideoReadCodecRate,
             EventHeader::ChannelVideoWriteCodecName,
             EventHeader::ChannelVideoWriteCodecRate,
+            EventHeader::Application,
+            EventHeader::ApplicationData,
+            EventHeader::ApplicationResponse,
+            EventHeader::ApplicationUuid,
         ];
         for v in variants {
             let wire = v.to_string();
