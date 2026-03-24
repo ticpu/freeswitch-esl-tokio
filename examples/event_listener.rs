@@ -6,7 +6,7 @@
 //!        cargo run --example event_listener -- -d    # dump raw wire data to stdout
 
 use freeswitch_esl_tokio::{
-    EslClient, EslError, EslEventType, EventFormat, EventHeader, HeaderLookup,
+    EslClient, EslError, EslEventType, EventFormat, EventHeader, EventSubscription, HeaderLookup,
     DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT,
 };
 use std::collections::HashMap;
@@ -48,26 +48,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    info!("Subscribing to events...");
-    if dump_raw {
-        client
-            .subscribe_all_events(EventFormat::Plain)
-            .await?;
+    // Build an EventSubscription describing everything we want to receive.
+    // apply_subscription() sends filters and the event command in one call.
+    let subscription = if dump_raw {
+        EventSubscription::all(EventFormat::Plain)
     } else {
-        client
-            .subscribe_events(EventFormat::Plain, EslEventType::CHANNEL_EVENTS)
-            .await?;
-        client
-            .subscribe_events(
-                EventFormat::Plain,
-                &[
-                    EslEventType::Dtmf,
-                    EslEventType::Heartbeat,
-                    EslEventType::BackgroundJob,
-                ],
-            )
-            .await?;
-    }
+        EventSubscription::new(EventFormat::Plain)
+            .events(EslEventType::CHANNEL_EVENTS)
+            .event(EslEventType::Dtmf)
+            .event(EslEventType::Heartbeat)
+            .event(EslEventType::BackgroundJob)
+    };
+
+    info!("Subscribing to events...");
+    client
+        .apply_subscription(&subscription)
+        .await?;
 
     let mut active_calls: HashMap<String, CallInfo> = HashMap::new();
     let mut event_count = 0u64;
