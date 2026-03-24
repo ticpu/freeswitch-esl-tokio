@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 /// Channel state from `switch_channel_state_t` -- carried in the `Channel-State` header
 /// as a string (`CS_ROUTING`) and in `Channel-State-Number` as an integer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 #[repr(u8)]
@@ -947,6 +947,8 @@ mod tests {
         assert!(ChannelState::CsReporting < ChannelState::CsDestroy);
     }
 
+    // Negated >= reads as "not yet in teardown", which is the real consumer intent.
+    #[allow(clippy::nonminimal_bool)]
     #[test]
     fn channel_state_teardown_check() {
         assert!(ChannelState::CsHangup >= ChannelState::CsHangup);
