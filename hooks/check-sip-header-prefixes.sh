@@ -6,7 +6,7 @@
 # SipHeader variants. This hook ensures no new headers were added to
 # sofia.c that sip-header doesn't know about.
 #
-# Usage: check-sip-invite-headers.sh [path-to-freeswitch-source]
+# Usage: check-sip-header-prefixes.sh [path-to-freeswitch-source]
 #
 # The FreeSWITCH source is located via (in order):
 #   1. First argument

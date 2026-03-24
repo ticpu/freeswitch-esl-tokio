@@ -9,7 +9,7 @@
 |---|---|
 | [![EslEventType][evt-badge]][ci] [![HangupCause][hc-badge]][ci] | [![EventHeader][eh-badge]][docs] [![ChannelVariable][cv-badge]][docs] |
 | [![ChannelState][cs-badge]][ci] [![CallState][ccs-badge]][ci] | [![HeaderLookup][hl-badge]][docs] |
-| [![SipPassthroughHeader][sph-badge]][ci] | [![SofiaVariable][sv-badge]][docs] |
+| [![SipHeaderPrefix][sph-badge]][ci] | [![SofiaVariable][sv-badge]][docs] |
 | [![CoreMediaVariable][cmv-badge]][ci] | |
 
 [ci]: https://github.com/ticpu/freeswitch-esl-tokio/actions/workflows/ci.yml
@@ -22,7 +22,7 @@
 [eh-badge]: https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/event-header-count.json
 [cv-badge]: https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/channel-var-count.json
 [hl-badge]: https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/header-lookup-count.json
-[sph-badge]: https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/sip-invite-header-count.json
+[sph-badge]: https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/sip-header-prefix-count.json
 [sv-badge]: https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/sofia-variable-count.json
 [cmv-badge]: https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/ticpu/def178758b6a88effff310aca87b6b50/raw/core-media-var-count.json
 
@@ -624,7 +624,7 @@ The pre-commit hook enforces:
 - `cargo clippy -- -D warnings` -- lint warnings as errors
 - `RUSTDOCFLAGS="-D missing_docs" cargo doc` -- all public items documented
 - `hooks/check-event-types.sh` -- `EslEventType` enum matches C ESL `EVENT_NAMES[]`
-- `hooks/check-sip-invite-headers.sh` -- `SipPassthroughHeader` wire format matches `sofia_parse_all_invite_headers()`
+- `hooks/check-sip-header-prefixes.sh` -- `SipHeader` variants cover all `sip_i_*` names in sofia.c
 
 ### Testing
 

@@ -63,7 +63,7 @@ jobs:
           echo "EVENT_HEADER_COUNT=$(grep -c '=> "' freeswitch-types/src/headers.rs)" >> "$GITHUB_ENV"
           echo "CHANNEL_VAR_COUNT=$(grep -c '=> "' freeswitch-types/src/variables/core.rs)" >> "$GITHUB_ENV"
           echo "HEADER_LOOKUP_COUNT=$(sed -n '/^pub trait HeaderLookup/,/^}/p' freeswitch-types/src/lookup.rs | grep -c '^ *fn ')" >> "$GITHUB_ENV"
-          echo "SIP_INVITE_HEADER_COUNT=$(grep -c '=> "' freeswitch-types/src/variables/sip_passthrough.rs)" >> "$GITHUB_ENV"
+          echo "SIP_HEADER_PREFIX_COUNT=$(grep -c '=> "' freeswitch-types/src/variables/sip_passthrough.rs)" >> "$GITHUB_ENV"
           echo "SOFIA_VARIABLE_COUNT=$(grep -c '=> "' freeswitch-types/src/variables/sofia.rs)" >> "$GITHUB_ENV"
 
       - name: Test
@@ -161,15 +161,15 @@ jobs:
           message: "${{ env.HEADER_LOOKUP_COUNT }} accessors"
           color: blue
 
-      - name: Update SipInviteHeader count badge
+      - name: Update SipHeaderPrefix count badge
         if: github.ref == 'refs/heads/master' && github.event_name == 'push'
         uses: schneegans/dynamic-badges-action@v1.7.0
         with:
           auth: ${{ secrets.GIST_SECRET }}
           gistID: def178758b6a88effff310aca87b6b50
-          filename: sip-invite-header-count.json
-          label: SipInviteHeader
-          message: "${{ env.SIP_INVITE_HEADER_COUNT }}"
+          filename: sip-header-prefix-count.json
+          label: SipHeaderPrefix
+          message: "${{ env.SIP_HEADER_PREFIX_COUNT }}"
           color: blue
 
       - name: Update SofiaVariable count badge

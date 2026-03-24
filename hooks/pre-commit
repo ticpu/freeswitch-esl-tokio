@@ -55,7 +55,7 @@ if ! "$SCRIPT_DIR/check-call-states.sh"; then
 fi
 
 echo "Checking SIP header coverage against sofia.c..."
-if ! "$SCRIPT_DIR/check-sip-invite-headers.sh"; then
+if ! "$SCRIPT_DIR/check-sip-header-prefixes.sh"; then
     echo "❌ SipHeader enum (sip-header crate) is missing headers used by FreeSWITCH sofia.c."
     exit 1
 fi
