@@ -157,7 +157,7 @@ pub use freeswitch_types::{
     ParseAnswerStateError, ParseCallDirectionError, ParseCallStateError, ParseChannelStateError,
     ParseChannelVariableError, ParseCoreMediaVariableError, ParseDialplanTypeError,
     ParseEventFormatError, ParseEventHeaderError, ParseEventTypeError, ParseGroupCallOrderError,
-    ParseHangupCauseError, ParsePriorityError, ParseTimetableError, SipHeaderPrefix,
+    ParseHangupCauseError, ParsePriorityError, ParseTimetableError, RtpStatUnit, SipHeaderPrefix,
     SipPassthroughHeader, TimetablePrefix, UuidAnswer, UuidBridge, UuidDeflect, UuidGetVar,
     UuidHold, UuidKill, UuidSendDtmf, UuidSetVar, UuidTransfer, VariableName, Variables,
     VariablesType, DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT,

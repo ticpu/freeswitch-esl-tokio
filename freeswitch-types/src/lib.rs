@@ -61,6 +61,6 @@ pub use sip_header::{
 };
 pub use variables::{
     ChannelVariable, CoreMediaVariable, EslArray, MultipartBody, MultipartItem,
-    ParseChannelVariableError, ParseCoreMediaVariableError, SipHeaderPrefix, SipPassthroughHeader,
-    VariableName,
+    ParseChannelVariableError, ParseCoreMediaVariableError, RtpStatUnit, SipHeaderPrefix,
+    SipPassthroughHeader, VariableName,
 };

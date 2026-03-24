@@ -1,5 +1,52 @@
 //! RTP media statistics variables set by `switch_core_media_set_stats()`.
 
+use std::fmt;
+
+/// Unit of measurement for an RTP statistic channel variable.
+///
+/// Returned by [`CoreMediaVariable::unit()`] to provide display and
+/// categorization metadata for RTP statistics. Use `Display` to format
+/// the unit as a human-readable suffix (e.g., `"bytes"`, `"ms"`, `"MOS"`).
+/// Dimensionless statistics ([`Ratio`](Self::Ratio), [`Count`](Self::Count))
+/// display as an empty string.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[non_exhaustive]
+pub enum RtpStatUnit {
+    /// Raw or media byte count.
+    Bytes,
+    /// RTCP octet count (RFC 3550).
+    Octets,
+    /// Packet count (RTP, RTCP, or jitter buffer size).
+    Packets,
+    /// Quality percentage (R-factor).
+    Percent,
+    /// Mean Opinion Score.
+    Mos,
+    /// Jitter variance or mean interval in milliseconds.
+    Milliseconds,
+    /// Dimensionless ratio (loss rate, burst rate).
+    Ratio,
+    /// Dimensionless count (flaw total).
+    Count,
+}
+
+impl fmt::Display for RtpStatUnit {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Bytes => "bytes",
+            Self::Octets => "octets",
+            Self::Packets => "packets",
+            Self::Percent => "%",
+            Self::Mos => "MOS",
+            Self::Milliseconds => "ms",
+            Self::Ratio => "",
+            Self::Count => "",
+        })
+    }
+}
+
 /// Error returned when parsing an unrecognized core media variable name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseCoreMediaVariableError(pub String);
@@ -118,6 +165,99 @@ sip_header::define_header_enum! {
         // --- Text RTCP ---
         RtpTextRtcpPacketCount => "rtp_text_rtcp_packet_count",
         RtpTextRtcpOctetCount => "rtp_text_rtcp_octet_count",
+    }
+}
+
+impl CoreMediaVariable {
+    /// Unit of measurement for this RTP statistic.
+    pub fn unit(&self) -> RtpStatUnit {
+        use CoreMediaVariable::*;
+        match self {
+            RtpAudioInRawBytes
+            | RtpAudioInMediaBytes
+            | RtpAudioOutRawBytes
+            | RtpAudioOutMediaBytes
+            | RtpVideoInRawBytes
+            | RtpVideoInMediaBytes
+            | RtpVideoOutRawBytes
+            | RtpVideoOutMediaBytes
+            | RtpTextInRawBytes
+            | RtpTextInMediaBytes
+            | RtpTextOutRawBytes
+            | RtpTextOutMediaBytes => RtpStatUnit::Bytes,
+
+            RtpAudioInPacketCount
+            | RtpAudioInMediaPacketCount
+            | RtpAudioInSkipPacketCount
+            | RtpAudioInJitterPacketCount
+            | RtpAudioInDtmfPacketCount
+            | RtpAudioInCngPacketCount
+            | RtpAudioInFlushPacketCount
+            | RtpAudioInLargestJbSize
+            | RtpAudioOutPacketCount
+            | RtpAudioOutMediaPacketCount
+            | RtpAudioOutSkipPacketCount
+            | RtpAudioOutDtmfPacketCount
+            | RtpAudioOutCngPacketCount
+            | RtpAudioRtcpPacketCount
+            | RtpVideoInPacketCount
+            | RtpVideoInMediaPacketCount
+            | RtpVideoInSkipPacketCount
+            | RtpVideoInJitterPacketCount
+            | RtpVideoInDtmfPacketCount
+            | RtpVideoInCngPacketCount
+            | RtpVideoInFlushPacketCount
+            | RtpVideoInLargestJbSize
+            | RtpVideoOutPacketCount
+            | RtpVideoOutMediaPacketCount
+            | RtpVideoOutSkipPacketCount
+            | RtpVideoOutDtmfPacketCount
+            | RtpVideoOutCngPacketCount
+            | RtpVideoRtcpPacketCount
+            | RtpTextInPacketCount
+            | RtpTextInMediaPacketCount
+            | RtpTextInSkipPacketCount
+            | RtpTextInJitterPacketCount
+            | RtpTextInDtmfPacketCount
+            | RtpTextInCngPacketCount
+            | RtpTextInFlushPacketCount
+            | RtpTextInLargestJbSize
+            | RtpTextOutPacketCount
+            | RtpTextOutMediaPacketCount
+            | RtpTextOutSkipPacketCount
+            | RtpTextOutDtmfPacketCount
+            | RtpTextOutCngPacketCount
+            | RtpTextRtcpPacketCount => RtpStatUnit::Packets,
+
+            RtpAudioRtcpOctetCount | RtpVideoRtcpOctetCount | RtpTextRtcpOctetCount => {
+                RtpStatUnit::Octets
+            }
+
+            RtpAudioInJitterMinVariance
+            | RtpAudioInJitterMaxVariance
+            | RtpAudioInMeanInterval
+            | RtpVideoInJitterMinVariance
+            | RtpVideoInJitterMaxVariance
+            | RtpVideoInMeanInterval
+            | RtpTextInJitterMinVariance
+            | RtpTextInJitterMaxVariance
+            | RtpTextInMeanInterval => RtpStatUnit::Milliseconds,
+
+            RtpAudioInJitterLossRate
+            | RtpAudioInJitterBurstRate
+            | RtpVideoInJitterLossRate
+            | RtpVideoInJitterBurstRate
+            | RtpTextInJitterLossRate
+            | RtpTextInJitterBurstRate => RtpStatUnit::Ratio,
+
+            RtpAudioInFlawTotal | RtpVideoInFlawTotal | RtpTextInFlawTotal => RtpStatUnit::Count,
+
+            RtpAudioInQualityPercentage
+            | RtpVideoInQualityPercentage
+            | RtpTextInQualityPercentage => RtpStatUnit::Percent,
+
+            RtpAudioInMos | RtpVideoInMos | RtpTextInMos => RtpStatUnit::Mos,
+        }
     }
 }
 

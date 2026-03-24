@@ -9,7 +9,7 @@ mod sip_passthrough;
 mod sofia;
 
 pub use self::core::{ChannelVariable, ParseChannelVariableError};
-pub use core_media::{CoreMediaVariable, ParseCoreMediaVariableError};
+pub use core_media::{CoreMediaVariable, ParseCoreMediaVariableError, RtpStatUnit};
 pub use esl_array::EslArray;
 pub use sip_multipart::{MultipartBody, MultipartItem};
 pub use sip_passthrough::{

@@ -52,8 +52,9 @@ for prefix in $prefixes; do
 done
 c_names=$(echo "$c_names" | grep -v '^$' | sort)
 
-# Extract wire names from CoreMediaVariable enum
-rust_names=$(grep -oP '=> "\K[^"]+' "$RUST_FILE" | sort)
+# Extract wire names from the define_header_enum! macro block only
+rust_names=$(sed -n '/define_header_enum!/,/^}/p' "$RUST_FILE" \
+	| grep -oP '=> "\K[^"]+' | sort)
 
 rust_count=$(echo "$rust_names" | wc -l)
 c_count=$(echo "$c_names" | wc -l)
