@@ -961,6 +961,14 @@ mod tests {
     // --- CallState tests ---
 
     #[test]
+    fn call_state_ordering_matches_c_enum() {
+        assert!(CallState::Down < CallState::Dialing);
+        assert!(CallState::Dialing < CallState::Ringing);
+        assert!(CallState::Early < CallState::Active);
+        assert!(CallState::Active < CallState::Hangup);
+    }
+
+    #[test]
     fn test_call_state_display() {
         assert_eq!(CallState::Down.to_string(), "DOWN");
         assert_eq!(CallState::Dialing.to_string(), "DIALING");
