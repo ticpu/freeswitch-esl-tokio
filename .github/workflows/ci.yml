@@ -63,7 +63,7 @@ jobs:
           echo "EVENT_HEADER_COUNT=$(grep -c '=> "' freeswitch-types/src/headers.rs)" >> "$GITHUB_ENV"
           echo "CHANNEL_VAR_COUNT=$(grep -c '=> "' freeswitch-types/src/variables/core.rs)" >> "$GITHUB_ENV"
           echo "HEADER_LOOKUP_COUNT=$(sed -n '/^pub trait HeaderLookup/,/^}/p' freeswitch-types/src/lookup.rs | grep -c '^ *fn ')" >> "$GITHUB_ENV"
-          echo "SIP_INVITE_HEADER_COUNT=$(grep -c '=> "' freeswitch-types/src/variables/sip_invite.rs)" >> "$GITHUB_ENV"
+          echo "SIP_INVITE_HEADER_COUNT=$(grep -c '=> "' freeswitch-types/src/variables/sip_passthrough.rs)" >> "$GITHUB_ENV"
           echo "SOFIA_VARIABLE_COUNT=$(grep -c '=> "' freeswitch-types/src/variables/sofia.rs)" >> "$GITHUB_ENV"
 
       - name: Test
