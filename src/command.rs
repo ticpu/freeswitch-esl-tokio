@@ -134,7 +134,6 @@ impl EslResponse {
     pub fn event_uuid(&self) -> Option<&str> {
         self.reply_text()
             .and_then(|t| t.strip_prefix("+OK "))
-            .map(|s| s.trim())
             .filter(|s| !s.is_empty())
     }
 
@@ -577,18 +576,10 @@ impl EslCommand {
     /// and strips the trailing `\n\n` terminator for readability.
     pub fn redact_wire<'a>(&self, wire: &'a str) -> Cow<'a, str> {
         match self {
-            EslCommand::Auth { .. } => Cow::Owned(
-                Self::format_simple_command("auth", &["[REDACTED]"])
-                    .strip_suffix(HEADER_TERMINATOR)
-                    .unwrap_or_default()
-                    .to_owned(),
-            ),
-            EslCommand::UserAuth { user, .. } => Cow::Owned(
-                Self::format_simple_command("userauth", &[&format!("{}:[REDACTED]", user)])
-                    .strip_suffix(HEADER_TERMINATOR)
-                    .unwrap_or_default()
-                    .to_owned(),
-            ),
+            EslCommand::Auth { .. } => Cow::Owned("auth [REDACTED]".into()),
+            EslCommand::UserAuth { user, .. } => {
+                Cow::Owned(format!("userauth {}:[REDACTED]", user))
+            }
             _ => Cow::Borrowed(
                 wire.strip_suffix(HEADER_TERMINATOR)
                     .unwrap_or(wire),
@@ -599,27 +590,33 @@ impl EslCommand {
 
 /// Parse an API response body, handling `+OK`/`-ERR`/`-USAGE` prefixes.
 ///
-/// Returns the meaningful payload after stripping the prefix on success.
+/// A trailing `\n` (the standard FreeSWITCH API output terminator) is
+/// stripped; all other content is preserved verbatim.
 /// Returns [`EslError::CommandFailed`] for `-ERR` and `-USAGE` responses,
-/// and [`EslError::ProtocolError`] for empty bodies.
+/// and [`EslError::ProtocolError`] if the body is empty after stripping.
 pub fn parse_api_body(body: &str) -> EslResult<&str> {
-    let trimmed = body.trim();
-    if trimmed.is_empty() {
+    // Strip the trailing \n that FreeSWITCH appends to API output.
+    let body = body
+        .strip_suffix('\n')
+        .unwrap_or(body);
+    let body = body
+        .strip_suffix('\r')
+        .unwrap_or(body);
+    if body.is_empty() {
         return Err(EslError::ProtocolError {
             message: "api response body is empty".into(),
         });
     }
-    if let Some(rest) = trimmed.strip_prefix("+OK") {
+    if let Some(rest) = body.strip_prefix("+OK") {
         Ok(rest
             .strip_prefix(' ')
-            .unwrap_or(rest)
-            .trim())
-    } else if trimmed.starts_with("-ERR") || trimmed.starts_with("-USAGE") {
+            .unwrap_or(rest))
+    } else if body.starts_with("-ERR") || body.starts_with("-USAGE") {
         Err(EslError::CommandFailed {
-            reply_text: trimmed.to_string(),
+            reply_text: body.to_string(),
         })
     } else {
-        Ok(trimmed)
+        Ok(body)
     }
 }
 

@@ -154,7 +154,6 @@ impl EslParser {
                     // Check if we need a body
                     if let Some(length_str) = headers.get(HEADER_CONTENT_LENGTH) {
                         let length: usize = length_str
-                            .trim()
                             .parse()
                             .map_err(|_| EslError::InvalidHeader {
                                 header: format!("Content-Length: {}", length_str),
@@ -227,16 +226,18 @@ impl EslParser {
         let mut headers = HashMap::new();
 
         for line in headers_str.lines() {
-            let line = line.trim();
+            let line = line
+                .strip_suffix('\r')
+                .unwrap_or(line);
             if line.is_empty() {
                 continue;
             }
 
             if let Some(colon_pos) = line.find(':') {
-                let key = line[..colon_pos]
-                    .trim()
-                    .to_string();
-                let raw_value = line[colon_pos + 1..].trim();
+                let key = line[..colon_pos].to_string();
+                let raw_value = line[colon_pos + 1..]
+                    .strip_prefix(' ')
+                    .unwrap_or(&line[colon_pos + 1..]);
                 let value = percent_decode_str(raw_value)
                     .decode_utf8()
                     .map(|s| s.into_owned())
@@ -325,15 +326,17 @@ impl EslParser {
 
         // Parse event headers from the body, percent-decoding values
         for line in header_section.lines() {
-            let line = line.trim();
+            let line = line
+                .strip_suffix('\r')
+                .unwrap_or(line);
             if line.is_empty() {
                 continue;
             }
             if let Some(colon_pos) = line.find(':') {
-                let key = line[..colon_pos]
-                    .trim()
-                    .to_string();
-                let raw_value = line[colon_pos + 1..].trim();
+                let key = line[..colon_pos].to_string();
+                let raw_value = line[colon_pos + 1..]
+                    .strip_prefix(' ')
+                    .unwrap_or(&line[colon_pos + 1..]);
                 let value = percent_decode_str(raw_value)
                     .decode_utf8()
                     .map(|s| s.into_owned())
