@@ -191,8 +191,8 @@ Keep the boundary clean — `EslClient` sends strings and returns `EslResponse`.
 ## v1.5 Backports and Deprecations
 
 This branch (v1) receives backports from 2.0 and deprecation warnings to
-ease migration. Last backport base: master commit 1c4adfa (fix: add
-BgJobTracker cleanup helpers). Key changes in v1.5:
+ease migration. Last backport base: master commit 215d41b (feat: derive
+PartialOrd and Ord for ChannelState and CallState). Key changes in v1.5:
 
 **Backported from 2.0:**
 
@@ -209,6 +209,17 @@ BgJobTracker cleanup helpers). Key changes in v1.5:
   (0426e06)
 - `EslError::JsonError`/`XmlError` wrapped as `String` (stops leaking dep types).
   (0426e06)
+- `PartialOrd`/`Ord` for `ChannelState` and `CallState` — enables
+  `state >= CsHangup` lifecycle comparisons matching C idioms. (215d41b)
+- Application event headers (`Application`, `Application-Data`,
+  `Application-Response`, `Application-UUID`) in `EventHeader`. (e83e503)
+- `^^` alternate separator in `Variables::from_str`. (6cd7b27)
+
+**Bug fixes backported from 2.0:**
+
+- Replace `.trim()` on wire content with explicit protocol suffix stripping
+  in `parse_api_body`, protocol header parsing, `event_uuid`, and
+  `redact_wire`. (ec4cdc2)
 
 **Deprecated (use the replacement before upgrading to 2.0):**
 
