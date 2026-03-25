@@ -618,6 +618,38 @@ mod tests {
         assert_eq!(parsed.get("sip_h_Call-Info"), Some("<url>;meta=123,<uri>"));
     }
 
+    #[test]
+    fn variables_parse_alternate_separator() {
+        let input =
+            "{^^|origination_caller_id_number=9005551212|sip_h_Call-Info=<url>;meta=123,<uri>}";
+        let parsed: Variables = input
+            .parse()
+            .unwrap();
+        assert_eq!(
+            parsed.get("origination_caller_id_number"),
+            Some("9005551212")
+        );
+        assert_eq!(parsed.get("sip_h_Call-Info"), Some("<url>;meta=123,<uri>"));
+    }
+
+    #[test]
+    fn variables_parse_alternate_separator_colon() {
+        let input = "{^^:key1:val1:key2=val2}";
+        let parsed: Variables = input
+            .parse()
+            .unwrap();
+        assert_eq!(parsed.get("key1"), Some("val1"));
+        assert_eq!(parsed.get("key2"), Some("val2"));
+    }
+
+    #[test]
+    fn variables_parse_alternate_separator_missing_char() {
+        let input = "{^^}";
+        assert!(input
+            .parse::<Variables>()
+            .is_err());
+    }
+
     // --- Endpoint ---
 
     #[test]

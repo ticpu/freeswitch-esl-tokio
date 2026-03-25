@@ -109,6 +109,37 @@ mod tests {
     }
 
     #[test]
+    fn application_headers_parse() {
+        assert_eq!(
+            "Application".parse::<EventHeader>(),
+            Ok(EventHeader::Application)
+        );
+        assert_eq!(
+            "Application-Data".parse::<EventHeader>(),
+            Ok(EventHeader::ApplicationData)
+        );
+        assert_eq!(
+            "Application-Response".parse::<EventHeader>(),
+            Ok(EventHeader::ApplicationResponse)
+        );
+        assert_eq!(
+            "Application-UUID".parse::<EventHeader>(),
+            Ok(EventHeader::ApplicationUuid)
+        );
+    }
+
+    #[test]
+    fn application_headers_display() {
+        assert_eq!(EventHeader::Application.to_string(), "Application");
+        assert_eq!(EventHeader::ApplicationData.to_string(), "Application-Data");
+        assert_eq!(
+            EventHeader::ApplicationResponse.to_string(),
+            "Application-Response"
+        );
+        assert_eq!(EventHeader::ApplicationUuid.to_string(), "Application-UUID");
+    }
+
+    #[test]
     fn from_str_round_trip_all_variants() {
         let variants = [
             EventHeader::EventName,
@@ -139,6 +170,10 @@ mod tests {
             EventHeader::DtmfDigit,
             EventHeader::Priority,
             EventHeader::LogLevel,
+            EventHeader::Application,
+            EventHeader::ApplicationData,
+            EventHeader::ApplicationResponse,
+            EventHeader::ApplicationUuid,
         ];
         for v in variants {
             let wire = v.to_string();

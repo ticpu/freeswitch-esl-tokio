@@ -774,6 +774,43 @@ mod tests {
         assert_eq!(tt.hungup, Some(0));
     }
 
+    // --- ChannelState ordering ---
+
+    #[test]
+    fn channel_state_ord_reflects_lifecycle() {
+        assert!(ChannelState::CsNew < ChannelState::CsInit);
+        assert!(ChannelState::CsInit < ChannelState::CsRouting);
+        assert!(ChannelState::CsExecute < ChannelState::CsHangup);
+        assert!(ChannelState::CsHangup < ChannelState::CsReporting);
+        assert!(ChannelState::CsReporting < ChannelState::CsDestroy);
+    }
+
+    #[test]
+    fn channel_state_ge_hangup_detects_teardown() {
+        assert!(ChannelState::CsHangup >= ChannelState::CsHangup);
+        assert!(ChannelState::CsReporting >= ChannelState::CsHangup);
+        assert!(ChannelState::CsDestroy >= ChannelState::CsHangup);
+        assert!(!(ChannelState::CsExecute >= ChannelState::CsHangup));
+    }
+
+    // --- CallState ordering ---
+
+    #[test]
+    fn call_state_ord_reflects_lifecycle() {
+        assert!(CallState::Down < CallState::Dialing);
+        assert!(CallState::Dialing < CallState::Ringing);
+        assert!(CallState::Ringing < CallState::Early);
+        assert!(CallState::Early < CallState::Active);
+        assert!(CallState::Active < CallState::Held);
+    }
+
+    #[test]
+    fn call_state_ge_active() {
+        assert!(CallState::Active >= CallState::Active);
+        assert!(CallState::Held >= CallState::Active);
+        assert!(!(CallState::Ringing >= CallState::Active));
+    }
+
     #[test]
     fn timetable_custom_prefix() {
         let mut event = EslEvent::new();
