@@ -6,7 +6,7 @@ use std::str::FromStr;
 
 /// Channel state from `switch_channel_state_t` — carried in the `Channel-State` header
 /// as a string (`CS_ROUTING`) and in `Channel-State-Number` as an integer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[non_exhaustive]
 #[repr(u8)]
 #[allow(missing_docs)]
@@ -117,7 +117,7 @@ impl FromStr for ChannelState {
 }
 
 /// Call state from `switch_channel_callstate_t` — carried in the `Channel-Call-State` header.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[non_exhaustive]
 #[allow(missing_docs)]
 pub enum CallState {
@@ -785,12 +785,15 @@ mod tests {
         assert!(ChannelState::CsReporting < ChannelState::CsDestroy);
     }
 
+    // Negated >= reads as "not yet in teardown", which is the real consumer intent.
+    #[allow(clippy::nonminimal_bool)]
     #[test]
     fn channel_state_ge_hangup_detects_teardown() {
         assert!(ChannelState::CsHangup >= ChannelState::CsHangup);
         assert!(ChannelState::CsReporting >= ChannelState::CsHangup);
         assert!(ChannelState::CsDestroy >= ChannelState::CsHangup);
         assert!(!(ChannelState::CsExecute >= ChannelState::CsHangup));
+        assert!(!(ChannelState::CsPark >= ChannelState::CsHangup));
     }
 
     // --- CallState ordering ---
@@ -804,6 +807,8 @@ mod tests {
         assert!(CallState::Active < CallState::Held);
     }
 
+    // Negated >= reads as "not yet active", which is the real consumer intent.
+    #[allow(clippy::nonminimal_bool)]
     #[test]
     fn call_state_ge_active() {
         assert!(CallState::Active >= CallState::Active);

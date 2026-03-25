@@ -190,14 +190,31 @@ impl FromStr for Variables {
         };
 
         let mut inner = IndexMap::new();
-        // Split on commas not preceded by backslash
-        for part in split_unescaped_commas(inner_str) {
-            let (key, value) = part
-                .split_once('=')
+        if let Some(rest) = inner_str.strip_prefix("^^") {
+            let sep = rest
+                .chars()
+                .next()
                 .ok_or_else(|| {
-                    OriginateError::ParseError(format!("missing = in variable: {}", part))
+                    OriginateError::ParseError("^^ without separator character".into())
                 })?;
-            inner.insert(key.to_string(), unescape_value(value));
+            let after_sep = &rest[sep.len_utf8()..];
+            for part in after_sep.split(sep) {
+                let (key, value) = part
+                    .split_once('=')
+                    .ok_or_else(|| {
+                        OriginateError::ParseError(format!("missing = in variable: {}", part))
+                    })?;
+                inner.insert(key.to_string(), value.to_string());
+            }
+        } else {
+            for part in split_unescaped_commas(inner_str) {
+                let (key, value) = part
+                    .split_once('=')
+                    .ok_or_else(|| {
+                        OriginateError::ParseError(format!("missing = in variable: {}", part))
+                    })?;
+                inner.insert(key.to_string(), unescape_value(value));
+            }
         }
 
         Ok(Self { vars_type, inner })
@@ -634,7 +651,7 @@ mod tests {
 
     #[test]
     fn variables_parse_alternate_separator_colon() {
-        let input = "{^^:key1:val1:key2=val2}";
+        let input = "{^^:key1=val1:key2=val2}";
         let parsed: Variables = input
             .parse()
             .unwrap();

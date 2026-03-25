@@ -50,6 +50,14 @@ define_header_enum! {
         DtmfDigit => "DTMF-Digit",
         Priority => "priority",
         LogLevel => "Log-Level",
+        /// Application name from CHANNEL_EXECUTE/CHANNEL_EXECUTE_COMPLETE events.
+        Application => "Application",
+        /// Application arguments.
+        ApplicationData => "Application-Data",
+        /// Application response string.
+        ApplicationResponse => "Application-Response",
+        /// UUID of the application execution.
+        ApplicationUuid => "Application-UUID",
     }
 }
 
