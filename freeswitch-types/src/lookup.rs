@@ -120,6 +120,39 @@ pub trait HeaderLookup {
         self.header(EventHeader::CallerCalleeIdName)
     }
 
+    /// `Channel-Presence-ID` header (e.g. `1000@example.com`).
+    fn channel_presence_id(&self) -> Option<&str> {
+        self.header(EventHeader::ChannelPresenceId)
+    }
+
+    /// `Presence-Call-Direction` header, parsed into a [`CallDirection`].
+    fn presence_call_direction(&self) -> Result<Option<CallDirection>, ParseCallDirectionError> {
+        match self.header(EventHeader::PresenceCallDirection) {
+            Some(s) => Ok(Some(s.parse()?)),
+            None => Ok(None),
+        }
+    }
+
+    /// `Event-Date-Timestamp` header (microseconds since epoch).
+    fn event_date_timestamp(&self) -> Option<&str> {
+        self.header(EventHeader::EventDateTimestamp)
+    }
+
+    /// `Event-Sequence` header (sequential event counter).
+    fn event_sequence(&self) -> Option<&str> {
+        self.header(EventHeader::EventSequence)
+    }
+
+    /// `DTMF-Duration` header (digit duration in milliseconds).
+    fn dtmf_duration(&self) -> Option<&str> {
+        self.header(EventHeader::DtmfDuration)
+    }
+
+    /// `DTMF-Source` header (e.g. `rtp`, `inband`).
+    fn dtmf_source(&self) -> Option<&str> {
+        self.header(EventHeader::DtmfSource)
+    }
+
     /// Parse the `Hangup-Cause` header into a [`HangupCause`].
     ///
     /// Returns `Ok(None)` if the header is absent, `Err` if present but unparseable.
@@ -556,6 +589,16 @@ mod tests {
         assert_eq!(s.pl_data(), None);
         assert_eq!(s.sip_event(), None);
         assert_eq!(s.gateway_name(), None);
+        assert_eq!(s.channel_presence_id(), None);
+        assert_eq!(
+            s.presence_call_direction()
+                .unwrap(),
+            None
+        );
+        assert_eq!(s.event_date_timestamp(), None);
+        assert_eq!(s.event_sequence(), None);
+        assert_eq!(s.dtmf_duration(), None);
+        assert_eq!(s.dtmf_source(), None);
     }
 
     #[test]
@@ -618,6 +661,7 @@ mod tests {
             ("Channel-Call-State", "BOGUS"),
             ("Answer-State", "bogus"),
             ("Call-Direction", "bogus"),
+            ("Presence-Call-Direction", "bogus"),
             ("priority", "BOGUS"),
             ("Hangup-Cause", "BOGUS"),
         ]);
@@ -635,6 +679,9 @@ mod tests {
             .is_err());
         assert!(s
             .call_direction()
+            .is_err());
+        assert!(s
+            .presence_call_direction()
             .is_err());
         assert!(s
             .priority()
