@@ -30,39 +30,9 @@ if ! test_output=$(cargo test --workspace 2>&1); then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
-echo "Checking EslEventType against C ESL..."
-if ! "$SCRIPT_DIR/check-event-types.sh"; then
-    echo "❌ EslEventType enum is out of sync with C ESL. Update freeswitch-types/src/event.rs."
-    exit 1
-fi
-
-echo "Checking HangupCause against switch_call_cause_t..."
-if ! "$SCRIPT_DIR/check-hangup-causes.sh"; then
-    echo "❌ HangupCause enum is out of sync with FreeSWITCH. Update freeswitch-types/src/channel.rs."
-    exit 1
-fi
-
-echo "Checking ChannelState against switch_channel_state_t..."
-if ! "$SCRIPT_DIR/check-channel-states.sh"; then
-    echo "❌ ChannelState enum is out of sync with FreeSWITCH. Update freeswitch-types/src/channel.rs."
-    exit 1
-fi
-
-echo "Checking CallState against switch_channel_callstate_t..."
-if ! "$SCRIPT_DIR/check-call-states.sh"; then
-    echo "❌ CallState enum is out of sync with FreeSWITCH. Update freeswitch-types/src/channel.rs."
-    exit 1
-fi
-
-echo "Checking SIP header coverage against sofia.c..."
-if ! "$SCRIPT_DIR/check-sip-header-prefixes.sh"; then
-    echo "❌ SipHeader enum (sip-header crate) is missing headers used by FreeSWITCH sofia.c."
-    exit 1
-fi
-
-echo "Checking CoreMediaVariable against set_stats()..."
-if ! "$SCRIPT_DIR/check-core-media-vars.sh"; then
-    echo "❌ CoreMediaVariable enum is out of sync with FreeSWITCH. Update freeswitch-types/src/variables/core_media.rs."
+echo "Checking enum sync against FreeSWITCH C source..."
+if ! python3 "$SCRIPT_DIR/check-enums.py" --quiet; then
+    echo "❌ Enum coverage out of sync with FreeSWITCH. Run: python3 hooks/check-enums.py"
     exit 1
 fi
 
