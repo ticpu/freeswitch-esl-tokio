@@ -311,6 +311,194 @@ mod tests {
     }
 
     #[test]
+    fn parse_missing_event_default_headers() {
+        // From switch_event_prep_for_delivery_detailed (switch_event.c)
+        assert!("Event-Date-Local"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Event-Date-GMT"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Event-Date-Timestamp"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Event-Calling-File"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Event-Calling-Function"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Event-Calling-Line-Number"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Event-Sequence"
+            .parse::<EventHeader>()
+            .is_ok());
+    }
+
+    #[test]
+    fn parse_missing_channel_basic_data_headers() {
+        // From switch_channel_event_set_basic_data (switch_channel.c)
+        assert!("Channel-Presence-ID"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Channel-Presence-Data"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Presence-Data-Cols"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Presence-Call-Direction"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Channel-HIT-Dialplan"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Session-External-ID"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Other-Type"
+            .parse::<EventHeader>()
+            .is_ok());
+    }
+
+    #[test]
+    fn parse_missing_callstate_and_dtmf_headers() {
+        // From switch_channel_perform_set_callstate (switch_channel.c)
+        assert!("Channel-Call-State-Number"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Original-Channel-Call-State"
+            .parse::<EventHeader>()
+            .is_ok());
+        // From switch_channel_dequeue_dtmf (switch_channel.c)
+        assert!("DTMF-Duration"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("DTMF-Source"
+            .parse::<EventHeader>()
+            .is_ok());
+    }
+
+    #[test]
+    fn parse_missing_caller_profile_headers() {
+        // From switch_caller_profile_event_set_data (switch_caller.c) with "Caller-" prefix
+        assert!("Caller-Logical-Direction"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Caller-Username"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Caller-Dialplan"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Caller-ANI"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Caller-ANI-II"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Caller-Source"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Caller-Transfer-Source"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Caller-RDNIS"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Caller-Channel-Name"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Caller-Profile-Index"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Caller-Screen-Bit"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Caller-Privacy-Hide-Name"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Caller-Privacy-Hide-Number"
+            .parse::<EventHeader>()
+            .is_ok());
+    }
+
+    #[test]
+    fn parse_missing_other_leg_headers() {
+        // From switch_caller_profile_event_set_data with "Other-Leg" prefix
+        assert!("Other-Leg-Direction"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Other-Leg-Logical-Direction"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Other-Leg-Username"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Other-Leg-Dialplan"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Other-Leg-Caller-ID-Name"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Other-Leg-Caller-ID-Number"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Other-Leg-Orig-Caller-ID-Name"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Other-Leg-Orig-Caller-ID-Number"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Other-Leg-Callee-ID-Name"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Other-Leg-Callee-ID-Number"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Other-Leg-Network-Addr"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Other-Leg-ANI"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Other-Leg-ANI-II"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Other-Leg-Destination-Number"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Other-Leg-Source"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Other-Leg-Transfer-Source"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Other-Leg-Context"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Other-Leg-RDNIS"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Other-Leg-Channel-Name"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Other-Leg-Profile-Index"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Other-Leg-Screen-Bit"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Other-Leg-Privacy-Hide-Name"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Other-Leg-Privacy-Hide-Number"
+            .parse::<EventHeader>()
+            .is_ok());
+    }
+
+    #[test]
     fn from_str_round_trip_all_variants() {
         let variants = [
             EventHeader::EventName,

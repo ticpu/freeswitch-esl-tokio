@@ -571,6 +571,46 @@ mod tests {
     }
 
     #[test]
+    fn channel_presence_id() {
+        let s = store_with(&[("Channel-Presence-ID", "1000@example.com")]);
+        assert_eq!(s.channel_presence_id(), Some("1000@example.com"));
+    }
+
+    #[test]
+    fn presence_call_direction_typed() {
+        let s = store_with(&[("Presence-Call-Direction", "outbound")]);
+        assert_eq!(
+            s.presence_call_direction()
+                .unwrap(),
+            Some(CallDirection::Outbound)
+        );
+    }
+
+    #[test]
+    fn event_date_timestamp() {
+        let s = store_with(&[("Event-Date-Timestamp", "1700000001000000")]);
+        assert_eq!(s.event_date_timestamp(), Some("1700000001000000"));
+    }
+
+    #[test]
+    fn event_sequence() {
+        let s = store_with(&[("Event-Sequence", "12345")]);
+        assert_eq!(s.event_sequence(), Some("12345"));
+    }
+
+    #[test]
+    fn dtmf_duration() {
+        let s = store_with(&[("DTMF-Duration", "2000")]);
+        assert_eq!(s.dtmf_duration(), Some("2000"));
+    }
+
+    #[test]
+    fn dtmf_source() {
+        let s = store_with(&[("DTMF-Source", "rtp")]);
+        assert_eq!(s.dtmf_source(), Some("rtp"));
+    }
+
+    #[test]
     fn invalid_values_return_err() {
         let s = store_with(&[
             ("Channel-State", "BOGUS"),
