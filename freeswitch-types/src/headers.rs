@@ -157,6 +157,33 @@ sip_header::define_header_enum! {
         OtherLegScreenBit => "Other-Leg-Screen-Bit",
         OtherLegPrivacyHideName => "Other-Leg-Privacy-Hide-Name",
         OtherLegPrivacyHideNumber => "Other-Leg-Privacy-Hide-Number",
+
+        // --- Heartbeat (from send_heartbeat in switch_core.c) ---
+        /// Seconds since FreeSWITCH startup.
+        UpTime => "Up-Time",
+        /// Milliseconds since FreeSWITCH startup.
+        UptimeMsec => "Uptime-msec",
+        MaxSessions => "Max-Sessions",
+        SessionPeakMax => "Session-Peak-Max",
+        SessionPeakFiveMin => "Session-Peak-FiveMin",
+        SessionPerSec => "Session-Per-Sec",
+        SessionPerSecFiveMin => "Session-Per-Sec-FiveMin",
+        SessionPerSecMax => "Session-Per-Sec-Max",
+        SessionPerSecLast => "Session-Per-Sec-Last",
+        SessionSinceStartup => "Session-Since-Startup",
+        IdleCpu => "Idle-CPU",
+        HeartbeatInterval => "Heartbeat-Interval",
+        EventInfo => "Event-Info",
+
+        // --- Log (from switch_log_meta_vprintf in switch_log.c) ---
+        LogData => "Log-Data",
+        LogFile => "Log-File",
+        LogFunction => "Log-Function",
+        LogLine => "Log-Line",
+        UserData => "User-Data",
+
+        // --- Application (from switch_core_session_exec in switch_core_session.c) ---
+        ApplicationUuidName => "Application-UUID-Name",
     }
 }
 
@@ -492,6 +519,75 @@ mod tests {
     }
 
     #[test]
+    fn parse_heartbeat_headers() {
+        assert!("Up-Time"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Uptime-msec"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Max-Sessions"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Session-Peak-Max"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Session-Peak-FiveMin"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Session-Per-Sec"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Session-Per-Sec-FiveMin"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Session-Per-Sec-Max"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Session-Per-Sec-Last"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Session-Since-Startup"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Idle-CPU"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Heartbeat-Interval"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Event-Info"
+            .parse::<EventHeader>()
+            .is_ok());
+    }
+
+    #[test]
+    fn parse_log_headers() {
+        assert!("Log-Data"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Log-File"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Log-Function"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("Log-Line"
+            .parse::<EventHeader>()
+            .is_ok());
+        assert!("User-Data"
+            .parse::<EventHeader>()
+            .is_ok());
+    }
+
+    #[test]
+    fn parse_application_uuid_name() {
+        assert!("Application-UUID-Name"
+            .parse::<EventHeader>()
+            .is_ok());
+    }
+
+    #[test]
     fn parse_missing_other_leg_headers() {
         // From switch_caller_profile_event_set_data with "Other-Leg" prefix
         assert!("Other-Leg-Direction"
@@ -670,6 +766,25 @@ mod tests {
             EventHeader::OtherLegScreenBit,
             EventHeader::OtherLegPrivacyHideName,
             EventHeader::OtherLegPrivacyHideNumber,
+            EventHeader::UpTime,
+            EventHeader::UptimeMsec,
+            EventHeader::MaxSessions,
+            EventHeader::SessionPeakMax,
+            EventHeader::SessionPeakFiveMin,
+            EventHeader::SessionPerSec,
+            EventHeader::SessionPerSecFiveMin,
+            EventHeader::SessionPerSecMax,
+            EventHeader::SessionPerSecLast,
+            EventHeader::SessionSinceStartup,
+            EventHeader::IdleCpu,
+            EventHeader::HeartbeatInterval,
+            EventHeader::EventInfo,
+            EventHeader::LogData,
+            EventHeader::LogFile,
+            EventHeader::LogFunction,
+            EventHeader::LogLine,
+            EventHeader::UserData,
+            EventHeader::ApplicationUuidName,
         ];
         for v in variants {
             let wire = v.to_string();
