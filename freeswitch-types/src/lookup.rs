@@ -201,6 +201,15 @@ pub trait HeaderLookup {
         self.header(EventHeader::Phrase)
     }
 
+    /// `Status` header (SIP response code) from `sofia::gateway_state` and
+    /// `sofia::sip_user_state` events.
+    fn sip_status_code(&self) -> Result<Option<u16>, std::num::ParseIntError> {
+        match self.header(EventHeader::Status) {
+            Some(s) => Ok(Some(s.parse()?)),
+            None => Ok(None),
+        }
+    }
+
     /// Parse the `State` header as a [`GatewayRegState`].
     ///
     /// Returns `Ok(None)` if absent, `Err` if present but unparseable.

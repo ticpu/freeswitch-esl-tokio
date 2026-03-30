@@ -191,6 +191,8 @@ sip_header::define_header_enum! {
         PingStatus => "Ping-Status",
         Phrase => "Phrase",
         ProfileName => "profile-name",
+        /// SIP response code (integer) from gateway_state and sip_user_state events.
+        Status => "Status",
     }
 }
 
@@ -812,6 +814,7 @@ mod tests {
             EventHeader::PingStatus,
             EventHeader::Phrase,
             EventHeader::ProfileName,
+            EventHeader::Status,
         ];
         for v in variants {
             let wire = v.to_string();

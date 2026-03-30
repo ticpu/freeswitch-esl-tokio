@@ -566,7 +566,6 @@ def main() -> int:
         "checks",
         nargs="*",
         default=list(ALL_CHECKS.keys()),
-        choices=list(ALL_CHECKS.keys()) + [[]],
         metavar="CHECK",
     )
     parser.add_argument(
@@ -588,6 +587,10 @@ def main() -> int:
     rc = 0
 
     for name in args.checks:
+        if name not in ALL_CHECKS:
+            parser.error(
+                f"invalid choice: {name!r} (choose from {', '.join(ALL_CHECKS)})"
+            )
         result = ALL_CHECKS[name](repo, resolver)
         results.append(result)
 
