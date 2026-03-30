@@ -37,7 +37,7 @@ jobs:
 
       - name: Verify and count enums against C source
         run: |
-          if ! json=$(python3 hooks/check-enums.py --json 2>/dev/null); then
+          if ! json=$(python3 hooks/check-enums.py --json); then
             echo "::warning::C source enum check failed"
             echo "C_SOURCE_AVAILABLE=false" >> "$GITHUB_ENV"
             exit 0
