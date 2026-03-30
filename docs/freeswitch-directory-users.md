@@ -209,6 +209,65 @@ Custom events use the `CUSTOM` event type with a subclass name. These can be use
 
 `sofia::register`, `sofia::pre_register`, `sofia::register_attempt`, `sofia::register_failure`, `sofia::unregister`, `sofia::expire`, `sofia::gateway_state`, `sofia::gateway_add`, `sofia::gateway_delete`, `sofia::gateway_invalid_digest_req`, `sofia::sip_user_state`, `sofia::notify_refer`, `sofia::reinvite`, `sofia::recovery_recv`, `sofia::recovery_send`, `sofia::recovery_recovered`, `sofia::error`, `sofia::profile_start`, `sofia::notify_watched_header`, `sofia::wrong_call_state`, `sofia::transferor`, `sofia::transferee`, `sofia::replaced`, `sofia::intercepted`, `sofia::bye_response`.
 
+Registration lifecycle events:
+
+| Subclass | When | `Event-Subclass` header |
+|---|---|---|
+| `sofia::pre_register` | FS issues a 401/407 challenge (no credentials yet) | `sofia::pre_register` |
+| `sofia::register_attempt` | Credentials received, any outcome | `sofia::register_attempt` |
+| `sofia::register` | Successful registration or refresh (`update-reg: true` on refresh) | `sofia::register` |
+| `sofia::unregister` | Explicit `expires: 0` from UA | `sofia::unregister` |
+| `sofia::expire` | Silent timeout, fired by the registrar's SQL expiry timer | `sofia::expire` |
+| `sofia::register_failure` | Hard 403 Forbidden (wrong password, disabled user) | `sofia::register_failure` |
+
+All are `SWITCH_EVENT_CUSTOM` in the C core — the ESL subscription token is `CUSTOM` followed by the subclass name(s). Subscribing to `CUSTOM sofia::gateway_state` receives **only** that subclass; other CUSTOM subclasses are filtered out by mod_event_socket before delivery.
+
+#### Subscribing to registration events with this crate
+
+```rust
+use freeswitch_esl_tokio::{EslClient, EventFormat, EventSubscription};
+
+let (client, mut events) = EslClient::connect(&host, port, &password).await?;
+
+// Subscribe only to the subclasses needed to track registrations.
+// custom_subclass() returns Err if the string contains spaces or newlines.
+let subscription = EventSubscription::new(EventFormat::Plain)
+    .custom_subclass("sofia::register").unwrap()
+    .custom_subclass("sofia::unregister").unwrap()
+    .custom_subclass("sofia::expire").unwrap();
+
+// Sends: event plain CUSTOM sofia::register sofia::unregister sofia::expire
+client.apply_subscription(&subscription).await?;
+
+while let Some(Ok(event)) = events.recv().await {
+    let subclass = event.header_str("Event-Subclass").unwrap_or("");
+    let user = event.header_str("from-user").unwrap_or("?");
+    let host = event.header_str("from-host").unwrap_or("?");
+    match subclass {
+        "sofia::register"   => println!("registered:   {}@{}", user, host),
+        "sofia::unregister" => println!("unregistered: {}@{}", user, host),
+        "sofia::expire"     => println!("expired:      {}@{}", user, host),
+        _                   => {}
+    }
+}
+```
+
+To restrict a directory ESL user to only these events, list the subclass names in `esl-allowed-events`. The `CUSTOM` token must appear before any subclass names:
+
+```xml
+<param name="esl-allowed-events" value="CUSTOM sofia::register sofia::unregister sofia::expire"/>
+```
+
+Standard event types and CUSTOM subclasses can be combined on the same line. **Standard event names must come before `CUSTOM`** — the parser uses a sticky flag: once `CUSTOM` is seen, every subsequent token is treated as a subclass name, not an event type.
+
+```xml
+<!-- Correct: standard events first, CUSTOM and subclasses at the end -->
+<param name="esl-allowed-events" value="CHANNEL_CREATE CHANNEL_DESTROY CUSTOM sofia::register sofia::unregister sofia::expire"/>
+
+<!-- Wrong: CHANNEL_CREATE after CUSTOM is inserted as a subclass string, not as the event type -->
+<param name="esl-allowed-events" value="CUSTOM sofia::register CHANNEL_CREATE"/>
+```
+
 ### mod_conference Events
 
 `conference::maintenance`, `conference::cdr`.
