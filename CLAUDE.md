@@ -137,41 +137,6 @@ cargo test --workspace --lib
 When FreeSWITCH ESL is available on `127.0.0.1:8022`, also run live tests:
 `ss -tlnp sport = :8022` to check, then `cargo test --test live_freeswitch -- --ignored`.
 
-## Release Workflow
-
-This is a two-crate workspace. `freeswitch-esl-tokio` depends on
-`freeswitch-types`, so **types must be published first**.
-
-### Pre-release checks
-
-```sh
-cargo fmt --all
-cargo clippy --workspace --release -- -D warnings
-cargo test --workspace --release
-cargo test --test live_freeswitch -- --ignored
-cargo build --workspace --release
-cargo build --examples
-cargo semver-checks check-release -p freeswitch-types
-cargo semver-checks check-release -p freeswitch-esl-tokio
-cargo publish --dry-run -p freeswitch-types
-```
-
-### Publish order
-
-```sh
-cargo publish -p freeswitch-types
-cargo publish -p freeswitch-esl-tokio
-```
-
-**Never `cargo publish` without completing these steps first:**
-
-1. Create signed annotated tags (`git tag -as`) with a brief changelog
-   in the tag message (use `git log --oneline <previous-tag>..HEAD` to
-   generate it)
-2. Push the tags (`git push --tags`)
-3. Wait for CI to pass on the tagged commit
-4. Only then `cargo publish` (types first, then ESL)
-
 ## Documentation Style
 
 All public items must have doc comments — the pre-commit hook enforces
