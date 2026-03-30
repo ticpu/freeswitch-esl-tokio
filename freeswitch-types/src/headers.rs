@@ -184,6 +184,13 @@ sip_header::define_header_enum! {
 
         // --- Application (from switch_core_session_exec in switch_core_session.c) ---
         ApplicationUuidName => "Application-UUID-Name",
+
+        // --- Sofia event headers (from mod_sofia CUSTOM events) ---
+        Gateway => "Gateway",
+        State => "State",
+        PingStatus => "Ping-Status",
+        Phrase => "Phrase",
+        ProfileName => "profile-name",
     }
 }
 
@@ -588,6 +595,21 @@ mod tests {
     }
 
     #[test]
+    fn parse_sofia_event_headers() {
+        assert_eq!("Gateway".parse::<EventHeader>(), Ok(EventHeader::Gateway));
+        assert_eq!("State".parse::<EventHeader>(), Ok(EventHeader::State));
+        assert_eq!(
+            "Ping-Status".parse::<EventHeader>(),
+            Ok(EventHeader::PingStatus)
+        );
+        assert_eq!("Phrase".parse::<EventHeader>(), Ok(EventHeader::Phrase));
+        assert_eq!(
+            "profile-name".parse::<EventHeader>(),
+            Ok(EventHeader::ProfileName)
+        );
+    }
+
+    #[test]
     fn parse_missing_other_leg_headers() {
         // From switch_caller_profile_event_set_data with "Other-Leg" prefix
         assert!("Other-Leg-Direction"
@@ -785,6 +807,11 @@ mod tests {
             EventHeader::LogLine,
             EventHeader::UserData,
             EventHeader::ApplicationUuidName,
+            EventHeader::Gateway,
+            EventHeader::State,
+            EventHeader::PingStatus,
+            EventHeader::Phrase,
+            EventHeader::ProfileName,
         ];
         for v in variants {
             let wire = v.to_string();

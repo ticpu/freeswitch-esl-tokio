@@ -469,6 +469,24 @@ def check_event_headers(repo: Path, src: SourceResolver) -> CheckResult:
         "sofia.c:sofia_handle_sip_i_notify()",
     )
 
+    add(
+        reference,
+        func_headers(
+            "src/mod/endpoints/mod_sofia/sofia_reg.c",
+            "sofia_reg_fire_custom_gateway_state_event",
+        ),
+        "sofia_reg.c:sofia_reg_fire_custom_gateway_state_event()",
+    )
+
+    add(
+        reference,
+        func_headers(
+            "src/mod/endpoints/mod_sofia/sofia_reg.c",
+            "sofia_reg_fire_custom_sip_user_state_event",
+        ),
+        "sofia_reg.c:sofia_reg_fire_custom_sip_user_state_event()",
+    )
+
     c_xmlrpc = src.read("src/mod/xml_int/mod_xml_rpc/mod_xml_rpc.c")
     add(reference, extract_headers_from_text(c_xmlrpc), "mod_xml_rpc.c")
 

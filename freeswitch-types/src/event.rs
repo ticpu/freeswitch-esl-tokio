@@ -2,6 +2,7 @@
 
 use crate::headers::{normalize_header_key, EventHeader};
 use crate::lookup::HeaderLookup;
+use crate::sofia::SofiaEventSubclass;
 use crate::variables::EslArray;
 use indexmap::IndexMap;
 use percent_encoding::{percent_encode, NON_ALPHANUMERIC};
@@ -548,6 +549,38 @@ impl EventSubscription {
                 .push(s);
         }
         Ok(self)
+    }
+
+    /// Subscribe to a single Sofia event subclass.
+    ///
+    /// Convenience wrapper around [`custom_subclass()`](Self::custom_subclass) that
+    /// accepts a typed [`SofiaEventSubclass`] instead of a raw string.
+    pub fn sofia_event(mut self, subclass: SofiaEventSubclass) -> Self {
+        self.custom_subclasses
+            .push(
+                subclass
+                    .as_str()
+                    .to_string(),
+            );
+        self
+    }
+
+    /// Subscribe to multiple Sofia event subclasses.
+    pub fn sofia_events(
+        mut self,
+        subclasses: impl IntoIterator<Item = impl std::borrow::Borrow<SofiaEventSubclass>>,
+    ) -> Self {
+        self.custom_subclasses
+            .extend(
+                subclasses
+                    .into_iter()
+                    .map(|s| {
+                        s.borrow()
+                            .as_str()
+                            .to_string()
+                    }),
+            );
+        self
     }
 
     /// Add a filter with a typed header.
@@ -1998,5 +2031,40 @@ mod tests {
         let result = EventSubscription::new(EventFormat::Plain)
             .filter(EventHeader::CallDirection, "bad\nvalue");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn sofia_event_single() {
+        let sub =
+            EventSubscription::new(EventFormat::Plain).sofia_event(SofiaEventSubclass::Register);
+        assert_eq!(
+            sub.to_event_string(),
+            Some("CUSTOM sofia::register".to_string())
+        );
+    }
+
+    #[test]
+    fn sofia_events_group() {
+        let sub = EventSubscription::new(EventFormat::Plain)
+            .sofia_events(SofiaEventSubclass::GATEWAY_EVENTS);
+        let event_str = sub
+            .to_event_string()
+            .unwrap();
+        assert!(event_str.starts_with("CUSTOM"));
+        assert!(event_str.contains("sofia::gateway_state"));
+        assert!(event_str.contains("sofia::gateway_add"));
+        assert!(event_str.contains("sofia::gateway_delete"));
+        assert!(event_str.contains("sofia::gateway_invalid_digest_req"));
+    }
+
+    #[test]
+    fn sofia_event_mixed_with_typed_events() {
+        let sub = EventSubscription::new(EventFormat::Plain)
+            .event(EslEventType::Heartbeat)
+            .sofia_event(SofiaEventSubclass::GatewayState);
+        assert_eq!(
+            sub.to_event_string(),
+            Some("HEARTBEAT CUSTOM sofia::gateway_state".to_string())
+        );
     }
 }

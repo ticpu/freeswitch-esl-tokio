@@ -13,6 +13,11 @@ use crate::channel::{
 #[cfg(feature = "esl")]
 use crate::event::{EslEventPriority, ParsePriorityError};
 use crate::headers::EventHeader;
+use crate::sofia::{
+    GatewayPingStatus, GatewayRegState, ParseGatewayPingStatusError, ParseGatewayRegStateError,
+    ParseSipUserPingStatusError, ParseSofiaEventSubclassError, SipUserPingStatus,
+    SofiaEventSubclass,
+};
 use crate::variables::VariableName;
 
 /// Trait for looking up ESL headers and channel variables from any key-value store.
@@ -166,6 +171,70 @@ pub trait HeaderLookup {
     /// `Event-Subclass` header for `CUSTOM` events (e.g. `sofia::register`).
     fn event_subclass(&self) -> Option<&str> {
         self.header(EventHeader::EventSubclass)
+    }
+
+    /// Parse `Event-Subclass` as a typed [`SofiaEventSubclass`].
+    ///
+    /// Returns `Ok(None)` if the header is absent, `Err` if present but not a
+    /// recognized `sofia::*` subclass.
+    fn sofia_event_subclass(
+        &self,
+    ) -> Result<Option<SofiaEventSubclass>, ParseSofiaEventSubclassError> {
+        match self.event_subclass() {
+            Some(s) => Ok(Some(s.parse()?)),
+            None => Ok(None),
+        }
+    }
+
+    /// `Gateway` header from `sofia::gateway_state` / `sofia::gateway_add` events.
+    fn gateway(&self) -> Option<&str> {
+        self.header(EventHeader::Gateway)
+    }
+
+    /// `profile-name` header from `sofia::sip_user_state` events.
+    fn profile_name(&self) -> Option<&str> {
+        self.header(EventHeader::ProfileName)
+    }
+
+    /// `Phrase` header (SIP reason phrase) from sofia state events.
+    fn phrase(&self) -> Option<&str> {
+        self.header(EventHeader::Phrase)
+    }
+
+    /// Parse the `State` header as a [`GatewayRegState`].
+    ///
+    /// Returns `Ok(None)` if absent, `Err` if present but unparseable.
+    fn gateway_reg_state(&self) -> Result<Option<GatewayRegState>, ParseGatewayRegStateError> {
+        match self.header(EventHeader::State) {
+            Some(s) => Ok(Some(s.parse()?)),
+            None => Ok(None),
+        }
+    }
+
+    /// Parse `Ping-Status` as a [`GatewayPingStatus`].
+    ///
+    /// Use on `sofia::gateway_state` events. For `sofia::sip_user_state`, use
+    /// [`sip_user_ping_status()`](Self::sip_user_ping_status) instead.
+    fn gateway_ping_status(
+        &self,
+    ) -> Result<Option<GatewayPingStatus>, ParseGatewayPingStatusError> {
+        match self.header(EventHeader::PingStatus) {
+            Some(s) => Ok(Some(s.parse()?)),
+            None => Ok(None),
+        }
+    }
+
+    /// Parse `Ping-Status` as a [`SipUserPingStatus`].
+    ///
+    /// Use on `sofia::sip_user_state` events. For `sofia::gateway_state`, use
+    /// [`gateway_ping_status()`](Self::gateway_ping_status) instead.
+    fn sip_user_ping_status(
+        &self,
+    ) -> Result<Option<SipUserPingStatus>, ParseSipUserPingStatusError> {
+        match self.header(EventHeader::PingStatus) {
+            Some(s) => Ok(Some(s.parse()?)),
+            None => Ok(None),
+        }
     }
 
     /// `pl_data` header -- SIP NOTIFY body content from `NOTIFY_IN` events.
@@ -434,6 +503,90 @@ mod tests {
     fn event_subclass() {
         let s = store_with(&[("Event-Subclass", "sofia::register")]);
         assert_eq!(s.event_subclass(), Some("sofia::register"));
+    }
+
+    #[test]
+    fn sofia_event_subclass_typed() {
+        let s = store_with(&[("Event-Subclass", "sofia::gateway_state")]);
+        assert_eq!(
+            s.sofia_event_subclass()
+                .unwrap(),
+            Some(crate::sofia::SofiaEventSubclass::GatewayState)
+        );
+    }
+
+    #[test]
+    fn sofia_event_subclass_absent() {
+        let s = store_with(&[]);
+        assert_eq!(
+            s.sofia_event_subclass()
+                .unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn sofia_event_subclass_non_sofia_is_error() {
+        let s = store_with(&[("Event-Subclass", "conference::maintenance")]);
+        assert!(s
+            .sofia_event_subclass()
+            .is_err());
+    }
+
+    #[test]
+    fn gateway_reg_state_typed() {
+        let s = store_with(&[("State", "REGED")]);
+        assert_eq!(
+            s.gateway_reg_state()
+                .unwrap(),
+            Some(crate::sofia::GatewayRegState::Reged)
+        );
+    }
+
+    #[test]
+    fn gateway_reg_state_invalid_is_error() {
+        let s = store_with(&[("State", "BOGUS")]);
+        assert!(s
+            .gateway_reg_state()
+            .is_err());
+    }
+
+    #[test]
+    fn gateway_ping_status_typed() {
+        let s = store_with(&[("Ping-Status", "UP")]);
+        assert_eq!(
+            s.gateway_ping_status()
+                .unwrap(),
+            Some(crate::sofia::GatewayPingStatus::Up)
+        );
+    }
+
+    #[test]
+    fn sip_user_ping_status_typed() {
+        let s = store_with(&[("Ping-Status", "REACHABLE")]);
+        assert_eq!(
+            s.sip_user_ping_status()
+                .unwrap(),
+            Some(crate::sofia::SipUserPingStatus::Reachable)
+        );
+    }
+
+    #[test]
+    fn gateway_accessor() {
+        let s = store_with(&[("Gateway", "my-gateway")]);
+        assert_eq!(s.gateway(), Some("my-gateway"));
+    }
+
+    #[test]
+    fn profile_name_accessor() {
+        let s = store_with(&[("profile-name", "internal")]);
+        assert_eq!(s.profile_name(), Some("internal"));
+    }
+
+    #[test]
+    fn phrase_accessor() {
+        let s = store_with(&[("Phrase", "OK")]);
+        assert_eq!(s.phrase(), Some("OK"));
     }
 
     #[test]

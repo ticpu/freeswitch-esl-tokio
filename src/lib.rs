@@ -145,22 +145,24 @@ pub(crate) mod constants;
 pub(crate) mod protocol;
 
 // Re-export sub-modules from freeswitch-types for path-based access
-pub use freeswitch_types::{channel, commands, event, headers, lookup, prelude, variables};
+pub use freeswitch_types::{channel, commands, event, headers, lookup, prelude, sofia, variables};
 
 // Re-export domain types from freeswitch-types
 pub use freeswitch_types::{
     AnswerState, Application, BridgeDialString, CallDirection, CallState, ChannelState,
     ChannelTimetable, ChannelVariable, CoreMediaVariable, DialString, DialplanType, Endpoint,
     EslArray, EslEvent, EslEventPriority, EslEventType, EventFormat, EventHeader,
-    EventSubscription, EventSubscriptionError, GroupCallOrder, HangupCause, HeaderLookup,
-    MultipartBody, MultipartItem, Originate, OriginateError, OriginateTarget,
-    ParseAnswerStateError, ParseCallDirectionError, ParseCallStateError, ParseChannelStateError,
-    ParseChannelVariableError, ParseCoreMediaVariableError, ParseDialplanTypeError,
-    ParseEventFormatError, ParseEventHeaderError, ParseEventTypeError, ParseGroupCallOrderError,
-    ParseHangupCauseError, ParsePriorityError, ParseTimetableError, RtpStatUnit, SipHeaderPrefix,
-    SipPassthroughHeader, TimetablePrefix, UuidAnswer, UuidBridge, UuidDeflect, UuidGetVar,
-    UuidHold, UuidKill, UuidSendDtmf, UuidSetVar, UuidTransfer, VariableName, Variables,
-    VariablesType, DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT,
+    EventSubscription, EventSubscriptionError, GatewayPingStatus, GatewayRegState, GroupCallOrder,
+    HangupCause, HeaderLookup, MultipartBody, MultipartItem, Originate, OriginateError,
+    OriginateTarget, ParseAnswerStateError, ParseCallDirectionError, ParseCallStateError,
+    ParseChannelStateError, ParseChannelVariableError, ParseCoreMediaVariableError,
+    ParseDialplanTypeError, ParseEventFormatError, ParseEventHeaderError, ParseEventTypeError,
+    ParseGatewayPingStatusError, ParseGatewayRegStateError, ParseGroupCallOrderError,
+    ParseHangupCauseError, ParsePriorityError, ParseSipUserPingStatusError,
+    ParseSofiaEventSubclassError, ParseTimetableError, RtpStatUnit, SipHeaderPrefix,
+    SipPassthroughHeader, SipUserPingStatus, SofiaEventSubclass, TimetablePrefix, UuidAnswer,
+    UuidBridge, UuidDeflect, UuidGetVar, UuidHold, UuidKill, UuidSendDtmf, UuidSetVar,
+    UuidTransfer, VariableName, Variables, VariablesType, DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT,
 };
 
 pub use app::dptools::AppCommand;

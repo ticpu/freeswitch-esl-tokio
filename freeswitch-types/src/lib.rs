@@ -27,6 +27,7 @@ pub mod event;
 pub mod headers;
 pub mod lookup;
 pub mod prelude;
+pub mod sofia;
 pub mod variables;
 
 /// Default FreeSWITCH ESL port for inbound connections.
@@ -58,6 +59,11 @@ pub use sip_header::{
     extract_header, HistoryInfo, HistoryInfoEntry, HistoryInfoError, HistoryInfoReason,
     ParseSipHeaderAddrError, ParseSipHeaderError, SipCallInfo, SipCallInfoEntry, SipCallInfoError,
     SipGeolocation, SipGeolocationRef, SipHeader, SipHeaderAddr, SipHeaderLookup,
+};
+pub use sofia::{
+    GatewayPingStatus, GatewayRegState, ParseGatewayPingStatusError, ParseGatewayRegStateError,
+    ParseSipUserPingStatusError, ParseSofiaEventSubclassError, SipUserPingStatus,
+    SofiaEventSubclass,
 };
 pub use variables::{
     ChannelVariable, CoreMediaVariable, EslArray, MultipartBody, MultipartItem,
