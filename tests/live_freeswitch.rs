@@ -1489,3 +1489,67 @@ async fn live_codec_header_normalization() {
     kill_channel(&client, &uuid).await;
     assert!(saw_codec, "never received CODEC event");
 }
+
+/// Verify that userauth with a long Allowed-Events list survives
+/// FreeSWITCH's reply[512] truncation in mod_event_socket.c.
+///
+/// Requires the `many-events@default` user configured in FreeSWITCH with
+/// a long esl-allowed-events list that triggers the 512-byte overflow.
+/// The user has `esl-allowed-api = "show uuid_dump originate uuid_kill"`
+/// and `esl-allowed-log = false`, but the 512-byte reply buffer overflow
+/// truncates these headers (Allowed-LOG is always fully lost).
+#[tokio::test]
+#[ignore]
+async fn live_connect_userauth_truncated_response() {
+    let permit = CONN_SEMAPHORE
+        .acquire()
+        .await
+        .expect("semaphore closed");
+    let opts = EslConnectOptions::new().with_connect_timeout(Duration::from_secs(5));
+    let (client, _events) = EslClient::connect_with_user_and_options(
+        ESL_HOST,
+        ESL_PORT,
+        "many-events@default",
+        ESL_PASSWORD,
+        opts,
+    )
+    .await
+    .expect("userauth with truncated response should succeed");
+
+    assert!(client.is_connected());
+
+    let auth = client
+        .auth_response()
+        .expect("auth_response should be present for inbound connection");
+    assert_eq!(auth.reply_text(), Some("+OK accepted"));
+    assert!(
+        auth.header("Allowed-Events")
+            .is_some(),
+        "Allowed-Events header should be present (possibly truncated)"
+    );
+
+    // Allowed-LOG is the last header in the reply — with the 512-byte
+    // overflow it's always fully truncated. Its absence proves the
+    // salvage path was triggered (a non-truncated response would have it).
+    assert!(
+        auth.header("Allowed-Log")
+            .is_none(),
+        "Allowed-Log should be missing due to reply[512] truncation. \
+         If this fails, FreeSWITCH may have been patched — \
+         the workaround is no longer needed for this configuration."
+    );
+
+    // Allowed-API should be present but truncated (fewer commands than
+    // the configured "show uuid_dump originate uuid_kill").
+    if let Some(api) = auth.header("Allowed-Api") {
+        let commands: Vec<&str> = api
+            .split_whitespace()
+            .collect();
+        assert!(
+            commands.len() < 4,
+            "Allowed-API has all 4 commands ({api}), expected truncation"
+        );
+    }
+
+    drop(permit);
+}

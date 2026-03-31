@@ -701,3 +701,58 @@ all other prefixes preserve the canonical SIP header casing
 trying `SipHeader::from_str` on the re-hyphenated suffix. For unknown
 headers the reversal is lossy — original casing is lost — but this is
 inherent to FreeSWITCH's wire format, not a library limitation.
+
+## Truncated userauth response (mod_event_socket reply[512] overflow)
+
+FreeSWITCH's `mod_event_socket.c` has a buffer overflow in the `userauth`
+response path that silently truncates the reply and drops the `\n\n`
+terminator our parser expects.
+
+The code in `listener_run()` declares `char reply[512]` (line 2704) as the
+final output buffer. The `userauth` handler at line 2009 formats the auth
+response into it:
+
+```c
+switch_snprintf(reply, reply_len,
+    "~Reply-Text: +OK accepted\n%s%s%s\n",
+    event_reply, api_reply, log_reply);
+```
+
+Each of `event_reply`, `api_reply`, and `log_reply` is itself a 512-byte
+buffer, but they all get concatenated into the same 512-byte `reply`.
+With a realistic `esl-allowed-events` list (28 event types plus CUSTOM
+subclasses), the `Allowed-Events` header alone consumes ~470 bytes of
+the reply buffer. After the `~Reply-Text: +OK accepted\n` prefix (~28
+bytes), only ~14 bytes remain for `Allowed-API` and `Allowed-LOG`.
+`switch_snprintf` silently truncates without writing the trailing `\n`
+that would complete the `\n\n` terminator.
+
+The wire data reaches the client as a valid-looking header block that
+simply never ends. The parser accumulates the data, never finds `\n\n`,
+and eventually the connect timeout fires.
+
+This only affects `userauth`, not `auth`. The plain `auth` command
+response is a simple `+OK accepted` (14 bytes) that fits easily.
+
+Our workaround lives in `authenticate()` in `connection.rs`. When the
+auth response read times out and the parser buffer contains data, we
+call `salvage_truncated_auth_response()` which:
+
+1. Extracts the buffer contents as UTF-8
+2. Finds the last complete line (ending with `\n`)
+3. Drops any trailing fragment without a colon (mid-header-name truncation)
+4. Parses the salvageable headers via the existing `parse_headers()` path
+5. Validates `Content-Type: command/reply` to confirm it's actually an
+   auth response
+6. Returns the partial `EslMessage` and drains the parser buffer
+
+The function is private to `connection.rs` and only called from
+`authenticate()`. It is not a general parser recovery mechanism — the
+`Content-Type` validation ensures it won't accidentally salvage
+non-auth data.
+
+The auth is valid on the FreeSWITCH side — `LFLAG_AUTHED` is set before
+the reply is sent. The truncated headers (`Allowed-API`, `Allowed-LOG`)
+are informational access-policy metadata, not required for the ESL
+session to function. We log a WARN so operators can identify the issue
+and either reduce their `esl-allowed-events` list or patch FreeSWITCH.

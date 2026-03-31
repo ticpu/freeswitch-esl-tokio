@@ -123,6 +123,28 @@ impl EslParser {
         matches!(self.state, ParseState::WaitingForHeaders)
     }
 
+    /// Discard all buffered data and reset to `WaitingForHeaders`.
+    ///
+    /// Used after salvaging a truncated auth response where the data
+    /// was parsed externally via `parse_headers()`.
+    #[cfg(unix)]
+    pub(crate) fn drain_buffer(&mut self) {
+        debug_assert!(
+            self.is_waiting_for_headers(),
+            "drain_buffer called outside WaitingForHeaders state"
+        );
+        let remaining = self
+            .buffer
+            .len();
+        if remaining > 0 {
+            let _ = self
+                .buffer
+                .advance(remaining);
+            self.buffer
+                .compact();
+        }
+    }
+
     /// Add data to the parser buffer
     pub fn add_data(&mut self, data: &[u8]) -> EslResult<()> {
         self.buffer
@@ -235,7 +257,7 @@ impl EslParser {
     }
 
     /// Parse headers from string
-    fn parse_headers(&self, headers_str: &str) -> EslResult<IndexMap<String, String>> {
+    pub(crate) fn parse_headers(&self, headers_str: &str) -> EslResult<IndexMap<String, String>> {
         let mut headers = IndexMap::new();
 
         for line in headers_str.lines() {
