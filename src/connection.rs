@@ -311,7 +311,30 @@ async fn authenticate(
         .await
         .map_err(EslError::Io)?;
 
-    let response_msg = recv_message(stream, parser, read_buffer).await?;
+    let response_msg = match recv_message(stream, parser, read_buffer).await {
+        Ok(msg) => msg,
+        Err(EslError::Timeout { timeout_ms }) => {
+            // FreeSWITCH mod_event_socket.c uses char reply[512] for the
+            // userauth response. When Allowed-Events is long, switch_snprintf
+            // truncates the output and the \n\n terminator is never sent.
+            match salvage_truncated_auth_response(parser) {
+                Ok(Some(msg)) => {
+                    warn!(
+                        "FreeSWITCH sent a truncated auth response \
+                         (mod_event_socket.c reply[512] overflow). \
+                         Allowed-API/Allowed-LOG headers may be incomplete or missing."
+                    );
+                    msg
+                }
+                Ok(None) => return Err(EslError::Timeout { timeout_ms }),
+                Err(e) => {
+                    debug!("Truncated auth response salvage failed: {}", e);
+                    return Err(EslError::Timeout { timeout_ms });
+                }
+            }
+        }
+        Err(e) => return Err(e),
+    };
     let response = response_msg.into_response();
 
     if !response.is_success() {
@@ -325,6 +348,72 @@ async fn authenticate(
 
     debug!("Authentication successful");
     Ok(())
+}
+
+/// Salvage a truncated `userauth` response from the parser buffer.
+///
+/// FreeSWITCH `mod_event_socket.c` formats the userauth reply into
+/// `char reply[512]`. When the `Allowed-Events` list is long,
+/// `switch_snprintf` truncates the output and the `\n\n` terminator
+/// the parser expects is never written, causing a read timeout.
+///
+/// This function extracts whatever headers arrived before the
+/// truncation point. Only valid during the auth handshake.
+fn salvage_truncated_auth_response(parser: &mut EslParser) -> EslResult<Option<EslMessage>> {
+    if !parser.is_waiting_for_headers() {
+        return Ok(None);
+    }
+
+    let data = parser.remaining_bytes();
+    if data.is_empty() {
+        return Ok(None);
+    }
+
+    let data_str = std::str::from_utf8(data)
+        .map_err(|_| EslError::protocol_error("invalid UTF-8 in truncated auth response"))?;
+
+    // Find the last newline. Everything before it is complete header lines.
+    // Everything after may be a truncated line.
+    let last_nl = match data_str.rfind('\n') {
+        Some(pos) => pos,
+        None => return Ok(None),
+    };
+
+    let trailing = &data_str[last_nl + 1..];
+
+    // Build the header block to parse: all complete lines, plus the
+    // trailing fragment only if it contains a colon (truncated value
+    // is acceptable; truncated header name is not).
+    let header_block = if trailing.is_empty() || trailing.contains(':') {
+        data_str
+    } else {
+        &data_str[..last_nl]
+    };
+
+    let headers = parser.parse_headers(header_block)?;
+
+    // Validate this is actually a command/reply (auth response).
+    let content_type = headers
+        .get(HEADER_CONTENT_TYPE)
+        .ok_or_else(|| {
+            EslError::protocol_error(
+                "truncated response missing Content-Type header — not an auth response",
+            )
+        })?;
+
+    if content_type != crate::constants::CONTENT_TYPE_COMMAND_REPLY {
+        return Err(EslError::protocol_error(format!(
+            "truncated response has Content-Type '{}', expected command/reply",
+            content_type
+        )));
+    }
+
+    let message_type = MessageType::from_content_type(content_type);
+    let message = EslMessage::new(message_type, headers, None);
+
+    parser.drain_buffer();
+
+    Ok(Some(message))
 }
 
 /// Try to send an event (or error) to the application via try_send.
@@ -1268,5 +1357,127 @@ mod tests {
             ConnectionStatus::Connected,
             ConnectionStatus::Disconnected(DisconnectReason::ConnectionClosed)
         );
+    }
+
+    #[test]
+    fn salvage_truncated_auth_response_realistic() {
+        // Simulates FreeSWITCH reply[512] overflow: long Allowed-Events
+        // header causes Allowed-API to be truncated and \n\n never sent.
+        let wire_data = "\
+            Content-Type: command/reply\n\
+            Reply-Text: +OK accepted\n\
+            Allowed-Events: HEARTBEAT BACKGROUND_JOB CHANNEL_CREATE \
+            CHANNEL_ANSWER CHANNEL_HANGUP_COMPLETE CHANNEL_STATE \
+            CHANNEL_DATA CHANNEL_CALLSTATE CHANNEL_EXECUTE \
+            CHANNEL_EXECUTE_COMPLETE CHANNEL_BRIDGE NOTIFY_IN \
+            CHANNEL_DESTROY CHANNEL_HANGUP CHANNEL_HOLD CHANNEL_UNHOLD \
+            CHANNEL_UNBRIDGE CHANNEL_PROGRESS CHANNEL_PROGRESS_MEDIA \
+            CHANNEL_OUTGOING CHANNEL_PARK CHANNEL_UNPARK \
+            CHANNEL_APPLICATION CHANNEL_ORIGINATE CHANNEL_UUID CUSTOM \
+            sofia::gateway_state sofia::gateway_delete\n\
+            Allowed-API: show";
+
+        let mut parser = EslParser::new();
+        parser
+            .add_data(wire_data.as_bytes())
+            .unwrap();
+
+        // Normal parse should return None -- no \n\n terminator
+        assert!(parser
+            .parse_message()
+            .unwrap()
+            .is_none());
+
+        let msg = salvage_truncated_auth_response(&mut parser)
+            .unwrap()
+            .expect("salvage should succeed");
+
+        assert_eq!(msg.message_type, MessageType::CommandReply);
+        assert_eq!(
+            msg.headers
+                .get("Reply-Text")
+                .map(|s| s.as_str()),
+            Some("+OK accepted")
+        );
+        assert!(msg
+            .headers
+            .contains_key("Allowed-Events"));
+        // Truncated trailing line without \n preserved (has colon)
+        assert_eq!(
+            msg.headers
+                .get("Allowed-API")
+                .map(|s| s.as_str()),
+            Some("show")
+        );
+
+        // Parser buffer is drained
+        assert_eq!(
+            parser
+                .remaining_bytes()
+                .len(),
+            0
+        );
+    }
+
+    #[test]
+    fn salvage_truncated_mid_header_name() {
+        // Truncation cut mid-header-name (no colon in trailing fragment)
+        let wire_data = "Content-Type: command/reply\nReply-Text: +OK accepted\nAllo";
+
+        let mut parser = EslParser::new();
+        parser
+            .add_data(wire_data.as_bytes())
+            .unwrap();
+
+        let msg = salvage_truncated_auth_response(&mut parser)
+            .unwrap()
+            .expect("salvage should succeed with partial line dropped");
+
+        assert_eq!(msg.message_type, MessageType::CommandReply);
+        assert_eq!(
+            msg.headers
+                .get("Reply-Text")
+                .map(|s| s.as_str()),
+            Some("+OK accepted")
+        );
+        // "Allo" fragment was dropped
+        assert!(!msg
+            .headers
+            .contains_key("Allo"));
+    }
+
+    #[test]
+    fn salvage_empty_buffer_returns_none() {
+        let mut parser = EslParser::new();
+        assert!(salvage_truncated_auth_response(&mut parser)
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
+    fn salvage_no_newline_returns_none() {
+        let mut parser = EslParser::new();
+        parser
+            .add_data(b"Content-Type: command/reply")
+            .unwrap();
+        assert!(salvage_truncated_auth_response(&mut parser)
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
+    fn salvage_wrong_content_type_returns_error() {
+        let wire_data = "Content-Type: auth/request\n";
+        let mut parser = EslParser::new();
+        parser
+            .add_data(wire_data.as_bytes())
+            .unwrap();
+
+        let result = salvage_truncated_auth_response(&mut parser);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("command/reply"));
     }
 }

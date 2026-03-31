@@ -191,8 +191,9 @@ Keep the boundary clean — `EslClient` sends strings and returns `EslResponse`.
 ## v1.5 Backports and Deprecations
 
 This branch (v1) receives backports from 2.0 and deprecation warnings to
-ease migration. Last backport base: master commit 215d41b (feat: derive
-PartialOrd and Ord for ChannelState and CallState). Key changes in v1.5:
+ease migration. Last backport base: master commit 8ff4e23 (fix: work
+around FreeSWITCH mod_event_socket reply[512] overflow on userauth).
+Key changes in v1.5:
 
 **Backported from 2.0:**
 
@@ -220,6 +221,9 @@ PartialOrd and Ord for ChannelState and CallState). Key changes in v1.5:
 - Replace `.trim()` on wire content with explicit protocol suffix stripping
   in `parse_api_body`, protocol header parsing, `event_uuid`, and
   `redact_wire`. (ec4cdc2)
+- Work around FreeSWITCH `mod_event_socket.c` `reply[512]` overflow that
+  truncates `userauth` responses and drops the `\n\n` terminator. Salvages
+  partial headers from the parser buffer on auth timeout. (8ff4e23)
 
 **Deprecated (use the replacement before upgrading to 2.0):**
 

@@ -4,7 +4,8 @@
 //! Run with: cargo test --test live_freeswitch -- --ignored
 
 use freeswitch_esl_tokio::{
-    EslClient, EslError, EslEvent, EslEventPriority, EslEventType, EventFormat, ReplyStatus,
+    EslClient, EslConnectOptions, EslError, EslEvent, EslEventPriority, EslEventType, EventFormat,
+    ReplyStatus,
 };
 use std::time::Duration;
 use tokio::time::Instant;
@@ -464,4 +465,29 @@ async fn live_channel_timetable_on_create() {
         "did not receive CHANNEL_CREATE with timetable for {}",
         uuid
     );
+}
+
+/// Verify that userauth with a long Allowed-Events list survives
+/// FreeSWITCH's reply[512] truncation in mod_event_socket.c.
+///
+/// Requires the `many-events@default` user configured in FreeSWITCH with
+/// a long esl-allowed-events list that triggers the 512-byte overflow.
+/// The user has `esl-allowed-api = "show uuid_dump originate uuid_kill"`
+/// and `esl-allowed-log = false`, but the 512-byte reply buffer overflow
+/// truncates these headers (Allowed-LOG is always fully lost).
+#[tokio::test]
+#[ignore]
+async fn live_connect_userauth_truncated_response() {
+    let opts = EslConnectOptions::new().with_connect_timeout(Duration::from_secs(5));
+    let (client, _events) = EslClient::connect_with_user_and_options(
+        ESL_HOST,
+        ESL_PORT,
+        "many-events@default",
+        ESL_PASSWORD,
+        opts,
+    )
+    .await
+    .expect("userauth with truncated response should succeed");
+
+    assert!(client.is_connected());
 }
