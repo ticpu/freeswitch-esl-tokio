@@ -111,14 +111,12 @@ impl EslParser {
     }
 
     /// Unconsumed bytes remaining in the parser buffer.
-    #[cfg(unix)]
     pub fn remaining_bytes(&self) -> &[u8] {
         self.buffer
             .data()
     }
 
     /// Returns `true` if the parser is between messages (not mid-body).
-    #[cfg(unix)]
     pub fn is_waiting_for_headers(&self) -> bool {
         matches!(self.state, ParseState::WaitingForHeaders)
     }
@@ -127,7 +125,6 @@ impl EslParser {
     ///
     /// Used after salvaging a truncated auth response where the data
     /// was parsed externally via `parse_headers()`.
-    #[cfg(unix)]
     pub(crate) fn drain_buffer(&mut self) {
         debug_assert!(
             self.is_waiting_for_headers(),

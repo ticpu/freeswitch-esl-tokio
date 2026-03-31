@@ -10,14 +10,15 @@ This is a two-crate workspace. `freeswitch-esl-tokio` depends on
 ### Pre-release checks
 
 ```sh
-cargo fmt --all
-cargo clippy --workspace --release -- -D warnings
-cargo test --workspace --release
-cargo test --test live_freeswitch -- --ignored
-cargo build --workspace --release
-cargo build --examples
-cargo semver-checks check-release -p freeswitch-types
-cargo semver-checks check-release -p freeswitch-esl-tokio
+cargo fmt --all && \
+cargo clippy --workspace --release -- -D warnings && \
+cargo test --workspace --release && \
+cargo test --test live_freeswitch -- --ignored && \
+cargo build --workspace --release && \
+cargo build --examples && \
+cargo check --workspace --target x86_64-pc-windows-msvc && \
+cargo semver-checks check-release -p freeswitch-types && \
+cargo semver-checks check-release -p freeswitch-esl-tokio && \
 cargo publish --dry-run -p freeswitch-types
 ```
 
@@ -71,6 +72,7 @@ cargo test --workspace --release && \
 cargo test --test live_freeswitch -- --ignored && \
 cargo build --workspace --release && \
 cargo build --examples && \
+cargo check --workspace --target x86_64-pc-windows-msvc && \
 cargo semver-checks check-release -p freeswitch-types && \
 cargo semver-checks check-release -p freeswitch-esl-tokio && \
 cargo publish --dry-run -p freeswitch-types
