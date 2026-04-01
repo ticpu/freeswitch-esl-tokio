@@ -667,8 +667,18 @@ impl FromStr for HangupCause {
 /// or unparseable.
 ///
 /// Extracted from ESL event headers using a prefix (typically `"Caller"`
-/// or `"Other-Leg"`). The wire header format is `{prefix}-{suffix}`,
-/// e.g. `Caller-Channel-Created-Time`.
+/// or `"Other-Leg"`). The wire header format is `{prefix}-{suffix}`.
+///
+/// ## Headers extracted
+///
+/// `from_lookup()` extracts headers with suffixes from [`SUFFIXES`](Self::SUFFIXES).
+/// With `TimetablePrefix::Caller`, extracts `Caller-Channel-Created-Time` →
+/// `created`, `Caller-Channel-Hangup-Time` → `hungup`, etc.
+///
+/// Use `TimetablePrefix::OtherLeg` for `Other-Leg-*` headers,
+/// `TimetablePrefix::Channel` for outbound ESL `Channel-*` headers, or pass
+/// a custom string prefix to `from_lookup()`. See [`SUFFIXES`](Self::SUFFIXES)
+/// for the complete list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
@@ -785,6 +795,35 @@ impl ParseTimetableError {
 }
 
 impl ChannelTimetable {
+    /// Header suffixes extracted by `from_lookup()`.
+    ///
+    /// Combine with a `TimetablePrefix` to build full header names for event
+    /// subscriptions or filters:
+    ///
+    /// ```
+    /// use freeswitch_types::{ChannelTimetable, TimetablePrefix};
+    ///
+    /// let prefix = TimetablePrefix::Caller.as_str();
+    /// let headers: Vec<String> = ChannelTimetable::SUFFIXES
+    ///     .iter()
+    ///     .map(|suffix| format!("{prefix}-{suffix}"))
+    ///     .collect();
+    /// assert!(headers.contains(&"Caller-Channel-Created-Time".to_string()));
+    /// ```
+    pub const SUFFIXES: &'static [&'static str] = &[
+        "Profile-Created-Time",
+        "Channel-Created-Time",
+        "Channel-Answered-Time",
+        "Channel-Progress-Time",
+        "Channel-Progress-Media-Time",
+        "Channel-Hangup-Time",
+        "Channel-Transfer-Time",
+        "Channel-Resurrect-Time",
+        "Channel-Bridged-Time",
+        "Channel-Last-Hold",
+        "Channel-Hold-Accum",
+    ];
+
     /// Extract a timetable by looking up prefixed header names via a closure.
     ///
     /// The closure receives full header names (e.g. `"Caller-Channel-Created-Time"`)

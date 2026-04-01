@@ -538,18 +538,40 @@ let cause = event.hangup_cause();       // Result<Option<HangupCause>, _>
 Call lifecycle timestamps via `ChannelTimetable`:
 
 ```rust
-use freeswitch_esl_tokio::{HeaderLookup, TimetablePrefix};
+use freeswitch_esl_tokio::{HeaderLookup, ChannelTimetable, TimetablePrefix};
 
-// Extracts Caller-Channel-*-Time headers from the event
+// Extracts all Caller-*-Time headers from the event
 let timetable = event.caller_timetable()?;
 
-// Also works with any key-value store, not coupled to EslEvent
+if let Some(tt) = timetable {
+    // All fields are Option<i64> (microseconds since epoch):
+    println!("Created: {:?}", tt.created);          // Caller-Channel-Created-Time
+    println!("Answered: {:?}", tt.answered);        // Caller-Channel-Answered-Time
+    println!("Hungup: {:?}", tt.hungup);            // Caller-Channel-Hangup-Time
+    println!("Bridged: {:?}", tt.bridged);          // Caller-Channel-Bridged-Time
+    println!("Progress: {:?}", tt.progress);        // Caller-Channel-Progress-Time
+    println!("Progress media: {:?}", tt.progress_media); // Caller-Channel-Progress-Media-Time
+    println!("Transferred: {:?}", tt.transferred);  // Caller-Channel-Transfer-Time
+    println!("Hold accum: {:?}", tt.hold_accum);    // Caller-Channel-Hold-Accum
+    // Also: profile_created, resurrected, last_hold
+}
+
+// Other-Leg timetable (bridged party):
+let other = event.other_leg_timetable()?;
+
+// Works with any key-value store, not coupled to EslEvent:
 let timetable = ChannelTimetable::from_lookup(
     TimetablePrefix::Caller,
     |key| headers.get(key).map(|v| v.as_str()),
 )?;
-if let Some(tt) = timetable {
-    println!("Created: {:?}, Answered: {:?}", tt.created, tt.answered);
+
+// Custom prefix for dynamic headers (e.g. "Hunt-Channel-Created-Time"):
+let hunt_tt = ChannelTimetable::from_lookup("Hunt", |key| headers.get(key))?;
+
+// Build subscription filters using SUFFIXES constant:
+let prefix = TimetablePrefix::Caller.as_str();
+for suffix in ChannelTimetable::SUFFIXES {
+    subscription_headers.insert(format!("{prefix}-{suffix}"));
 }
 ```
 
