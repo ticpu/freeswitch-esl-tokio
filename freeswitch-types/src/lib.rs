@@ -12,7 +12,7 @@
 //!
 //! General-purpose SIP header parsing is provided by the
 //! [`sip-header`](https://docs.rs/sip-header) crate, re-exported here for convenience.
-//! Types like [`SipHeaderAddr`], [`SipCallInfo`], [`HistoryInfo`], and [`SipGeolocation`]
+//! Types like [`SipHeaderAddr`], [`UriInfo`], [`HistoryInfo`], and [`SipGeolocation`]
 //! are available from the crate root.
 
 pub use sip_header;
@@ -57,8 +57,8 @@ pub use headers::{normalize_header_key, EventHeader, ParseEventHeaderError};
 pub use lookup::HeaderLookup;
 pub use sip_header::{
     extract_header, HistoryInfo, HistoryInfoEntry, HistoryInfoError, HistoryInfoReason,
-    ParseSipHeaderAddrError, ParseSipHeaderError, SipCallInfo, SipCallInfoEntry, SipCallInfoError,
-    SipGeolocation, SipGeolocationRef, SipHeader, SipHeaderAddr, SipHeaderLookup,
+    ParseSipHeaderAddrError, ParseSipHeaderError, SipGeolocation, SipGeolocationRef, SipHeader,
+    SipHeaderAddr, SipHeaderLookup, UriInfo, UriInfoEntry, UriInfoError,
 };
 pub use sofia::{
     GatewayPingStatus, GatewayRegState, ParseGatewayPingStatusError, ParseGatewayRegStateError,

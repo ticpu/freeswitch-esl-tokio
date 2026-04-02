@@ -270,10 +270,11 @@ impl SipPassthroughHeader {
         &self.wire
     }
 
-    /// Extract this header's value from a raw SIP message.
+    /// Extract this header's values from a raw SIP message.
     ///
+    /// Returns each occurrence as a separate entry (RFC 3261 §7.3.1).
     /// Delegates to [`sip_header::extract_header()`] using the canonical name.
-    pub fn extract_from(&self, message: &str) -> Option<String> {
+    pub fn extract_from(&self, message: &str) -> Vec<String> {
         sip_header::extract_header(message, &self.canonical_name)
     }
 
@@ -689,7 +690,7 @@ mod tests {
         let h = SipPassthroughHeader::invite(SipHeader::CallInfo);
         assert_eq!(
             h.extract_from(msg),
-            Some("<sip:example.com>;answer-after=0".into())
+            vec!["<sip:example.com>;answer-after=0"]
         );
     }
 
@@ -699,7 +700,9 @@ mod tests {
                    From: Alice <sip:alice@example.com>\r\n\
                    \r\n";
         let h = SipPassthroughHeader::invite(SipHeader::CallInfo);
-        assert_eq!(h.extract_from(msg), None);
+        assert!(h
+            .extract_from(msg)
+            .is_empty());
     }
 
     // --- VariableName trait ---

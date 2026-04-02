@@ -556,7 +556,7 @@ iteration. The tracker lives in `freeswitch-esl-tokio` rather than
 
 About 42% of `freeswitch-types` by line count (~4,300 lines) is pure RFC
 SIP standard code with zero FreeSWITCH coupling: the `SipHeaderAddr`
-name-addr parser (RFC 3261), `SipCallInfo` (RFC 3261 §20.9), `HistoryInfo`
+name-addr parser (RFC 3261), `UriInfo` (RFC 3261 §20.9), `HistoryInfo`
 (RFC 7044), `SipGeolocation` (RFC 6442), the `SipHeaderLookup` trait, SIP
 message header extraction, and the full RFC 4575 conference-info XML
 parser. These modules were written under a strict "no FreeSWITCH references
@@ -564,8 +564,8 @@ in sip_* modules" policy and have clean module boundaries — but they live
 in a crate named `freeswitch-types`.
 
 The problem surfaced through `eido`, the NG9-1-1 (NENA-STA-024.1a) library.
-`eido` depends on `freeswitch-types` solely for `SipCallInfo`,
-`SipCallInfoEntry`, `SipGeolocation`, `SipGeolocationRef`, `SipHeaderAddr`,
+`eido` depends on `freeswitch-types` solely for `UriInfo`,
+`UriInfoEntry`, `SipGeolocation`, `SipGeolocationRef`, `SipHeaderAddr`,
 and `sip_uri` — all RFC-standard SIP types. It uses zero FreeSWITCH-specific
 types: no `EslEventType`, no `ChannelState`, no `Originate`, no
 `HeaderLookup`. Anyone building NG9-1-1 tooling against a non-FreeSWITCH
@@ -586,7 +586,7 @@ channel state, and command builders on top.
 
 The extraction is not a simple file move because of `EslArray`. FreeSWITCH
 encodes multi-value SIP headers using a proprietary pipe-delimited format:
-`ARRAY::value1|:value2|:value3`. Both `SipCallInfo::parse()` and
+`ARRAY::value1|:value2|:value3`. Both `UriInfo::parse()` and
 `HistoryInfo::parse()` currently import `EslArray` to detect and split this
 format alongside standard RFC comma-separated values. `HistoryInfo::parse()`
 also strips `[...]` bracket wrapping from FreeSWITCH log output.
@@ -626,7 +626,7 @@ naturally created `EslHeaders` to bridge ESL's encoding quirks to the
 standard SIP parsing API. The extraction retroactively creates the layering
 that should have been there all along.
 
-`sip-header` provides `SipCallInfo::from_entries()` and
+`sip-header` provides `UriInfo::from_entries()` and
 `HistoryInfo::from_entries()` that accept `impl IntoIterator<Item = &str>`,
 so `EslHeaders` can split via `EslArray` and pass pre-split entries without
 `sip-header` knowing anything about the ARRAY format.
@@ -655,7 +655,7 @@ is implemented manually.
 ### What moves, what stays
 
 **Moves to sip-header:** `SipHeaderAddr`, `SipHeader` enum,
-`SipHeaderLookup` trait, `SipCallInfo`, `HistoryInfo`, `SipGeolocation`,
+`SipHeaderLookup` trait, `UriInfo`, `HistoryInfo`, `SipGeolocation`,
 `extract_header()`, the `define_header_enum!` macro,
 `split_comma_entries()`, and `conference_info/*` (feature-gated on `xml`).
 

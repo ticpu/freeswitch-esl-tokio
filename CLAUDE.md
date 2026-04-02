@@ -24,7 +24,7 @@ exhaustive compiler checks.
 (`ExecuteOptions`, `EslConnectOptions`, `Application`, `BridgeDialString`)
 use private fields + accessor methods. Pure data/DTO structs with
 `#[non_exhaustive]` and constructors (`SofiaGateway`, `SofiaEndpoint`,
-`SofiaContact`, `LoopbackEndpoint`, `UserEndpoint`, `SipCallInfoEntry`,
+`SofiaContact`, `LoopbackEndpoint`, `UserEndpoint`, `UriInfoEntry`,
 `ConferenceInfo` and its children) keep public fields — no validation
 constraints on individual fields.
 
@@ -42,7 +42,7 @@ or modifying public structs to verify external construction still works.
 ## SIP Modules Are Protocol-Agnostic
 
 Modules under the `sip_*` namespace (`sip_header`, `sip_header_addr`,
-`SipCallInfo`) are pure SIP standard types with no FreeSWITCH coupling.
+`UriInfo`) are pure SIP standard types with no FreeSWITCH coupling.
 Doc comments, module-level docs, and error messages in these modules must
 not reference FreeSWITCH, mod_sofia, ESL, NOTIFY_IN, or any FS-specific
 concepts. FreeSWITCH integration context belongs in `lookup.rs` (the

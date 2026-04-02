@@ -141,24 +141,23 @@ println!("{}", cmd);
 ### Raw SIP message header extraction
 
 `extract_header` pulls header values from raw SIP message text, handling
-case-insensitive matching, header folding, and multi-occurrence concatenation
+case-insensitive matching, header folding, and multi-occurrence extraction
 per RFC 3261 §7.3.1. Pairs naturally with the existing value parsers:
 
 ```rust
-use freeswitch_types::{extract_header, SipHeaderAddr};
-use freeswitch_types::variables::SipCallInfo;
+use freeswitch_types::{extract_header, SipHeaderAddr, UriInfo};
 
 let raw_invite = "INVITE sip:sos@bcf.example.com SIP/2.0\r\n\
     Call-Info: <urn:emergency:uid:callid:abc>;purpose=emergency-CallId\r\n\
     P-Asserted-Identity: \"Alice\" <sip:+15551234567@example.com>\r\n\
     \r\n";
 
-let ci_val = extract_header(raw_invite, "Call-Info").unwrap();
-let ci = SipCallInfo::parse(&ci_val).unwrap();
+let ci_vals = extract_header(raw_invite, "Call-Info");
+let ci = UriInfo::parse(&ci_vals[0]).unwrap();
 assert_eq!(ci.entries()[0].purpose(), Some("emergency-CallId"));
 
-let pai_val = extract_header(raw_invite, "P-Asserted-Identity").unwrap();
-let pai: SipHeaderAddr = pai_val.parse().unwrap();
+let pai_vals = extract_header(raw_invite, "P-Asserted-Identity");
+let pai: SipHeaderAddr = pai_vals[0].parse().unwrap();
 assert_eq!(pai.display_name(), Some("Alice"));
 ```
 

@@ -1,6 +1,6 @@
 [package]
 name = "freeswitch-types"
-version = "0.23.2"
+version = "0.24.0"
 edition = "2021"
 authors = ["Jérôme Poulin <jeromepoulin@gmail.com>"]
 description = "FreeSWITCH ESL protocol types: channel state, events, headers, commands, and variables"
@@ -20,7 +20,7 @@ esl = ["dep:indexmap"]
 conference-info = ["sip-header/conference-info"]
 
 [dependencies]
-sip-header = "0.2"
+sip-header = "0.3"
 serde = { version = "1.0", features = ["derive"], optional = true }
 percent-encoding = "2"
 indexmap = { version = "2", optional = true }
