@@ -171,6 +171,9 @@ sip_header::define_header_enum! {
         // --- SIP History ---
         SipHistoryInfo => "sip_history_info",
         SipGeolocation => "sip_geolocation",
+
+        // --- SIP Body ---
+        SipMultipart => "sip_multipart",
     }
 }
 
