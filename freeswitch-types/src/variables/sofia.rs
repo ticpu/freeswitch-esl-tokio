@@ -228,6 +228,7 @@ mod tests {
             SofiaVariable::RtpSecureMediaConfirmed,
             SofiaVariable::SipGatewayName,
             SofiaVariable::SipInviteCallId,
+            SofiaVariable::SipMultipart,
         ];
         for v in variants {
             let wire = v.to_string();
