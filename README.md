@@ -490,7 +490,7 @@ assert_eq!(arr.items(), &["item1", "item2", "item3"]);
 // Reading incoming INVITE headers (requires parse-all-invite-headers on the sofia profile)
 let pai = event.variable(SipPassthroughHeader::invite(SipHeader::PAssertedIdentity));
 if let Some(raw) = pai {
-    if let Some(arr) = EslArray::parse(raw) {
+    if let Ok(arr) = EslArray::parse(raw) {
         for identity in arr.items() {
             println!("P-Asserted-Identity: {}", identity);
         }

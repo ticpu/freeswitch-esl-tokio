@@ -151,7 +151,7 @@ pub use freeswitch_types::{channel, commands, event, headers, lookup, prelude, s
 pub use freeswitch_types::{
     AnswerState, Application, BridgeDialString, CallDirection, CallState, ChannelState,
     ChannelTimetable, ChannelVariable, CoreMediaVariable, DialString, DialplanType, Endpoint,
-    EslArray, EslEvent, EslEventPriority, EslEventType, EventFormat, EventHeader,
+    EslArray, EslArrayError, EslEvent, EslEventPriority, EslEventType, EventFormat, EventHeader,
     EventSubscription, EventSubscriptionError, GatewayPingStatus, GatewayRegState, GroupCallOrder,
     HangupCause, HeaderLookup, MultipartBody, MultipartItem, Originate, OriginateError,
     OriginateTarget, ParseAnswerStateError, ParseCallDirectionError, ParseCallStateError,
@@ -163,6 +163,7 @@ pub use freeswitch_types::{
     SipPassthroughHeader, SipUserPingStatus, SofiaEventSubclass, TimetablePrefix, UuidAnswer,
     UuidBridge, UuidDeflect, UuidGetVar, UuidHold, UuidKill, UuidSendDtmf, UuidSetVar,
     UuidTransfer, VariableName, Variables, VariablesType, DEFAULT_ESL_PASSWORD, DEFAULT_ESL_PORT,
+    MAX_ARRAY_ITEMS,
 };
 
 pub use app::dptools::AppCommand;

@@ -3,20 +3,67 @@ use std::fmt;
 const ARRAY_HEADER: &str = "ARRAY::";
 const ARRAY_SEPARATOR: &str = "|:";
 
+/// Maximum items accepted by [`EslArray::parse`].
+///
+/// Matches the index bound in FreeSWITCH `switch_event.c`
+/// (`switch_event_base_add_header`, `if (index > -1 && index <= 4000)`).
+pub const MAX_ARRAY_ITEMS: usize = 4000;
+
+/// Errors from [`EslArray::parse`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum EslArrayError {
+    /// Input did not start with the `ARRAY::` prefix.
+    MissingPrefix,
+    /// Item count exceeds [`MAX_ARRAY_ITEMS`].
+    TooManyItems {
+        /// Actual number of items found.
+        count: usize,
+        /// Configured maximum.
+        max: usize,
+    },
+}
+
+impl fmt::Display for EslArrayError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::MissingPrefix => f.write_str("missing ARRAY:: prefix"),
+            Self::TooManyItems { count, max } => {
+                write!(f, "array has {count} items, maximum is {max}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for EslArrayError {}
+
 /// Parses FreeSWITCH `ARRAY::item1|:item2|:item3` format
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct EslArray(Vec<String>);
 
 impl EslArray {
-    /// Parse an `ARRAY::` formatted string. Returns `None` if the prefix is missing.
-    pub fn parse(s: &str) -> Option<Self> {
-        let body = s.strip_prefix(ARRAY_HEADER)?;
-        let items = body
+    /// Parse an `ARRAY::` formatted string.
+    ///
+    /// Returns [`EslArrayError::MissingPrefix`] if the prefix is absent, or
+    /// [`EslArrayError::TooManyItems`] if the item count exceeds
+    /// [`MAX_ARRAY_ITEMS`].
+    pub fn parse(s: &str) -> Result<Self, EslArrayError> {
+        let body = s
+            .strip_prefix(ARRAY_HEADER)
+            .ok_or(EslArrayError::MissingPrefix)?;
+        let items: Vec<String> = body
             .split(ARRAY_SEPARATOR)
             .map(String::from)
             .collect();
-        Some(Self(items))
+        let count = items.len();
+        if count > MAX_ARRAY_ITEMS {
+            return Err(EslArrayError::TooManyItems {
+                count,
+                max: MAX_ARRAY_ITEMS,
+            });
+        }
+        Ok(Self(items))
     }
 
     /// Create a new array from a vec of items.
@@ -110,10 +157,61 @@ mod tests {
     }
 
     #[test]
-    fn parse_non_array_returns_none() {
-        assert!(EslArray::parse("not an array").is_none());
-        assert!(EslArray::parse("").is_none());
-        assert!(EslArray::parse("ARRAY:").is_none());
+    fn parse_non_array_returns_missing_prefix() {
+        assert!(matches!(
+            EslArray::parse("not an array"),
+            Err(EslArrayError::MissingPrefix)
+        ));
+        assert!(matches!(
+            EslArray::parse(""),
+            Err(EslArrayError::MissingPrefix)
+        ));
+        assert!(matches!(
+            EslArray::parse("ARRAY:"),
+            Err(EslArrayError::MissingPrefix)
+        ));
+    }
+
+    #[test]
+    fn parse_at_max_items_succeeds() {
+        let items: Vec<&str> = (0..MAX_ARRAY_ITEMS)
+            .map(|_| "x")
+            .collect();
+        let input = format!("ARRAY::{}", items.join("|:"));
+        let arr = EslArray::parse(&input).unwrap();
+        assert_eq!(arr.len(), MAX_ARRAY_ITEMS);
+    }
+
+    #[test]
+    fn parse_over_max_items_returns_error() {
+        let items: Vec<&str> = (0..=MAX_ARRAY_ITEMS)
+            .map(|_| "x")
+            .collect();
+        let input = format!("ARRAY::{}", items.join("|:"));
+        assert_eq!(
+            EslArray::parse(&input),
+            Err(EslArrayError::TooManyItems {
+                count: MAX_ARRAY_ITEMS + 1,
+                max: MAX_ARRAY_ITEMS,
+            })
+        );
+    }
+
+    #[test]
+    fn error_display_missing_prefix() {
+        assert_eq!(
+            EslArrayError::MissingPrefix.to_string(),
+            "missing ARRAY:: prefix"
+        );
+    }
+
+    #[test]
+    fn error_display_too_many_items() {
+        let err = EslArrayError::TooManyItems {
+            count: 5000,
+            max: 4000,
+        };
+        assert_eq!(err.to_string(), "array has 5000 items, maximum is 4000");
     }
 
     #[test]

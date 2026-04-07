@@ -3,7 +3,7 @@
 use crate::headers::{normalize_header_key, EventHeader};
 use crate::lookup::HeaderLookup;
 use crate::sofia::SofiaEventSubclass;
-use crate::variables::EslArray;
+use crate::variables::{EslArray, EslArrayError};
 use indexmap::IndexMap;
 use percent_encoding::{percent_encode, NON_ALPHANUMERIC};
 use std::fmt;
@@ -981,33 +981,42 @@ impl EslEvent {
     /// If it exists as a plain value, converts to `ARRAY::old|:new`.
     /// If it already has an `ARRAY::` prefix, appends the new value.
     ///
+    /// Returns [`EslArrayError::TooManyItems`] if the existing header already
+    /// contains [`MAX_ARRAY_ITEMS`](crate::MAX_ARRAY_ITEMS) items.
+    ///
     /// ```
     /// # use freeswitch_types::EslEvent;
     /// let mut event = EslEvent::new();
-    /// event.push_header("X-Test", "first");
-    /// event.push_header("X-Test", "second");
+    /// event.push_header("X-Test", "first").unwrap();
+    /// event.push_header("X-Test", "second").unwrap();
     /// assert_eq!(event.header_str("X-Test"), Some("ARRAY::first|:second"));
     /// ```
-    pub fn push_header(&mut self, name: &str, value: &str) {
-        self.stack_header(name, value, EslArray::push);
+    pub fn push_header(&mut self, name: &str, value: &str) -> Result<(), EslArrayError> {
+        self.stack_header(name, value, EslArray::push)
     }
 
     /// Prepend a value to a multi-value header (UNSHIFT semantics).
     ///
-    /// Same conversion rules as `push_header()`, but inserts at the front.
+    /// Same conversion rules as [`push_header()`](Self::push_header), but
+    /// inserts at the front.
     ///
     /// ```
     /// # use freeswitch_types::EslEvent;
     /// let mut event = EslEvent::new();
     /// event.set_header("X-Test", "ARRAY::b|:c");
-    /// event.unshift_header("X-Test", "a");
+    /// event.unshift_header("X-Test", "a").unwrap();
     /// assert_eq!(event.header_str("X-Test"), Some("ARRAY::a|:b|:c"));
     /// ```
-    pub fn unshift_header(&mut self, name: &str, value: &str) {
-        self.stack_header(name, value, EslArray::unshift);
+    pub fn unshift_header(&mut self, name: &str, value: &str) -> Result<(), EslArrayError> {
+        self.stack_header(name, value, EslArray::unshift)
     }
 
-    fn stack_header(&mut self, name: &str, value: &str, op: fn(&mut EslArray, String)) {
+    fn stack_header(
+        &mut self,
+        name: &str,
+        value: &str,
+        op: fn(&mut EslArray, String),
+    ) -> Result<(), EslArrayError> {
         match self
             .headers
             .get(name)
@@ -1016,14 +1025,23 @@ impl EslEvent {
                 self.set_header(name, value);
             }
             Some(existing) => {
-                let mut arr = match EslArray::parse(existing) {
-                    Some(arr) => arr,
-                    None => EslArray::new(vec![existing.clone()]),
+                let arr = match EslArray::parse(existing) {
+                    Ok(arr) => arr,
+                    Err(EslArrayError::MissingPrefix) => EslArray::new(vec![existing.clone()]),
+                    Err(e) => return Err(e),
                 };
+                if arr.len() >= crate::variables::MAX_ARRAY_ITEMS {
+                    return Err(EslArrayError::TooManyItems {
+                        count: arr.len(),
+                        max: crate::variables::MAX_ARRAY_ITEMS,
+                    });
+                }
+                let mut arr = arr;
                 op(&mut arr, value.into());
                 self.set_header(name, arr.to_string());
             }
         }
+        Ok(())
     }
 
     /// Check whether this event matches the given type.
@@ -1401,7 +1419,9 @@ mod tests {
     #[test]
     fn test_push_header_new() {
         let mut event = EslEvent::new();
-        event.push_header("X-Test", "first");
+        event
+            .push_header("X-Test", "first")
+            .unwrap();
         assert_eq!(event.header_str("X-Test"), Some("first"));
     }
 
@@ -1409,7 +1429,9 @@ mod tests {
     fn test_push_header_existing_plain() {
         let mut event = EslEvent::new();
         event.set_header("X-Test", "first");
-        event.push_header("X-Test", "second");
+        event
+            .push_header("X-Test", "second")
+            .unwrap();
         assert_eq!(event.header_str("X-Test"), Some("ARRAY::first|:second"));
     }
 
@@ -1417,14 +1439,32 @@ mod tests {
     fn test_push_header_existing_array() {
         let mut event = EslEvent::new();
         event.set_header("X-Test", "ARRAY::a|:b");
-        event.push_header("X-Test", "c");
+        event
+            .push_header("X-Test", "c")
+            .unwrap();
         assert_eq!(event.header_str("X-Test"), Some("ARRAY::a|:b|:c"));
+    }
+
+    #[test]
+    fn test_push_header_at_capacity() {
+        use crate::variables::MAX_ARRAY_ITEMS;
+        let mut event = EslEvent::new();
+        let items: Vec<&str> = (0..MAX_ARRAY_ITEMS)
+            .map(|_| "x")
+            .collect();
+        event.set_header("X-Test", format!("ARRAY::{}", items.join("|:")).as_str());
+        assert!(matches!(
+            event.push_header("X-Test", "overflow"),
+            Err(EslArrayError::TooManyItems { .. })
+        ));
     }
 
     #[test]
     fn test_unshift_header_new() {
         let mut event = EslEvent::new();
-        event.unshift_header("X-Test", "only");
+        event
+            .unshift_header("X-Test", "only")
+            .unwrap();
         assert_eq!(event.header_str("X-Test"), Some("only"));
     }
 
@@ -1432,7 +1472,9 @@ mod tests {
     fn test_unshift_header_existing_array() {
         let mut event = EslEvent::new();
         event.set_header("X-Test", "ARRAY::b|:c");
-        event.unshift_header("X-Test", "a");
+        event
+            .unshift_header("X-Test", "a")
+            .unwrap();
         assert_eq!(event.header_str("X-Test"), Some("ARRAY::a|:b|:c"));
     }
 
@@ -1633,11 +1675,15 @@ mod tests {
     fn test_sip_p_asserted_identity_array_format() {
         let mut event = EslEvent::new();
         // When FreeSWITCH stores repeated SIP headers via ARRAY format
-        event.push_header(
-            "variable_sip_P-Asserted-Identity",
-            "<sip:alice@atlanta.example.com>",
-        );
-        event.push_header("variable_sip_P-Asserted-Identity", "<tel:+15551234567>");
+        event
+            .push_header(
+                "variable_sip_P-Asserted-Identity",
+                "<sip:alice@atlanta.example.com>",
+            )
+            .unwrap();
+        event
+            .push_header("variable_sip_P-Asserted-Identity", "<tel:+15551234567>")
+            .unwrap();
 
         let raw = event
             .header_str("variable_sip_P-Asserted-Identity")
@@ -1657,14 +1703,18 @@ mod tests {
     fn test_sip_header_with_colons_in_uri() {
         let mut event = EslEvent::new();
         // SIP URIs contain colons (sip:, sips:) which must not confuse ARRAY parsing
-        event.push_header(
-            "variable_sip_h_Diversion",
-            "<sip:+15551234567@gw.example.com;reason=unconditional>",
-        );
-        event.push_header(
-            "variable_sip_h_Diversion",
-            "<sips:+15559876543@secure.example.com;reason=no-answer;counter=3>",
-        );
+        event
+            .push_header(
+                "variable_sip_h_Diversion",
+                "<sip:+15551234567@gw.example.com;reason=unconditional>",
+            )
+            .unwrap();
+        event
+            .push_header(
+                "variable_sip_h_Diversion",
+                "<sips:+15559876543@secure.example.com;reason=no-answer;counter=3>",
+            )
+            .unwrap();
 
         let raw = event
             .header_str("variable_sip_h_Diversion")

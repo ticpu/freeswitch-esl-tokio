@@ -756,3 +756,32 @@ the reply is sent. The truncated headers (`Allowed-API`, `Allowed-LOG`)
 are informational access-policy metadata, not required for the ESL
 session to function. We log a WARN so operators can identify the issue
 and either reduce their `esl-allowed-events` list or patch FreeSWITCH.
+
+## Bounded ARRAY parsing
+
+FreeSWITCH stores repeating SIP headers as `ARRAY::v1|:v2|:...` strings.
+`EslArray::parse()` splits on `|:` and collects into a `Vec<String>`.
+Without a cap, a crafted ARRAY value from the wire can yield millions of
+String allocations — each tiny on the wire (2 bytes for `|:`) but ~56 bytes
+of heap per item, a ~19x amplification. A 100 MB ESL message could produce
+~1.87 GB of heap pressure.
+
+The ESL protocol has no `MAX_MESSAGE_SIZE` — the receive buffer grows
+dynamically via `content-length` with no hard cap. The only engineered
+limit in FreeSWITCH is in `switch_event_base_add_header()` in
+`switch_event.c`, which silently drops index-addressed writes above 4000
+(`if (index > -1 && index <= 4000)`). PUSH-based growth has no bound,
+but 4000 is the practical ceiling for legitimate data. Real-world SIP
+arrays (Via, Record-Route, P-Asserted-Identity, multipart) never exceed
+~100 items.
+
+`MAX_ARRAY_ITEMS = 4000` matches the FreeSWITCH ceiling while preventing
+OOM from adversarial input. `parse()` returns `Err(EslArrayError::TooManyItems)`
+above this limit.
+
+The programmatic constructors (`new()`, `push()`, `unshift()`) do not
+enforce the limit — they build arrays in trusted code under caller
+control. The bound is a wire-parsing defense, not a domain constraint.
+`push_header()` and `unshift_header()` on `EslEvent` check the limit
+before adding to an existing array, propagating the error to the caller
+rather than silently dropping the value.

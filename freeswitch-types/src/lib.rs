@@ -66,7 +66,7 @@ pub use sofia::{
     SofiaEventSubclass,
 };
 pub use variables::{
-    ChannelVariable, CoreMediaVariable, EslArray, MultipartBody, MultipartItem,
+    ChannelVariable, CoreMediaVariable, EslArray, EslArrayError, MultipartBody, MultipartItem,
     ParseChannelVariableError, ParseCoreMediaVariableError, RtpStatUnit, SipHeaderPrefix,
-    SipPassthroughHeader, VariableName,
+    SipPassthroughHeader, VariableName, MAX_ARRAY_ITEMS,
 };

@@ -104,9 +104,15 @@ async fn live_sendevent_with_array_header() {
     let mut event = EslEvent::with_type(EslEventType::Custom);
     event.set_header("Event-Name", "CUSTOM");
     event.set_header("Event-Subclass", "esl_test::array");
-    event.push_header("X-Test-Array", "value1");
-    event.push_header("X-Test-Array", "value2");
-    event.push_header("X-Test-Array", "value3");
+    event
+        .push_header("X-Test-Array", "value1")
+        .unwrap();
+    event
+        .push_header("X-Test-Array", "value2")
+        .unwrap();
+    event
+        .push_header("X-Test-Array", "value3")
+        .unwrap();
 
     assert_eq!(
         event.header_str("X-Test-Array"),
@@ -139,8 +145,12 @@ async fn live_recv_custom_sendevent() {
     event.set_header("Event-Name", "CUSTOM");
     event.set_header("Event-Subclass", subclass.clone());
     event.set_priority(EslEventPriority::Normal);
-    event.push_header("X-Test-Data", "hello");
-    event.push_header("X-Test-Data", "world");
+    event
+        .push_header("X-Test-Data", "hello")
+        .unwrap();
+    event
+        .push_header("X-Test-Data", "world")
+        .unwrap();
 
     client
         .sendevent(event)
@@ -538,11 +548,15 @@ async fn live_sendevent_array_sip_header() {
     event.set_header("Event-Name", "CUSTOM");
     event.set_header("Event-Subclass", subclass.clone());
     // ARRAY format: repeating SIP header stored as separate values
-    event.push_header(
-        "variable_sip_P-Asserted-Identity",
-        "<sip:alice@atlanta.example.com>",
-    );
-    event.push_header("variable_sip_P-Asserted-Identity", "<tel:+15551234567>");
+    event
+        .push_header(
+            "variable_sip_P-Asserted-Identity",
+            "<sip:alice@atlanta.example.com>",
+        )
+        .unwrap();
+    event
+        .push_header("variable_sip_P-Asserted-Identity", "<tel:+15551234567>")
+        .unwrap();
 
     client
         .sendevent(event)
@@ -590,14 +604,18 @@ async fn live_sendevent_repeated_diversion_header() {
     event.set_header("Event-Name", "CUSTOM");
     event.set_header("Event-Subclass", subclass.clone());
     // SIP Diversion header (RFC 5806) with history info containing SIP URI params
-    event.push_header(
-        "variable_sip_h_Diversion",
-        "<sip:+15551234567@gw.example.com;reason=unconditional>",
-    );
-    event.push_header(
-        "variable_sip_h_Diversion",
-        "<sip:+15559876543@proxy.example.com;reason=no-answer;counter=3>",
-    );
+    event
+        .push_header(
+            "variable_sip_h_Diversion",
+            "<sip:+15551234567@gw.example.com;reason=unconditional>",
+        )
+        .unwrap();
+    event
+        .push_header(
+            "variable_sip_h_Diversion",
+            "<sip:+15559876543@proxy.example.com;reason=no-answer;counter=3>",
+        )
+        .unwrap();
 
     client
         .sendevent(event)

@@ -10,7 +10,7 @@ mod sofia;
 
 pub use self::core::{ChannelVariable, ParseChannelVariableError};
 pub use core_media::{CoreMediaVariable, ParseCoreMediaVariableError, RtpStatUnit};
-pub use esl_array::EslArray;
+pub use esl_array::{EslArray, EslArrayError, MAX_ARRAY_ITEMS};
 pub use sip_multipart::{MultipartBody, MultipartItem};
 pub use sip_passthrough::{
     InvalidHeaderName, ParseSipPassthroughError, SipHeaderPrefix, SipPassthroughHeader,

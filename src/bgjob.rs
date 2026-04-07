@@ -46,6 +46,16 @@
 //! # Ok(())
 //! # }
 //! ```
+//!
+//! # Stale job cleanup
+//!
+//! If a `BACKGROUND_JOB` event is lost (subscription misconfiguration, network
+//! issue, FreeSWITCH bug), entries remain in the tracker indefinitely. Long-lived
+//! trackers **must** call [`BgJobTracker::retain`] periodically to evict stale
+//! entries. Store a timestamp in the context type and sweep on a timer — see
+//! [`retain`](BgJobTracker::retain) for an example.
+//!
+//! Monitor [`BgJobTracker::pending_count`] to detect unexpected growth.
 
 use std::collections::HashMap;
 use std::fmt;
@@ -170,7 +180,26 @@ impl<C> BgJobTracker<C> {
 
     /// Retain only jobs matching the predicate, removing the rest.
     ///
-    /// Useful for timeout-based cleanup when the context carries a timestamp.
+    /// Long-lived trackers **must** call this periodically to evict stale
+    /// entries whose `BACKGROUND_JOB` events were lost. Store a timestamp
+    /// in the context type and sweep on a timer:
+    ///
+    /// ```rust,no_run
+    /// use std::time::{Duration, Instant};
+    /// use freeswitch_esl_tokio::BgJobTracker;
+    ///
+    /// let mut bg: BgJobTracker<Instant> = BgJobTracker::new();
+    /// // ... track jobs with Instant::now() as context ...
+    ///
+    /// // Periodic sweep (e.g. every 60s in your event loop):
+    /// let max_age = Duration::from_secs(300);
+    /// bg.retain(|_uuid, submitted_at| submitted_at.elapsed() < max_age);
+    ///
+    /// // Monitor for unexpected growth:
+    /// if bg.pending_count() > 100 {
+    ///     eprintln!("warning: {} bgapi jobs still pending", bg.pending_count());
+    /// }
+    /// ```
     pub fn retain(&mut self, mut f: impl FnMut(&str, &mut C) -> bool) {
         self.pending
             .retain(|uuid, ctx| f(uuid, ctx));

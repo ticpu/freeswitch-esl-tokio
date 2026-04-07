@@ -36,8 +36,9 @@ impl MultipartBody {
     /// separator between MIME type and body).
     pub fn parse(s: &str) -> Result<Option<Self>, String> {
         let array = match EslArray::parse(s) {
-            Some(a) => a,
-            None => return Ok(None),
+            Ok(a) => a,
+            Err(super::EslArrayError::MissingPrefix) => return Ok(None),
+            Err(e) => return Err(e.to_string()),
         };
         let mut items = Vec::with_capacity(
             array
