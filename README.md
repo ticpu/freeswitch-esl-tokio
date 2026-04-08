@@ -618,6 +618,39 @@ impl HeaderLookup for TrackedChannel {
 See `cargo run --example channel_tracker` for a complete reference
 implementation using `HeaderLookup` for channel lifecycle monitoring.
 
+### Channel event ordering
+
+FreeSWITCH does not guarantee that `CHANNEL_CREATE` is the first event for a
+given UUID. The state machine fires `CHANNEL_STATE` (CS_INIT) *before*
+`CHANNEL_CREATE` because `set_running_state()` happens at the top of the loop
+iteration, while the `CHANNEL_CREATE` event fires inside the `CS_INIT` case
+block (`switch_core_state_machine.c`).
+
+Similarly, `CHANNEL_DESTROY` is not the last event. `CHANNEL_STATE` with
+CS_DESTROY fires *after* `CHANNEL_DESTROY` because
+`switch_core_session_destroy_state()` is called after the destroy event
+(`switch_core_session.c`).
+
+Per-channel creation order:
+
+1. `CHANNEL_STATE` (CS_INIT)
+2. `CHANNEL_CREATE`
+3. `CHANNEL_ORIGINATE` (outbound only)
+
+Per-channel teardown order:
+
+1. `CHANNEL_HANGUP`
+2. `CHANNEL_STATE` (CS_HANGUP)
+3. `CHANNEL_HANGUP_COMPLETE`
+4. `CHANNEL_STATE` (CS_REPORTING)
+5. `CHANNEL_DESTROY`
+6. `CHANNEL_STATE` (CS_DESTROY) — true final event
+
+Events from different channels can interleave freely on the ESL wire. If you
+are tracking channel lifecycle, use `CHANNEL_STATE` (CS_INIT) as the
+start-of-life trigger and `CHANNEL_STATE` (CS_DESTROY) as end-of-life rather
+than relying on `CHANNEL_CREATE`/`CHANNEL_DESTROY`.
+
 ## Benchmarks
 
 bgapi throughput on localhost (N=10000, `bgapi status`, single connection):
