@@ -53,11 +53,10 @@ impl ChannelState {
     pub fn as_number(&self) -> u8 {
         *self as u8
     }
-}
 
-impl fmt::Display for ChannelState {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let name = match self {
+    /// Wire-format string matching `switch_channel_state_name()`.
+    pub const fn as_str(&self) -> &'static str {
+        match self {
             Self::CsNew => "CS_NEW",
             Self::CsInit => "CS_INIT",
             Self::CsRouting => "CS_ROUTING",
@@ -72,8 +71,13 @@ impl fmt::Display for ChannelState {
             Self::CsReporting => "CS_REPORTING",
             Self::CsDestroy => "CS_DESTROY",
             Self::CsNone => "CS_NONE",
-        };
-        f.write_str(name)
+        }
+    }
+}
+
+impl fmt::Display for ChannelState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
     }
 }
 
@@ -130,9 +134,10 @@ pub enum CallState {
     Unheld,
 }
 
-impl fmt::Display for CallState {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let name = match self {
+impl CallState {
+    /// Wire-format string matching `switch_channel_callstate2str()`.
+    pub const fn as_str(&self) -> &'static str {
+        match self {
             Self::Down => "DOWN",
             Self::Dialing => "DIALING",
             Self::Ringing => "RINGING",
@@ -142,8 +147,13 @@ impl fmt::Display for CallState {
             Self::RingWait => "RING_WAIT",
             Self::Hangup => "HANGUP",
             Self::Unheld => "UNHELD",
-        };
-        f.write_str(name)
+        }
+    }
+}
+
+impl fmt::Display for CallState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
     }
 }
 
@@ -190,15 +200,21 @@ pub enum AnswerState {
     Ringing,
 }
 
-impl fmt::Display for AnswerState {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let name = match self {
+impl AnswerState {
+    /// Wire-format string matching the `Answer-State` header value.
+    pub const fn as_str(&self) -> &'static str {
+        match self {
             Self::Hangup => "hangup",
             Self::Answered => "answered",
             Self::Early => "early",
             Self::Ringing => "ringing",
-        };
-        f.write_str(name)
+        }
+    }
+}
+
+impl fmt::Display for AnswerState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
     }
 }
 
@@ -238,13 +254,19 @@ pub enum CallDirection {
     Outbound,
 }
 
-impl fmt::Display for CallDirection {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let name = match self {
+impl CallDirection {
+    /// Wire-format string matching the `Call-Direction` header value.
+    pub const fn as_str(&self) -> &'static str {
+        match self {
             Self::Inbound => "inbound",
             Self::Outbound => "outbound",
-        };
-        f.write_str(name)
+        }
+    }
+}
+
+impl fmt::Display for CallDirection {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
     }
 }
 
@@ -475,11 +497,10 @@ impl HangupCause {
             _ => None,
         }
     }
-}
 
-impl fmt::Display for HangupCause {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let name = match self {
+    /// Wire-format string matching `switch_channel_cause2str()`.
+    pub const fn as_str(&self) -> &'static str {
+        match self {
             Self::None => "NONE",
             Self::UnallocatedNumber => "UNALLOCATED_NUMBER",
             Self::NoRouteTransitNet => "NO_ROUTE_TRANSIT_NET",
@@ -562,8 +583,13 @@ impl fmt::Display for HangupCause {
             Self::InvalidIdentity => "INVALID_IDENTITY",
             Self::StaleDate => "STALE_DATE",
             Self::RejectAll => "REJECT_ALL",
-        };
-        f.write_str(name)
+        }
+    }
+}
+
+impl fmt::Display for HangupCause {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
     }
 }
 

@@ -122,10 +122,33 @@ def rust_define_header_enum_names(path: Path) -> set[str]:
 def rust_display_impl_names(
     path: Path, type_name: str, stop_at: str | None = None
 ) -> set[str]:
-    """Extract wire names from a Display impl block."""
+    """Extract wire names from a type's Display impl or as_str() match arms.
+
+    Prefers the `pub const fn as_str` / `pub fn as_str` method on
+    `impl <type_name>` when present (the canonical place for wire-format
+    string tables), and falls back to the `impl fmt::Display for <type_name>`
+    match arms otherwise. This keeps the hook working whether Display inlines
+    the match or delegates to `self.as_str()`.
+    """
     text = path.read_text()
-    pattern = rf"impl fmt::Display for {type_name}"
     names: set[str] = set()
+
+    as_str_re = re.compile(
+        rf"impl {re.escape(type_name)}\s*\{{.*?"
+        rf"fn as_str\(&self\)\s*->\s*&'static str\s*\{{(.*?)\n\s*\}}",
+        re.DOTALL,
+    )
+    m = as_str_re.search(text)
+    if m:
+        body = m.group(1)
+        for arm in re.finditer(r'=> "([^"]+)"', body):
+            if stop_at and arm.group(1) == stop_at:
+                break
+            names.add(arm.group(1))
+        if names:
+            return names
+
+    pattern = rf"impl fmt::Display for {type_name}"
     in_block = False
     for line in text.splitlines():
         if pattern in line:
