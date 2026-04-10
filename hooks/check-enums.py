@@ -513,6 +513,16 @@ def check_event_headers(repo: Path, src: SourceResolver) -> CheckResult:
     c_xmlrpc = src.read("src/mod/xml_int/mod_xml_rpc/mod_xml_rpc.c")
     add(reference, extract_headers_from_text(c_xmlrpc), "mod_xml_rpc.c")
 
+    # ── Pending-upstream allowlist ──
+    # Headers present in Rust but not yet merged in signalwire/master.
+    # Each entry must reference an open upstream PR. Remove the entry once
+    # the PR merges and the cached download picks it up.
+    add(
+        reference,
+        {"Heartbeat-Interval"},
+        "pending: signalwire/freeswitch#3003 (add Heartbeat-Interval to send_heartbeat)",
+    )
+
     # ── Structural exclusions from core ──
     # These are patterns, not individual header names.
 
