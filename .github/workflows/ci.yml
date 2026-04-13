@@ -29,6 +29,13 @@ jobs:
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
+      - name: Check feature combinations
+        run: |
+          cargo check -p freeswitch-types --no-default-features --message-format=short
+          cargo check -p freeswitch-types --no-default-features --features esl --message-format=short
+          cargo check -p freeswitch-types --no-default-features --features serde --message-format=short
+          cargo check -p freeswitch-types --no-default-features --features conference-info --message-format=short
+
       - name: Check
         run: cargo check --workspace --all-targets
 
