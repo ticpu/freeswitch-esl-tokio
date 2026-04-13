@@ -498,6 +498,38 @@ impl HangupCause {
         }
     }
 
+    /// Map a SIP response code to the corresponding FreeSWITCH hangup cause.
+    ///
+    /// Uses the same mapping as mod_sofia's `sofia_glue_sip_cause_to_freeswitch()`.
+    /// Returns `None` for codes without an explicit mapping.
+    pub fn from_sip_response(code: u16) -> Option<Self> {
+        match code {
+            200 => Some(Self::NormalClearing),
+            401 | 402 | 403 | 407 | 603 | 608 => Some(Self::CallRejected),
+            607 => Some(Self::Unwanted),
+            404 => Some(Self::UnallocatedNumber),
+            485 | 604 => Some(Self::NoRouteDestination),
+            408 | 504 => Some(Self::RecoveryOnTimerExpire),
+            410 => Some(Self::NumberChanged),
+            413 | 414 | 416 | 420 | 421 | 423 | 505 | 513 => Some(Self::Interworking),
+            480 => Some(Self::NoUserResponse),
+            400 | 481 | 500 | 503 => Some(Self::NormalTemporaryFailure),
+            486 | 600 => Some(Self::UserBusy),
+            484 => Some(Self::InvalidNumberFormat),
+            488 | 606 => Some(Self::IncompatibleDestination),
+            502 => Some(Self::NetworkOutOfOrder),
+            405 => Some(Self::ServiceUnavailable),
+            406 | 415 | 501 => Some(Self::ServiceNotImplemented),
+            482 | 483 => Some(Self::ExchangeRoutingError),
+            487 => Some(Self::OriginatorCancel),
+            428 => Some(Self::NoIdentity),
+            429 => Some(Self::BadIdentityInfo),
+            437 => Some(Self::UnsupportedCertificate),
+            438 => Some(Self::InvalidIdentity),
+            _ => None,
+        }
+    }
+
     /// Wire-format string matching `switch_channel_cause2str()`.
     pub const fn as_str(&self) -> &'static str {
         match self {
