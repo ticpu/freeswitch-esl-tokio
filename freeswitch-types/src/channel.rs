@@ -1245,6 +1245,203 @@ mod tests {
         assert!(HangupCause::from_number(4).is_none());
     }
 
+    // --- from_sip_response tests (mapping from sofia_glue_sip_cause_to_freeswitch) ---
+
+    #[test]
+    fn from_sip_response_success() {
+        assert_eq!(
+            HangupCause::from_sip_response(200),
+            Some(HangupCause::NormalClearing)
+        );
+    }
+
+    #[test]
+    fn from_sip_response_4xx_auth_rejection() {
+        for code in [401, 402, 403, 407] {
+            assert_eq!(
+                HangupCause::from_sip_response(code),
+                Some(HangupCause::CallRejected),
+                "SIP {code}"
+            );
+        }
+    }
+
+    #[test]
+    fn from_sip_response_4xx_routing() {
+        assert_eq!(
+            HangupCause::from_sip_response(404),
+            Some(HangupCause::UnallocatedNumber)
+        );
+        assert_eq!(
+            HangupCause::from_sip_response(485),
+            Some(HangupCause::NoRouteDestination)
+        );
+        assert_eq!(
+            HangupCause::from_sip_response(484),
+            Some(HangupCause::InvalidNumberFormat)
+        );
+        assert_eq!(
+            HangupCause::from_sip_response(410),
+            Some(HangupCause::NumberChanged)
+        );
+    }
+
+    #[test]
+    fn from_sip_response_4xx_service() {
+        assert_eq!(
+            HangupCause::from_sip_response(405),
+            Some(HangupCause::ServiceUnavailable)
+        );
+        for code in [406, 415, 501] {
+            assert_eq!(
+                HangupCause::from_sip_response(code),
+                Some(HangupCause::ServiceNotImplemented),
+                "SIP {code}"
+            );
+        }
+    }
+
+    #[test]
+    fn from_sip_response_4xx_interworking() {
+        for code in [413, 414, 416, 420, 421, 423, 505, 513] {
+            assert_eq!(
+                HangupCause::from_sip_response(code),
+                Some(HangupCause::Interworking),
+                "SIP {code}"
+            );
+        }
+    }
+
+    #[test]
+    fn from_sip_response_4xx_timeout_and_busy() {
+        assert_eq!(
+            HangupCause::from_sip_response(408),
+            Some(HangupCause::RecoveryOnTimerExpire)
+        );
+        assert_eq!(
+            HangupCause::from_sip_response(504),
+            Some(HangupCause::RecoveryOnTimerExpire)
+        );
+        assert_eq!(
+            HangupCause::from_sip_response(480),
+            Some(HangupCause::NoUserResponse)
+        );
+        assert_eq!(
+            HangupCause::from_sip_response(486),
+            Some(HangupCause::UserBusy)
+        );
+        assert_eq!(
+            HangupCause::from_sip_response(487),
+            Some(HangupCause::OriginatorCancel)
+        );
+    }
+
+    #[test]
+    fn from_sip_response_4xx_temporary_failure() {
+        for code in [400, 481, 500, 503] {
+            assert_eq!(
+                HangupCause::from_sip_response(code),
+                Some(HangupCause::NormalTemporaryFailure),
+                "SIP {code}"
+            );
+        }
+    }
+
+    #[test]
+    fn from_sip_response_4xx_exchange_routing() {
+        for code in [482, 483] {
+            assert_eq!(
+                HangupCause::from_sip_response(code),
+                Some(HangupCause::ExchangeRoutingError),
+                "SIP {code}"
+            );
+        }
+    }
+
+    #[test]
+    fn from_sip_response_4xx_media() {
+        assert_eq!(
+            HangupCause::from_sip_response(488),
+            Some(HangupCause::IncompatibleDestination)
+        );
+        assert_eq!(
+            HangupCause::from_sip_response(606),
+            Some(HangupCause::IncompatibleDestination)
+        );
+    }
+
+    #[test]
+    fn from_sip_response_5xx() {
+        assert_eq!(
+            HangupCause::from_sip_response(502),
+            Some(HangupCause::NetworkOutOfOrder)
+        );
+    }
+
+    #[test]
+    fn from_sip_response_6xx() {
+        assert_eq!(
+            HangupCause::from_sip_response(600),
+            Some(HangupCause::UserBusy)
+        );
+        assert_eq!(
+            HangupCause::from_sip_response(603),
+            Some(HangupCause::CallRejected)
+        );
+        assert_eq!(
+            HangupCause::from_sip_response(604),
+            Some(HangupCause::NoRouteDestination)
+        );
+        assert_eq!(
+            HangupCause::from_sip_response(607),
+            Some(HangupCause::Unwanted)
+        );
+        assert_eq!(
+            HangupCause::from_sip_response(608),
+            Some(HangupCause::CallRejected)
+        );
+    }
+
+    #[test]
+    fn from_sip_response_stir_shaken() {
+        assert_eq!(
+            HangupCause::from_sip_response(428),
+            Some(HangupCause::NoIdentity)
+        );
+        assert_eq!(
+            HangupCause::from_sip_response(429),
+            Some(HangupCause::BadIdentityInfo)
+        );
+        assert_eq!(
+            HangupCause::from_sip_response(437),
+            Some(HangupCause::UnsupportedCertificate)
+        );
+        assert_eq!(
+            HangupCause::from_sip_response(438),
+            Some(HangupCause::InvalidIdentity)
+        );
+    }
+
+    #[test]
+    fn from_sip_response_unmapped_returns_none() {
+        // Provisional/success ranges without explicit mapping
+        for code in [100, 180, 183, 301, 302] {
+            assert_eq!(
+                HangupCause::from_sip_response(code),
+                None,
+                "SIP {code} should be None"
+            );
+        }
+        // Unmapped 4xx/5xx
+        for code in [409, 411, 412, 422, 489, 491, 493, 506, 580] {
+            assert_eq!(
+                HangupCause::from_sip_response(code),
+                None,
+                "SIP {code} should be None"
+            );
+        }
+    }
+
     // --- ChannelTimetable tests ---
 
     #[test]
