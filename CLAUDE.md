@@ -151,6 +151,11 @@ whole story, a brief one-liner suffices.
 markdown files or comments — these go stale when variants are added. Use dynamic
 badges (CI-generated) in README or just omit the count.
 
+**design-rationale is rationale, not changelog.** Version bumps, MSRV changes,
+dep updates, and plain feature adds belong in the release tag's ChangeLog.
+Only genuine design decisions (new layering, reversed trade-off, new invariant)
+get a rationale section.
+
 ## Logging and Credential Safety
 
 Logged wire data must be accurate. Never use `.trim()` on wire content for
