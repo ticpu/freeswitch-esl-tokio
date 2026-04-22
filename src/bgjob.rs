@@ -275,6 +275,13 @@ impl<'a> BgJobResult<'a> {
     }
 }
 
+impl freeswitch_types::sip_header::SipHeaderLookup for BgJobResult<'_> {
+    fn sip_header_str(&self, name: &str) -> Option<&str> {
+        self.0
+            .header_str(name)
+    }
+}
+
 impl HeaderLookup for BgJobResult<'_> {
     fn header_str(&self, name: &str) -> Option<&str> {
         self.0

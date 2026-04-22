@@ -4,6 +4,8 @@
 mod core;
 mod core_media;
 mod esl_array;
+#[cfg(feature = "esl")]
+mod esl_headers;
 mod sip_multipart;
 mod sip_passthrough;
 mod sofia;
@@ -11,6 +13,8 @@ mod sofia;
 pub use self::core::{ChannelVariable, ParseChannelVariableError};
 pub use core_media::{CoreMediaVariable, ParseCoreMediaVariableError, RtpStatUnit};
 pub use esl_array::{EslArray, EslArrayError, MAX_ARRAY_ITEMS};
+#[cfg(feature = "esl")]
+pub use esl_headers::EslHeaders;
 pub use sip_multipart::{MultipartBody, MultipartItem};
 pub use sip_passthrough::{
     InvalidHeaderName, ParseSipPassthroughError, SipHeaderPrefix, SipPassthroughHeader,

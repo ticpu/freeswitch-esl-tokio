@@ -842,6 +842,15 @@ impl FromStr for EslEventPriority {
 pub struct EslEvent {
     event_type: Option<EslEventType>,
     headers: IndexMap<String, String>,
+    /// Alias map from original wire key to normalized key, populated only
+    /// when the original differs from its normalized form (mixed-case
+    /// CODEC events, variant-cased log headers). Lets `header_str` resolve
+    /// non-canonical casing without allocating on every lookup.
+    ///
+    /// Derived from `headers`. Marked `#[serde(skip)]` — serde round trips
+    /// through `set_header()` during deserialization, which rebuilds this
+    /// map from the canonical keys. See the `Deserialize` impl below and
+    /// the `original_keys_rebuilt_after_serde_roundtrip` test.
     #[cfg_attr(feature = "serde", serde(skip))]
     original_keys: IndexMap<String, String>,
     body: Option<String>,
@@ -1100,6 +1109,12 @@ impl HeaderLookup for EslEvent {
     fn variable_str(&self, name: &str) -> Option<&str> {
         let key = format!("variable_{}", name);
         self.header_str(&key)
+    }
+}
+
+impl sip_header::SipHeaderLookup for EslEvent {
+    fn sip_header_str(&self, name: &str) -> Option<&str> {
+        EslEvent::header_str(self, name)
     }
 }
 
@@ -1849,6 +1864,73 @@ mod tests {
             Some("128000")
         );
         assert_eq!(event.header_str("unique-id"), Some("abc-123"));
+    }
+
+    #[test]
+    fn original_keys_rebuilt_after_serde_roundtrip() {
+        // Real-world CODEC event quirk: switch_core_codec.c emits
+        // `Channel-Write-Codec-Name` (Title-Case) alongside
+        // `channel-write-codec-bit-rate` (all lowercase). The wire parser
+        // routes every header through `set_header()` which normalizes the
+        // key and stores non-canonical originals in the alias map so
+        // `header_str("channel-write-codec-bit-rate")` still resolves
+        // without an extra hash probe per lookup.
+        //
+        // The alias map is `#[serde(skip)]`: it's derived state. After
+        // deserialization, the map must be rebuilt by routing every
+        // incoming key through `set_header` — otherwise external JSON
+        // carrying non-canonical keys (which is how FreeSWITCH's own
+        // JSON-format events arrive over the wire) would lose non-canonical
+        // lookup support.
+        //
+        // This test simulates that path: external JSON with both a
+        // canonical and a non-canonical key present.
+        let external_json = r#"{
+            "event_type": null,
+            "headers": {
+                "Channel-Write-Codec-Name": "opus",
+                "channel-write-codec-bit-rate": "64000",
+                "Custom-X-Header": "preserved"
+            },
+            "body": null
+        }"#;
+        let parsed: EslEvent = serde_json::from_str(external_json).unwrap();
+
+        // Canonical lookup via the typed enum — always works because
+        // set_header normalizes into the canonical form.
+        assert_eq!(
+            parsed.header(EventHeader::ChannelWriteCodecName),
+            Some("opus")
+        );
+        assert_eq!(
+            parsed.header(EventHeader::ChannelWriteCodecBitRate),
+            Some("64000")
+        );
+
+        // Non-canonical lookup of the bit-rate key — only works if the
+        // alias map was rebuilt during deserialization.
+        assert_eq!(
+            parsed.header_str("channel-write-codec-bit-rate"),
+            Some("64000")
+        );
+        // And canonical form of the same key still works.
+        assert_eq!(
+            parsed.header_str("Channel-Write-Codec-Bit-Rate"),
+            Some("64000")
+        );
+
+        // Headers the library has no enum variant for pass through the
+        // title-case fallback path; both forms resolve.
+        assert_eq!(parsed.header_str("Custom-X-Header"), Some("preserved"));
+
+        // And a round-trip of our own serialized output preserves the
+        // canonical lookups (no aliases needed — we write canonical keys).
+        let json = serde_json::to_string(&parsed).unwrap();
+        let re_parsed: EslEvent = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            re_parsed.header(EventHeader::ChannelWriteCodecBitRate),
+            Some("64000")
+        );
     }
 
     #[test]

@@ -65,6 +65,8 @@ pub use sofia::{
     ParseSipUserPingStatusError, ParseSofiaEventSubclassError, SipUserPingStatus,
     SofiaEventSubclass,
 };
+#[cfg(feature = "esl")]
+pub use variables::EslHeaders;
 pub use variables::{
     ChannelVariable, CoreMediaVariable, EslArray, EslArrayError, MultipartBody, MultipartItem,
     ParseChannelVariableError, ParseCoreMediaVariableError, RtpStatUnit, SipHeaderPrefix,

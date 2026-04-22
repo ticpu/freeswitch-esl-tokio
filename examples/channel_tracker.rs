@@ -95,6 +95,14 @@ struct TrackedChannel {
     data: HashMap<String, String>,
 }
 
+impl freeswitch_esl_tokio::prelude::SipHeaderLookup for TrackedChannel {
+    fn sip_header_str(&self, name: &str) -> Option<&str> {
+        self.data
+            .get(name)
+            .map(|s| s.as_str())
+    }
+}
+
 impl HeaderLookup for TrackedChannel {
     fn header_str(&self, name: &str) -> Option<&str> {
         self.data

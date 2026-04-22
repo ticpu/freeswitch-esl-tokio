@@ -19,12 +19,23 @@ use crate::sofia::{
     SofiaEventSubclass,
 };
 use crate::variables::VariableName;
+use sip_header::SipHeaderLookup;
 
 /// Trait for looking up ESL headers and channel variables from any key-value store.
 ///
 /// Implementors provide two methods -- `header_str(&str)` and `variable_str(&str)` --
 /// and get all typed accessors (`channel_state()`, `call_direction()`, `timetable()`,
 /// etc.) as default implementations.
+///
+/// `HeaderLookup: SipHeaderLookup` — every `HeaderLookup` implementor must also
+/// implement [`sip_header::SipHeaderLookup`] so callers can reach the typed RFC
+/// SIP parsers (`call_info()`, `history_info()`, `geolocation()`) directly from
+/// the same value. For stores that treat ESL headers and SIP headers as the
+/// same flat key-value namespace, a one-line delegation from `sip_header_str`
+/// to `header_str` is the intended impl — see [`EslEvent`](crate::EslEvent)
+/// for the pattern. Stores with FreeSWITCH-specific transport encoding (ARRAY,
+/// `[bracket]` wrapping) should use [`EslHeaders`](crate::EslHeaders), which
+/// overrides the `SipHeaderLookup` parsers to strip those quirks.
 ///
 /// This trait must be in scope to call its methods on `EslEvent` -- including
 /// `unique_id()`, `hangup_cause()`, and `channel_state()`. Import it directly
@@ -41,8 +52,18 @@ use crate::variables::VariableName;
 /// ```
 /// use std::collections::HashMap;
 /// use freeswitch_types::{HeaderLookup, EventHeader, ChannelVariable};
+/// use freeswitch_types::sip_header::SipHeaderLookup;
 ///
 /// struct MyStore(HashMap<String, String>);
+///
+/// // HeaderLookup has SipHeaderLookup as a supertrait. For stores that
+/// // treat ESL and SIP headers as one flat namespace, delegate
+/// // sip_header_str to the same lookup.
+/// impl SipHeaderLookup for MyStore {
+///     fn sip_header_str(&self, name: &str) -> Option<&str> {
+///         self.0.get(name).map(|s| s.as_str())
+///     }
+/// }
 ///
 /// impl HeaderLookup for MyStore {
 ///     fn header_str(&self, name: &str) -> Option<&str> {
@@ -65,7 +86,7 @@ use crate::variables::VariableName;
 /// assert_eq!(store.header(EventHeader::ChannelState), Some("CS_EXECUTE"));
 /// assert_eq!(store.variable(ChannelVariable::ReadCodec), Some("PCMU"));
 /// ```
-pub trait HeaderLookup {
+pub trait HeaderLookup: SipHeaderLookup {
     /// Look up a header by its raw wire name (e.g. `"Unique-ID"`).
     fn header_str(&self, name: &str) -> Option<&str>;
 
@@ -366,18 +387,11 @@ impl HeaderLookup for std::collections::HashMap<String, String> {
     }
 }
 
-#[cfg(feature = "esl")]
-impl HeaderLookup for indexmap::IndexMap<String, String> {
-    fn header_str(&self, name: &str) -> Option<&str> {
-        self.get(name)
-            .map(|s| s.as_str())
-    }
-
-    fn variable_str(&self, name: &str) -> Option<&str> {
-        self.get(&format!("variable_{name}"))
-            .map(|s| s.as_str())
-    }
-}
+// No blanket `HeaderLookup` / `SipHeaderLookup` on `indexmap::IndexMap<String,
+// String>` — both traits are external, so the orphan rules forbid the pair.
+// Wrap in [`EslHeaders`](crate::EslHeaders) instead, which is what callers
+// actually want: ARRAY-aware parsing, `variable_` prefix handling, and
+// bracket stripping are only correct for ESL-sourced headers anyway.
 
 #[cfg(test)]
 mod tests {
@@ -386,6 +400,14 @@ mod tests {
     use std::collections::HashMap;
 
     struct TestStore(HashMap<String, String>);
+
+    impl SipHeaderLookup for TestStore {
+        fn sip_header_str(&self, name: &str) -> Option<&str> {
+            self.0
+                .get(name)
+                .map(|s| s.as_str())
+        }
+    }
 
     impl HeaderLookup for TestStore {
         fn header_str(&self, name: &str) -> Option<&str> {

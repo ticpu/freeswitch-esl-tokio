@@ -266,6 +266,14 @@ impl EslResponse {
     }
 }
 
+impl freeswitch_types::sip_header::SipHeaderLookup for EslResponse {
+    fn sip_header_str(&self, name: &str) -> Option<&str> {
+        self.headers
+            .get(name)
+            .map(|s| s.as_str())
+    }
+}
+
 impl HeaderLookup for EslResponse {
     fn header_str(&self, name: &str) -> Option<&str> {
         self.headers

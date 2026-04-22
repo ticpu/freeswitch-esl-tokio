@@ -552,122 +552,132 @@ iteration. The tracker lives in `freeswitch-esl-tokio` rather than
 `freeswitch-types` because its `bgapi()` convenience method calls
 `EslClient::bgapi()`.
 
-## Extracting sip-header: why RFC types don't belong in freeswitch-types
+## sip-header as a standalone crate
 
-About 42% of `freeswitch-types` by line count (~4,300 lines) is pure RFC
+About 42% of `freeswitch-types` by line count (~4,300 lines) was pure RFC
 SIP standard code with zero FreeSWITCH coupling: the `SipHeaderAddr`
 name-addr parser (RFC 3261), `UriInfo` (RFC 3261 §20.9), `HistoryInfo`
 (RFC 7044), `SipGeolocation` (RFC 6442), the `SipHeaderLookup` trait, SIP
 message header extraction, and the full RFC 4575 conference-info XML
-parser. These modules were written under a strict "no FreeSWITCH references
-in sip_* modules" policy and have clean module boundaries — but they live
-in a crate named `freeswitch-types`.
+parser. These modules had a strict "no FreeSWITCH references in sip_*
+modules" policy and clean module boundaries, but they lived in a crate
+named `freeswitch-types` — forcing anyone who needed RFC SIP types to
+depend on FreeSWITCH-specific ESL infrastructure they had no use for.
 
 The problem surfaced through `eido`, the NG9-1-1 (NENA-STA-024.1a) library.
-`eido` depends on `freeswitch-types` solely for `UriInfo`,
-`UriInfoEntry`, `SipGeolocation`, `SipGeolocationRef`, `SipHeaderAddr`,
-and `sip_uri` — all RFC-standard SIP types. It uses zero FreeSWITCH-specific
-types: no `EslEventType`, no `ChannelState`, no `Originate`, no
-`HeaderLookup`. Anyone building NG9-1-1 tooling against a non-FreeSWITCH
-BCF — or just building a SIP Call-Info parser for a testing harness — has to
-pull in ESL event types, channel state machines, and originate command
-builders they will never use, from a crate whose name signals "this is for
-FreeSWITCH users."
+`eido` depended on `freeswitch-types` solely for `UriInfo`, `UriInfoEntry`,
+`SipGeolocation`, `SipGeolocationRef`, `SipHeaderAddr`, and `sip_uri` — all
+RFC-standard SIP types. It used zero FreeSWITCH-specific types: no
+`EslEventType`, no `ChannelState`, no `Originate`, no `HeaderLookup`.
+Anyone building NG9-1-1 tooling against a non-FreeSWITCH BCF — or a SIP
+Call-Info parser for a testing harness — had to pull in ESL event types,
+channel state machines, and originate command builders they would never
+use, from a crate whose name signalled "this is for FreeSWITCH users."
 
-The solution is extracting the RFC-pure modules into a standalone
-`sip-header` crate (MIT OR Apache-2.0, matching `sip-uri`). This creates a
-layered ecosystem: `sip-uri` handles URI parsing (RFC 3261 addr-spec),
-`sip-header` handles header-level parsing (name-addr with header params,
-Call-Info, History-Info, Geolocation, conference-info), and
-`freeswitch-types` re-exports everything while adding ESL protocol types,
-channel state, and command builders on top.
+Those modules were extracted into a standalone `sip-header` crate
+(MIT OR Apache-2.0, matching `sip-uri`), which `freeswitch-types` now
+depends on. The result is a layered ecosystem: `sip-uri` handles URI
+parsing (RFC 3261 addr-spec), `sip-header` handles header-level parsing
+(name-addr with header params, Call-Info, History-Info, Geolocation,
+conference-info), and `freeswitch-types` re-exports everything from
+`sip-header` while adding ESL protocol types, channel state, and command
+builders on top. Existing users see no API change — all types remain
+importable from `freeswitch_types::`.
 
 ### The ARRAY encoding problem
 
-The extraction is not a simple file move because of `EslArray`. FreeSWITCH
+The extraction was not a simple file move because of `EslArray`. FreeSWITCH
 encodes multi-value SIP headers using a proprietary pipe-delimited format:
 `ARRAY::value1|:value2|:value3`. Both `UriInfo::parse()` and
-`HistoryInfo::parse()` currently import `EslArray` to detect and split this
-format alongside standard RFC comma-separated values. `HistoryInfo::parse()`
-also strips `[...]` bracket wrapping from FreeSWITCH log output.
+`HistoryInfo::parse()` had previously imported `EslArray` to detect and
+split this format alongside standard RFC comma-separated values, and
+`HistoryInfo::parse()` also stripped `[...]` bracket wrapping from
+FreeSWITCH log output. Those were FreeSWITCH transport-encoding details
+leaking into RFC-pure parsers.
 
-These are FreeSWITCH transport encoding details leaking into RFC-pure
-parsers. The question was whether to inline the trivial ARRAY detection
-(3 lines of prefix check) to keep `parse()` handling both formats
-transparently, or to make `parse()` strictly RFC-only.
-
-The pragmatic argument for inlining: it's 3 lines, no dependency, and the
-`SipHeaderLookup` trait's default methods call `parse()` — if `parse()` is
+The question was whether to inline the trivial ARRAY detection (three
+lines of prefix check) inside `sip-header` itself — keeping `parse()`
+transparently handling both formats — or make `parse()` strictly RFC-only
+and push ESL-specific handling up into `freeswitch-types`. The pragmatic
+argument for inlining: it's three lines, no dependency, and the
+`SipHeaderLookup` trait's default methods call `parse()`; if `parse()` is
 RFC-only, then `HashMap` users with ESL data get parse failures on ARRAY
 values, and Rust's orphan rules prevent `freeswitch-types` from overriding
 the `HashMap` impl that `sip-header` provides.
 
-The purity argument won. Making `parse()` RFC-only forces the design to be
+The purity argument won. Making `parse()` RFC-only forced the design to be
 honest about the abstraction boundary: a `HashMap<String, String>` holding
 ESL data is not the same thing as a `HashMap` holding standard SIP headers.
 The difference is real — ESL values can be ARRAY-encoded, bracket-wrapped,
-and carry `variable_` prefixed keys. Papering over this with "parse both
-formats" hides a transport distinction that callers need to reason about.
+and carry `variable_` prefixed keys. Papering over that inside `sip-header`
+would hide a transport distinction that callers need to reason about.
 
 ### EslHeaders: making the transport boundary visible
 
-The clean solution is a newtype. `EslHeaders` wraps a `HashMap` and
-overrides the `SipHeaderLookup` default methods with ARRAY-aware parsing
-and bracket stripping. The type makes visible what was previously hidden:
+The clean solution was a newtype. [`EslHeaders`](../freeswitch-types/src/variables/esl_headers.rs)
+wraps `IndexMap<String, String>` and overrides the `SipHeaderLookup`
+default methods that do RFC parsing (`call_info`, `history_info`,
+`alert_info`) to peel the FreeSWITCH encoding — `ARRAY::` splitting via
+`EslArray` and `[...]` bracket stripping — before delegating to the
+RFC parsers (`UriInfo::from_entries`, `HistoryInfo::from_entries`).
+Raw lookups (`sip_header_str`) return the stored value untouched, so
+callers who want the wire form see exactly what FreeSWITCH sent.
+
+The type makes visible what was previously hidden:
 
 | Type | `call_info()` handles | `variable_str()` | ARRAY decoding |
 |------|----------------------|-------------------|----------------|
 | `HashMap<String, String>` | RFC comma-separated | no | no |
 | `EslHeaders` | RFC + ARRAY + brackets | yes (`variable_` prefix) | yes |
 
-This is not an extra abstraction — it is the correct abstraction. If
-`sip-header` had existed from day one, `freeswitch-types` would have
-naturally created `EslHeaders` to bridge ESL's encoding quirks to the
-standard SIP parsing API. The extraction retroactively creates the layering
-that should have been there all along.
-
 `sip-header` provides `UriInfo::from_entries()` and
-`HistoryInfo::from_entries()` that accept `impl IntoIterator<Item = &str>`,
-so `EslHeaders` can split via `EslArray` and pass pre-split entries without
-`sip-header` knowing anything about the ARRAY format.
+`HistoryInfo::from_entries()` that accept
+`impl IntoIterator<Item = &str>`, so `EslHeaders` can split via
+`EslArray` and pass pre-split entries without `sip-header` knowing
+anything about the ARRAY format.
 
 ### HeaderLookup as a supertrait
 
-Currently `freeswitch-types` bridges the two traits with a blanket impl:
+`freeswitch-types` previously bridged the two traits with a blanket
+`impl<T: HeaderLookup> SipHeaderLookup for T`. After extraction,
+`SipHeaderLookup` lives in `sip-header` and `HashMap` gets its impl
+there — making the blanket conflict with `sip-header`'s own
+`HashMap` impl under Rust coherence. The chosen fix was making
+`SipHeaderLookup` a supertrait of `HeaderLookup`:
 
 ```rust
-impl<T: HeaderLookup> SipHeaderLookup for T {
-    fn sip_header_str(&self, name: &str) -> Option<&str> {
-        self.header_str(name)
-    }
-}
+pub trait HeaderLookup: SipHeaderLookup { ... }
 ```
 
-After extraction, `SipHeaderLookup` lives in `sip-header` and `HashMap`
-gets its impl there. A blanket `impl<T: HeaderLookup> SipHeaderLookup for T`
-in `freeswitch-types` would conflict with `sip-header`'s `HashMap` impl
-(Rust coherence). The fix: `HeaderLookup: SipHeaderLookup` as a supertrait.
-Any `HeaderLookup` implementor must also provide `SipHeaderLookup` — for
-`HashMap` this comes from `sip-header`, for `EslHeaders` it comes from
-`freeswitch-types` with ARRAY overrides, and for custom ESL event types it
-is implemented manually.
+Every `HeaderLookup` implementor must now also provide
+`SipHeaderLookup`. For stores that treat ESL and SIP headers as a
+single flat namespace — `EslEvent`, `EslResponse`, `BgJobResult`,
+`TrackedChannel` — it's a one-line delegation from `sip_header_str`
+to `header_str`. For `HashMap<String, String>` it comes from
+`sip-header`. For `EslHeaders` it comes from `freeswitch-types` with
+the ARRAY and bracket overrides described above.
+
+This was a breaking change and landed in the 2.0 window. The
+`IndexMap<String, String>` blanket `HeaderLookup` impl was dropped at
+the same time: orphan rules prevent `freeswitch-types` from impling
+the sip-header trait on an external type, and in practice ESL callers
+want the `EslHeaders` newtype anyway (ARRAY decoding, bracket
+stripping, `variable_` prefix handling are all correct for ESL data
+and wrong for a plain `IndexMap`).
 
 ### What moves, what stays
 
-**Moves to sip-header:** `SipHeaderAddr`, `SipHeader` enum,
+**Moved to sip-header:** `SipHeaderAddr`, `SipHeader` enum,
 `SipHeaderLookup` trait, `UriInfo`, `HistoryInfo`, `SipGeolocation`,
 `extract_header()`, the `define_header_enum!` macro,
-`split_comma_entries()`, and `conference_info/*` (feature-gated on `xml`).
+`split_comma_entries()`, and `conference_info/*`
+(feature-gated on `conference-info`).
 
-**Stays in freeswitch-types:** `EslArray`, `EslHeaders` (new),
+**Stays in freeswitch-types:** `EslArray`, `EslHeaders`,
 `SipPassthroughHeader` (FS `sip_h_*`/`sip_i_*`/etc. variable names),
 `MultipartBody` (100% ARRAY format), `HeaderLookup` trait,
 `EventHeader`, `ChannelVariable`, `SofiaVariable`, all channel state
 types, and all command builders.
-
-`freeswitch-types` re-exports everything from `sip-header` for backward
-compatibility. Existing users see no API change — all types remain
-importable from `freeswitch_types::`.
 
 ## Unified SIP passthrough headers over per-prefix enums
 
