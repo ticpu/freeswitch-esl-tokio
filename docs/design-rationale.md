@@ -344,6 +344,18 @@ transitive dependency — unacceptable for a config parser or a static analysis
 tool. The split keeps the dependency boundary clean: `freeswitch-types` is
 pure data, `freeswitch-esl-tokio` is transport.
 
+With the 2.0 release the types crate reached 1.0. The `#[non_exhaustive]`
+policy on public enums and public-field structs is in place, the builders
+(`Originate`, endpoint types, `EventSubscription`) have accessor and
+mutator conventions documented, and downstream consumers — particularly
+`eido` and its NG9-1-1 tooling — need a stability signal. The types
+crate now versions independently from the transport crate, so a future
+breaking change in the types catalog does not force the transport
+crate's major version, and vice versa. A `freeswitch-esl-tokio` 2.x
+release stays compatible with any `freeswitch-types` 1.x, and a
+`freeswitch-types` 2.0 would be cut when we need to break the data
+layer without necessarily touching the transport.
+
 ## Wire security: newline injection prevention
 
 ESL is a text protocol where `\n\n` terminates a command. Any user-provided
