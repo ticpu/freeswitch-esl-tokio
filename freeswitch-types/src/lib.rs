@@ -19,6 +19,9 @@ pub use sip_header;
 pub use sip_header::define_header_enum;
 pub use sip_header::sip_uri;
 
+#[macro_use]
+mod macros;
+
 pub mod channel;
 #[cfg(feature = "esl")]
 pub mod commands;

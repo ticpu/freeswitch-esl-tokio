@@ -3,28 +3,28 @@
 use std::fmt;
 use std::str::FromStr;
 
-/// Channel state from `switch_channel_state_t` -- carried in the `Channel-State` header
-/// as a string (`CS_ROUTING`) and in `Channel-State-Number` as an integer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[non_exhaustive]
-#[repr(u8)]
-#[allow(missing_docs)]
-pub enum ChannelState {
-    CsNew = 0,
-    CsInit = 1,
-    CsRouting = 2,
-    CsSoftExecute = 3,
-    CsExecute = 4,
-    CsExchangeMedia = 5,
-    CsPark = 6,
-    CsConsumeMedia = 7,
-    CsHibernate = 8,
-    CsReset = 9,
-    CsHangup = 10,
-    CsReporting = 11,
-    CsDestroy = 12,
-    CsNone = 13,
+wire_enum! {
+    /// Channel state from `switch_channel_state_t` -- carried in the `Channel-State` header
+    /// as a string (`CS_ROUTING`) and in `Channel-State-Number` as an integer.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    #[repr(u8)]
+    pub enum ChannelState {
+        CsNew = 0 => "CS_NEW",
+        CsInit = 1 => "CS_INIT",
+        CsRouting = 2 => "CS_ROUTING",
+        CsSoftExecute = 3 => "CS_SOFT_EXECUTE",
+        CsExecute = 4 => "CS_EXECUTE",
+        CsExchangeMedia = 5 => "CS_EXCHANGE_MEDIA",
+        CsPark = 6 => "CS_PARK",
+        CsConsumeMedia = 7 => "CS_CONSUME_MEDIA",
+        CsHibernate = 8 => "CS_HIBERNATE",
+        CsReset = 9 => "CS_RESET",
+        CsHangup = 10 => "CS_HANGUP",
+        CsReporting = 11 => "CS_REPORTING",
+        CsDestroy = 12 => "CS_DESTROY",
+        CsNone = 13 => "CS_NONE",
+    }
+    error ParseChannelStateError("channel state");
 }
 
 impl ChannelState {
@@ -53,245 +53,45 @@ impl ChannelState {
     pub fn as_number(&self) -> u8 {
         *self as u8
     }
+}
 
-    /// Wire-format string matching `switch_channel_state_name()`.
-    pub const fn as_str(&self) -> &'static str {
-        match self {
-            Self::CsNew => "CS_NEW",
-            Self::CsInit => "CS_INIT",
-            Self::CsRouting => "CS_ROUTING",
-            Self::CsSoftExecute => "CS_SOFT_EXECUTE",
-            Self::CsExecute => "CS_EXECUTE",
-            Self::CsExchangeMedia => "CS_EXCHANGE_MEDIA",
-            Self::CsPark => "CS_PARK",
-            Self::CsConsumeMedia => "CS_CONSUME_MEDIA",
-            Self::CsHibernate => "CS_HIBERNATE",
-            Self::CsReset => "CS_RESET",
-            Self::CsHangup => "CS_HANGUP",
-            Self::CsReporting => "CS_REPORTING",
-            Self::CsDestroy => "CS_DESTROY",
-            Self::CsNone => "CS_NONE",
-        }
+wire_enum! {
+    /// Call state from `switch_channel_callstate_t` -- carried in the `Channel-Call-State` header.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    pub enum CallState {
+        Down => "DOWN",
+        Dialing => "DIALING",
+        Ringing => "RINGING",
+        Early => "EARLY",
+        Active => "ACTIVE",
+        Held => "HELD",
+        RingWait => "RING_WAIT",
+        Hangup => "HANGUP",
+        Unheld => "UNHELD",
     }
+    error ParseCallStateError("call state");
 }
 
-impl fmt::Display for ChannelState {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_str())
+wire_enum! {
+    /// Answer state from the `Answer-State` header. Wire format is lowercase.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub enum AnswerState {
+        Hangup => "hangup",
+        Answered => "answered",
+        Early => "early",
+        Ringing => "ringing",
     }
+    error ParseAnswerStateError("answer state");
 }
 
-/// Error returned when parsing an invalid channel state string.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParseChannelStateError(pub String);
-
-impl fmt::Display for ParseChannelStateError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "unknown channel state: {}", self.0)
+wire_enum! {
+    /// Call direction from the `Call-Direction` header. Wire format is lowercase.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub enum CallDirection {
+        Inbound => "inbound",
+        Outbound => "outbound",
     }
-}
-
-impl std::error::Error for ParseChannelStateError {}
-
-impl FromStr for ChannelState {
-    type Err = ParseChannelStateError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "CS_NEW" => Ok(Self::CsNew),
-            "CS_INIT" => Ok(Self::CsInit),
-            "CS_ROUTING" => Ok(Self::CsRouting),
-            "CS_SOFT_EXECUTE" => Ok(Self::CsSoftExecute),
-            "CS_EXECUTE" => Ok(Self::CsExecute),
-            "CS_EXCHANGE_MEDIA" => Ok(Self::CsExchangeMedia),
-            "CS_PARK" => Ok(Self::CsPark),
-            "CS_CONSUME_MEDIA" => Ok(Self::CsConsumeMedia),
-            "CS_HIBERNATE" => Ok(Self::CsHibernate),
-            "CS_RESET" => Ok(Self::CsReset),
-            "CS_HANGUP" => Ok(Self::CsHangup),
-            "CS_REPORTING" => Ok(Self::CsReporting),
-            "CS_DESTROY" => Ok(Self::CsDestroy),
-            "CS_NONE" => Ok(Self::CsNone),
-            _ => Err(ParseChannelStateError(s.to_string())),
-        }
-    }
-}
-
-/// Call state from `switch_channel_callstate_t` -- carried in the `Channel-Call-State` header.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[non_exhaustive]
-#[allow(missing_docs)]
-pub enum CallState {
-    Down,
-    Dialing,
-    Ringing,
-    Early,
-    Active,
-    Held,
-    RingWait,
-    Hangup,
-    Unheld,
-}
-
-impl CallState {
-    /// Wire-format string matching `switch_channel_callstate2str()`.
-    pub const fn as_str(&self) -> &'static str {
-        match self {
-            Self::Down => "DOWN",
-            Self::Dialing => "DIALING",
-            Self::Ringing => "RINGING",
-            Self::Early => "EARLY",
-            Self::Active => "ACTIVE",
-            Self::Held => "HELD",
-            Self::RingWait => "RING_WAIT",
-            Self::Hangup => "HANGUP",
-            Self::Unheld => "UNHELD",
-        }
-    }
-}
-
-impl fmt::Display for CallState {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
-/// Error returned when parsing an invalid call state string.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParseCallStateError(pub String);
-
-impl fmt::Display for ParseCallStateError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "unknown call state: {}", self.0)
-    }
-}
-
-impl std::error::Error for ParseCallStateError {}
-
-impl FromStr for CallState {
-    type Err = ParseCallStateError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "DOWN" => Ok(Self::Down),
-            "DIALING" => Ok(Self::Dialing),
-            "RINGING" => Ok(Self::Ringing),
-            "EARLY" => Ok(Self::Early),
-            "ACTIVE" => Ok(Self::Active),
-            "HELD" => Ok(Self::Held),
-            "RING_WAIT" => Ok(Self::RingWait),
-            "HANGUP" => Ok(Self::Hangup),
-            "UNHELD" => Ok(Self::Unheld),
-            _ => Err(ParseCallStateError(s.to_string())),
-        }
-    }
-}
-
-/// Answer state from the `Answer-State` header. Wire format is lowercase.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[non_exhaustive]
-#[allow(missing_docs)]
-pub enum AnswerState {
-    Hangup,
-    Answered,
-    Early,
-    Ringing,
-}
-
-impl AnswerState {
-    /// Wire-format string matching the `Answer-State` header value.
-    pub const fn as_str(&self) -> &'static str {
-        match self {
-            Self::Hangup => "hangup",
-            Self::Answered => "answered",
-            Self::Early => "early",
-            Self::Ringing => "ringing",
-        }
-    }
-}
-
-impl fmt::Display for AnswerState {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
-/// Error returned when parsing an invalid answer state string.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParseAnswerStateError(pub String);
-
-impl fmt::Display for ParseAnswerStateError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "unknown answer state: {}", self.0)
-    }
-}
-
-impl std::error::Error for ParseAnswerStateError {}
-
-impl FromStr for AnswerState {
-    type Err = ParseAnswerStateError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "hangup" => Ok(Self::Hangup),
-            "answered" => Ok(Self::Answered),
-            "early" => Ok(Self::Early),
-            "ringing" => Ok(Self::Ringing),
-            _ => Err(ParseAnswerStateError(s.to_string())),
-        }
-    }
-}
-
-/// Call direction from the `Call-Direction` header. Wire format is lowercase.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[non_exhaustive]
-#[allow(missing_docs)]
-pub enum CallDirection {
-    Inbound,
-    Outbound,
-}
-
-impl CallDirection {
-    /// Wire-format string matching the `Call-Direction` header value.
-    pub const fn as_str(&self) -> &'static str {
-        match self {
-            Self::Inbound => "inbound",
-            Self::Outbound => "outbound",
-        }
-    }
-}
-
-impl fmt::Display for CallDirection {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
-/// Error returned when parsing an invalid call direction string.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParseCallDirectionError(pub String);
-
-impl fmt::Display for ParseCallDirectionError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "unknown call direction: {}", self.0)
-    }
-}
-
-impl std::error::Error for ParseCallDirectionError {}
-
-impl FromStr for CallDirection {
-    type Err = ParseCallDirectionError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "inbound" => Ok(Self::Inbound),
-            "outbound" => Ok(Self::Outbound),
-            _ => Err(ParseCallDirectionError(s.to_string())),
-        }
-    }
+    error ParseCallDirectionError("call direction");
 }
 
 /// Error returned when parsing an unknown hangup cause string.

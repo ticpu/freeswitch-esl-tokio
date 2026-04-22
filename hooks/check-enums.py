@@ -124,14 +124,32 @@ def rust_display_impl_names(
 ) -> set[str]:
     """Extract wire names from a type's Display impl or as_str() match arms.
 
-    Prefers the `pub const fn as_str` / `pub fn as_str` method on
-    `impl <type_name>` when present (the canonical place for wire-format
-    string tables), and falls back to the `impl fmt::Display for <type_name>`
-    match arms otherwise. This keeps the hook working whether Display inlines
-    the match or delegates to `self.as_str()`.
+    Looks, in order, for:
+      1. a `wire_enum! { ... pub enum <type_name> { ... } ... }` macro
+         invocation (generates as_str/Display/FromStr via a table)
+      2. a manual `impl <type_name> { fn as_str(&self) -> &'static str { ... } }`
+      3. a manual `impl fmt::Display for <type_name>` block
+
+    Each source is treated equivalently: wire names are collected from
+    `=> "NAME"` arrows in the body.
     """
     text = path.read_text()
     names: set[str] = set()
+
+    wire_enum_re = re.compile(
+        rf"wire_enum!\s*\{{(?:[^{{}}]|\{{[^{{}}]*\}})*?"
+        rf"pub enum {re.escape(type_name)}\s*\{{(.*?)\}}",
+        re.DOTALL,
+    )
+    m = wire_enum_re.search(text)
+    if m:
+        body = m.group(1)
+        for arm in re.finditer(r'=> "([^"]+)"', body):
+            if stop_at and arm.group(1) == stop_at:
+                break
+            names.add(arm.group(1))
+        if names:
+            return names
 
     as_str_re = re.compile(
         rf"impl {re.escape(type_name)}\s*\{{.*?"

@@ -1,0 +1,92 @@
+//! Internal declarative macros shared across the crate.
+//!
+//! These are `#[macro_use]`-imported from `lib.rs` and are not part of the
+//! public API. They exist to reduce mechanical repetition in types that are
+//! "wire-string ↔ enum" mappings (see `channel.rs`, `sofia/`).
+
+/// Generate an enum with canonical wire-string mappings and a matching
+/// `Parse<Name>Error` error type.
+///
+/// Expands to the enum itself, `as_str()`, `Display`, a `ParseFooError`
+/// newtype (`Debug + Clone + PartialEq + Eq + std::error::Error`), and
+/// `FromStr` that accepts the canonical case only.
+///
+/// Input shape:
+///
+/// ```ignore
+/// wire_enum! {
+///     /// Doc comment on the enum.
+///     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+///     pub enum CallDirection {
+///         /// Optional per-variant attrs (docs, cfg_attr).
+///         Inbound => "inbound",
+///         Outbound => "outbound",
+///     }
+///     error ParseCallDirectionError("call direction");
+/// }
+/// ```
+///
+/// The caller supplies the derive list and any additional attributes (repr,
+/// cfg_attr, allow). The macro appends `#[non_exhaustive]`,
+/// `#[allow(missing_docs)]`, and `#[cfg_attr(feature = "serde", derive(...))]`
+/// so those do not need to be duplicated at the call sites.
+macro_rules! wire_enum {
+    (
+        $(#[$enum_meta:meta])*
+        $vis:vis enum $Enum:ident {
+            $(
+                $(#[$var_meta:meta])*
+                $Variant:ident $(= $disc:literal)? => $wire:literal
+            ),+ $(,)?
+        }
+        error $Error:ident($label:literal);
+    ) => {
+        $(#[$enum_meta])*
+        #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+        #[non_exhaustive]
+        #[allow(missing_docs)]
+        $vis enum $Enum {
+            $(
+                $(#[$var_meta])*
+                $Variant $(= $disc)?,
+            )+
+        }
+
+        impl $Enum {
+            /// Canonical wire-format string.
+            pub const fn as_str(&self) -> &'static str {
+                match self {
+                    $( Self::$Variant => $wire, )+
+                }
+            }
+        }
+
+        impl ::std::fmt::Display for $Enum {
+            fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+                f.write_str(self.as_str())
+            }
+        }
+
+        #[doc = concat!("Error returned when parsing an invalid ", $label, " string.")]
+        #[derive(Debug, Clone, PartialEq, Eq)]
+        pub struct $Error(pub String);
+
+        impl ::std::fmt::Display for $Error {
+            fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+                write!(f, concat!("unknown ", $label, ": {}"), self.0)
+            }
+        }
+
+        impl ::std::error::Error for $Error {}
+
+        impl ::std::str::FromStr for $Enum {
+            type Err = $Error;
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+                match s {
+                    $( $wire => Ok(Self::$Variant), )+
+                    _ => Err($Error(s.to_string())),
+                }
+            }
+        }
+    };
+}
