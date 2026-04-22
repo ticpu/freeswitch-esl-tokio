@@ -30,7 +30,88 @@
 /// cfg_attr, allow). The macro appends `#[non_exhaustive]`,
 /// `#[allow(missing_docs)]`, and `#[cfg_attr(feature = "serde", derive(...))]`
 /// so those do not need to be duplicated at the call sites.
+///
+/// An optional trailing `tests: <module_ident>;` clause emits a
+/// `#[cfg(test)] mod <module_ident>` containing exhaustive round-trip,
+/// wrong-case-rejection, and unknown-rejection tests. The module name must
+/// be unique within the enclosing scope.
 macro_rules! wire_enum {
+    // With tests: emit the base expansion then the test module.
+    (
+        $(#[$enum_meta:meta])*
+        $vis:vis enum $Enum:ident {
+            $(
+                $(#[$var_meta:meta])*
+                $Variant:ident $(= $disc:literal)? => $wire:literal
+            ),+ $(,)?
+        }
+        error $Error:ident($label:literal);
+        tests: $tests_mod:ident;
+    ) => {
+        wire_enum! {
+            $(#[$enum_meta])*
+            $vis enum $Enum {
+                $(
+                    $(#[$var_meta])*
+                    $Variant $(= $disc)? => $wire
+                ),+
+            }
+            error $Error($label);
+        }
+
+        #[cfg(test)]
+        mod $tests_mod {
+            use super::*;
+
+            #[test]
+            fn display_and_from_str_roundtrip() {
+                $(
+                    assert_eq!($Enum::$Variant.to_string(), $wire);
+                    assert_eq!($wire.parse::<$Enum>(), Ok($Enum::$Variant));
+                )+
+            }
+
+            #[test]
+            fn from_str_rejects_wrong_case() {
+                $({
+                    let wire: &str = $wire;
+                    let lower = wire.to_ascii_lowercase();
+                    if lower != wire {
+                        assert!(
+                            lower.parse::<$Enum>().is_err(),
+                            concat!(
+                                stringify!($Enum),
+                                " must reject lowercased \"",
+                                $wire,
+                                "\"",
+                            ),
+                        );
+                    }
+                    let upper = wire.to_ascii_uppercase();
+                    if upper != wire {
+                        assert!(
+                            upper.parse::<$Enum>().is_err(),
+                            concat!(
+                                stringify!($Enum),
+                                " must reject uppercased \"",
+                                $wire,
+                                "\"",
+                            ),
+                        );
+                    }
+                })+
+            }
+
+            #[test]
+            fn from_str_rejects_unknown() {
+                let err = "__wire_enum_bogus_sentinel__".parse::<$Enum>().unwrap_err();
+                assert_eq!(err.0, "__wire_enum_bogus_sentinel__");
+                assert!(err.to_string().contains($label));
+            }
+        }
+    };
+
+    // Base expansion, no tests.
     (
         $(#[$enum_meta:meta])*
         $vis:vis enum $Enum:ident {
