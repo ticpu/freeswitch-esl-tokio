@@ -795,3 +795,103 @@ control. The bound is a wire-parsing defense, not a domain constraint.
 `push_header()` and `unshift_header()` on `EslEvent` check the limit
 before adding to an existing array, propagating the error to the caller
 rather than silently dropping the value.
+
+## EventSubscription as a reusable, serializable builder
+
+Production ESL daemons don't subscribe to events once at startup and
+forget — they re-subscribe after every reconnect, and deployments vary
+which events matter. fs-eventd's channel tracker, noans-worker, and the
+NG9-1-1 abandoned-call monitor all load their subscription from a
+config file: which event types, which CUSTOM subclasses, which header
+filters, what wire format. An earlier design bolted each piece onto the
+client separately (`client.subscribe_events(...)`, `client.filter(...)`,
+`client.filter(...)` again, etc.); on reconnect, the caller had to
+remember the exact sequence and redo each call in the right order.
+
+`EventSubscription` captures the whole thing — format, typed events,
+raw-named events, custom subclasses, filters — as one value. The client
+has `apply_subscription(&sub)` which issues the right wire commands in
+the right order, and `resubscribe_from(&old, &new)` which diffs the two
+and sends additive subscribes before removing the gone entries, so no
+desired event type is ever briefly unsubscribed during the transition.
+
+The serde impl exists for the same reason as on the command builders:
+YAML config is the source of truth for deployments. The NG9-1-1
+abandoned-call daemon's `subscription:` block deserializes directly
+into `EventSubscription`, the same value is passed to
+`apply_subscription` on the initial connect and on every reconnect.
+Deserialization validates newline injection, space injection, and
+empty strings at the boundary — an invalid config fails at load time
+rather than on the wire.
+
+The `event_raw()` / `events_raw()` pair is the escape hatch for events
+FreeSWITCH adds before we update [`EslEventType`](../freeswitch-types/src/event.rs).
+Without it, a freshly-added upstream event would force callers to bypass
+`EventSubscription` entirely and drop down to raw `subscribe_events_raw`,
+defeating the whole config-driven story. Raw events appear on the wire
+alongside typed events in the same `event` command, and
+`resubscribe_from` diffs them the same way.
+
+## HangupCause::from_sip_response mapping
+
+FreeSWITCH's mod_sofia translates SIP response codes to Q.850 hangup
+causes in `sofia_glue_sip_cause_to_freeswitch()`. Callers bridging
+inbound SIP provisional/final responses into their own hangup-tracking
+logic need the same mapping — writing it again by hand is error-prone
+and drifts from the FS source. `HangupCause::from_sip_response(code)`
+is a direct port of that C function's match block, one-for-one, with
+no reinterpretation.
+
+The return is `Option<Self>`: codes without an explicit mapping
+return `None` rather than defaulting to `NormalClearing` or
+`NormalUnspecified`. Absence is a signal (an unusual SIP code the
+caller should probably log) not a cause to fabricate. This matches
+the crate's correctness-over-recovery policy — the library won't
+invent a cause that FreeSWITCH itself wouldn't produce.
+
+The mapping is neither injective nor surjective: multiple SIP codes
+collapse to the same cause (`401/402/403/407/603/608 → CallRejected`),
+and some Q.850 causes have no SIP counterpart in FS's table. Both are
+a property of the source mapping, not the port. If
+`sofia_glue_sip_cause_to_freeswitch` gains a new branch upstream, the
+fix here is one added match arm — the test suite
+(`from_sip_response_*` tests) enumerates every current code so drift
+from the C source is visible in diff.
+
+## Channel event ordering: CHANNEL_CREATE is not first, CHANNEL_DESTROY is not last
+
+FreeSWITCH's event emission order is a leaky abstraction that bites
+anyone writing a channel-lifecycle tracker against the typed event
+names. The intuitive story — "subscribe to `CHANNEL_CREATE` for
+start-of-life, `CHANNEL_DESTROY` for end-of-life" — is wrong, because
+`switch_core_state_machine.c` fires `CHANNEL_STATE(CS_INIT)` *before*
+`CHANNEL_CREATE` inside the same state-machine iteration, and
+`switch_core_session.c` fires `CHANNEL_STATE(CS_DESTROY)` *after*
+`CHANNEL_DESTROY` during session teardown. Trackers built on the
+`CREATE → DESTROY` assumption miss state at both ends.
+
+The fix is to subscribe to `CHANNEL_STATE` and use `CS_INIT` as the
+true start-of-life trigger and `CS_DESTROY` as the true end-of-life
+trigger. The typed `ChannelState` enum makes the comparison
+compile-checked. Events from different channels still interleave
+freely on the wire, so the per-channel ordering is a per-UUID
+invariant, not a global one.
+
+The full sequence (creation order, teardown order, plus a note on
+`CHANNEL_ORIGINATE` only firing on outbound) lives in the
+[README §"Channel event ordering"](../README.md#channel-event-ordering)
+because it's the first place someone writing a tracker looks. The
+`channel_tracker` example uses the correct triggers.
+
+## Reconnection: see the example
+
+The [`reconnecting_client`](../examples/reconnecting_client.rs) example
+is the reference implementation of the reconnect pattern described in
+§"Disconnection and reconnection" above: error classification via
+`is_recoverable()` / `is_connection_error()`, exponential backoff bounded
+by a max interval, and the caller's responsibility to rebuild
+application state (channel tracker, pending bgapi jobs, etc.) after each
+successful reconnect. Consult the example rather than re-deriving the
+pattern from the rationale — the code is the source of truth for the
+sequence of calls and what to do with a `DisconnectReason::AuthenticationFailed`
+versus `HeartbeatExpired`.
