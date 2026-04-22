@@ -253,6 +253,19 @@ impl EslParser {
         }
     }
 
+    /// Resolve `Event-Name` on a freshly populated event into its typed
+    /// [`EslEventType`] and record it via `set_event_type`. No-op if the
+    /// header is missing; that leaves the event type as `None` and the
+    /// caller can decide whether to reject it or keep the raw headers.
+    fn finalize_event_type(event: &mut EslEvent) {
+        if let Some(name) = event
+            .header(EventHeader::EventName)
+            .map(|s| s.to_string())
+        {
+            event.set_event_type(EslEventType::parse_event_type(&name));
+        }
+    }
+
     /// Parse a single `Key: value` line, stripping `\r`, normalizing the key,
     /// and percent-decoding the value as UTF-8.
     ///
@@ -385,13 +398,7 @@ impl EslParser {
             }
         }
 
-        if let Some(event_name) = event
-            .header(EventHeader::EventName)
-            .map(|s| s.to_string())
-        {
-            event.set_event_type(EslEventType::parse_event_type(&event_name));
-        }
-
+        Self::finalize_event_type(&mut event);
         Ok(event)
     }
 
@@ -425,13 +432,7 @@ impl EslParser {
             }
         }
 
-        if let Some(event_name) = event
-            .header(EventHeader::EventName)
-            .map(|s| s.to_string())
-        {
-            event.set_event_type(EslEventType::parse_event_type(&event_name));
-        }
-
+        Self::finalize_event_type(&mut event);
         Ok(event)
     }
 
@@ -528,13 +529,7 @@ impl EslParser {
             }
         }
 
-        if let Some(event_name) = event
-            .header(EventHeader::EventName)
-            .map(|s| s.to_string())
-        {
-            event.set_event_type(EslEventType::parse_event_type(&event_name));
-        }
-
+        Self::finalize_event_type(&mut event);
         Ok(event)
     }
 
