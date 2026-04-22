@@ -253,40 +253,47 @@ impl EslParser {
         }
     }
 
+    /// Parse a single `Key: value` line, stripping `\r`, normalizing the key,
+    /// and percent-decoding the value as UTF-8.
+    ///
+    /// Returns `Ok(None)` for blank lines (caller keeps looping), `Ok(Some((k,
+    /// v)))` on success, `Err` when the line is non-blank but lacks a colon or
+    /// contains invalid UTF-8 after decoding. `context` is inlined into the
+    /// UTF-8 error message so the caller (outer envelope vs. inner event body)
+    /// is visible to operators.
+    fn parse_header_line(line: &str, context: &str) -> EslResult<Option<(String, String)>> {
+        let line = line
+            .strip_suffix('\r')
+            .unwrap_or(line);
+        if line.is_empty() {
+            return Ok(None);
+        }
+        let Some(colon_pos) = line.find(':') else {
+            return Err(EslError::InvalidHeader {
+                header: line.to_string(),
+            });
+        };
+        let key = normalize_header_key(&line[..colon_pos]);
+        let raw_value = line[colon_pos + 1..]
+            .strip_prefix(' ')
+            .unwrap_or(&line[colon_pos + 1..]);
+        let value = percent_decode_str(raw_value)
+            .decode_utf8()
+            .map(|s| s.into_owned())
+            .map_err(|e| {
+                EslError::protocol_error(format!("invalid UTF-8 in {context} '{key}': {e}"))
+            })?;
+        Ok(Some((key, value)))
+    }
+
     /// Parse headers from string
     pub(crate) fn parse_headers(&self, headers_str: &str) -> EslResult<IndexMap<String, String>> {
         let mut headers = IndexMap::new();
-
         for line in headers_str.lines() {
-            let line = line
-                .strip_suffix('\r')
-                .unwrap_or(line);
-            if line.is_empty() {
-                continue;
-            }
-
-            if let Some(colon_pos) = line.find(':') {
-                let key = normalize_header_key(&line[..colon_pos]);
-                let raw_value = line[colon_pos + 1..]
-                    .strip_prefix(' ')
-                    .unwrap_or(&line[colon_pos + 1..]);
-                let value = percent_decode_str(raw_value)
-                    .decode_utf8()
-                    .map(|s| s.into_owned())
-                    .map_err(|e| {
-                        EslError::protocol_error(format!(
-                            "invalid UTF-8 in header '{}': {}",
-                            key, e
-                        ))
-                    })?;
+            if let Some((key, value)) = Self::parse_header_line(line, "header")? {
                 headers.insert(key, value);
-            } else {
-                return Err(EslError::InvalidHeader {
-                    header: line.to_string(),
-                });
             }
         }
-
         Ok(headers)
     }
 
@@ -365,31 +372,8 @@ impl EslParser {
 
         // Parse event headers from the body, percent-decoding values
         for line in header_section.lines() {
-            let line = line
-                .strip_suffix('\r')
-                .unwrap_or(line);
-            if line.is_empty() {
-                continue;
-            }
-            if let Some(colon_pos) = line.find(':') {
-                let key = normalize_header_key(&line[..colon_pos]);
-                let raw_value = line[colon_pos + 1..]
-                    .strip_prefix(' ')
-                    .unwrap_or(&line[colon_pos + 1..]);
-                let value = percent_decode_str(raw_value)
-                    .decode_utf8()
-                    .map(|s| s.into_owned())
-                    .map_err(|e| {
-                        EslError::protocol_error(format!(
-                            "invalid UTF-8 in event header '{}': {}",
-                            key, e
-                        ))
-                    })?;
+            if let Some((key, value)) = Self::parse_header_line(line, "event header")? {
                 event.set_header(key, value);
-            } else {
-                return Err(EslError::InvalidHeader {
-                    header: line.to_string(),
-                });
             }
         }
 
