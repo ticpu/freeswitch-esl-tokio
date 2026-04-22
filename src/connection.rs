@@ -1437,7 +1437,31 @@ impl EslClient {
                 .await?;
         }
 
-        // Step 4: nixevent removed custom subclasses
+        // Step 4: nixevent removed raw-named events
+        let old_raw: HashSet<&str> = old
+            .event_types_raw()
+            .iter()
+            .map(|s| s.as_str())
+            .collect();
+        let new_raw: HashSet<&str> = new
+            .event_types_raw()
+            .iter()
+            .map(|s| s.as_str())
+            .collect();
+        let removed_raw: Vec<&&str> = old_raw
+            .difference(&new_raw)
+            .collect();
+        if !removed_raw.is_empty() {
+            let nixevent_str = removed_raw
+                .iter()
+                .map(|s| **s)
+                .collect::<Vec<_>>()
+                .join(" ");
+            self.nixevent_raw(&nixevent_str)
+                .await?;
+        }
+
+        // Step 5: nixevent removed custom subclasses
         let old_subclasses: HashSet<&str> = old
             .custom_subclass_list()
             .iter()
