@@ -20,6 +20,17 @@ use crate::sofia::{
 };
 use crate::variables::VariableName;
 use sip_header::SipHeaderLookup;
+use std::str::FromStr;
+
+/// Parse an optional wire header value into a typed result.
+///
+/// Collapses the common `match self.header(...) { Some(s) => Ok(Some(s.parse()?)),
+/// None => Ok(None) }` pattern used by many `HeaderLookup` accessors.
+#[inline]
+fn parse_opt<T: FromStr>(raw: Option<&str>) -> Result<Option<T>, T::Err> {
+    raw.map(str::parse)
+        .transpose()
+}
 
 /// Trait for looking up ESL headers and channel variables from any key-value store.
 ///
@@ -153,10 +164,7 @@ pub trait HeaderLookup: SipHeaderLookup {
 
     /// `Presence-Call-Direction` header, parsed into a [`CallDirection`].
     fn presence_call_direction(&self) -> Result<Option<CallDirection>, ParseCallDirectionError> {
-        match self.header(EventHeader::PresenceCallDirection) {
-            Some(s) => Ok(Some(s.parse()?)),
-            None => Ok(None),
-        }
+        parse_opt(self.header(EventHeader::PresenceCallDirection))
     }
 
     /// `Event-Date-Timestamp` header (microseconds since epoch).
@@ -183,10 +191,7 @@ pub trait HeaderLookup: SipHeaderLookup {
     ///
     /// Returns `Ok(None)` if the header is absent, `Err` if present but unparseable.
     fn hangup_cause(&self) -> Result<Option<HangupCause>, ParseHangupCauseError> {
-        match self.header(EventHeader::HangupCause) {
-            Some(s) => Ok(Some(s.parse()?)),
-            None => Ok(None),
-        }
+        parse_opt(self.header(EventHeader::HangupCause))
     }
 
     /// `Event-Subclass` header for `CUSTOM` events (e.g. `sofia::register`).
@@ -201,10 +206,7 @@ pub trait HeaderLookup: SipHeaderLookup {
     fn sofia_event_subclass(
         &self,
     ) -> Result<Option<SofiaEventSubclass>, ParseSofiaEventSubclassError> {
-        match self.event_subclass() {
-            Some(s) => Ok(Some(s.parse()?)),
-            None => Ok(None),
-        }
+        parse_opt(self.event_subclass())
     }
 
     /// `Gateway` header from `sofia::gateway_state` / `sofia::gateway_add` events.
@@ -225,20 +227,14 @@ pub trait HeaderLookup: SipHeaderLookup {
     /// `Status` header (SIP response code) from `sofia::gateway_state` and
     /// `sofia::sip_user_state` events.
     fn sip_status_code(&self) -> Result<Option<u16>, std::num::ParseIntError> {
-        match self.header(EventHeader::Status) {
-            Some(s) => Ok(Some(s.parse()?)),
-            None => Ok(None),
-        }
+        parse_opt(self.header(EventHeader::Status))
     }
 
     /// Parse the `State` header as a [`GatewayRegState`].
     ///
     /// Returns `Ok(None)` if absent, `Err` if present but unparseable.
     fn gateway_reg_state(&self) -> Result<Option<GatewayRegState>, ParseGatewayRegStateError> {
-        match self.header(EventHeader::State) {
-            Some(s) => Ok(Some(s.parse()?)),
-            None => Ok(None),
-        }
+        parse_opt(self.header(EventHeader::State))
     }
 
     /// Parse `Ping-Status` as a [`GatewayPingStatus`].
@@ -248,10 +244,7 @@ pub trait HeaderLookup: SipHeaderLookup {
     fn gateway_ping_status(
         &self,
     ) -> Result<Option<GatewayPingStatus>, ParseGatewayPingStatusError> {
-        match self.header(EventHeader::PingStatus) {
-            Some(s) => Ok(Some(s.parse()?)),
-            None => Ok(None),
-        }
+        parse_opt(self.header(EventHeader::PingStatus))
     }
 
     /// Parse `Ping-Status` as a [`SipUserPingStatus`].
@@ -261,10 +254,7 @@ pub trait HeaderLookup: SipHeaderLookup {
     fn sip_user_ping_status(
         &self,
     ) -> Result<Option<SipUserPingStatus>, ParseSipUserPingStatusError> {
-        match self.header(EventHeader::PingStatus) {
-            Some(s) => Ok(Some(s.parse()?)),
-            None => Ok(None),
-        }
+        parse_opt(self.header(EventHeader::PingStatus))
     }
 
     /// `pl_data` header -- SIP NOTIFY body content from `NOTIFY_IN` events.
@@ -292,10 +282,7 @@ pub trait HeaderLookup: SipHeaderLookup {
     ///
     /// Returns `Ok(None)` if the header is absent, `Err` if present but unparseable.
     fn channel_state(&self) -> Result<Option<ChannelState>, ParseChannelStateError> {
-        match self.header(EventHeader::ChannelState) {
-            Some(s) => Ok(Some(s.parse()?)),
-            None => Ok(None),
-        }
+        parse_opt(self.header(EventHeader::ChannelState))
     }
 
     /// Parse the `Channel-State-Number` header into a [`ChannelState`].
@@ -319,30 +306,21 @@ pub trait HeaderLookup: SipHeaderLookup {
     ///
     /// Returns `Ok(None)` if the header is absent, `Err` if present but unparseable.
     fn call_state(&self) -> Result<Option<CallState>, ParseCallStateError> {
-        match self.header(EventHeader::ChannelCallState) {
-            Some(s) => Ok(Some(s.parse()?)),
-            None => Ok(None),
-        }
+        parse_opt(self.header(EventHeader::ChannelCallState))
     }
 
     /// Parse the `Answer-State` header into an [`AnswerState`].
     ///
     /// Returns `Ok(None)` if the header is absent, `Err` if present but unparseable.
     fn answer_state(&self) -> Result<Option<AnswerState>, ParseAnswerStateError> {
-        match self.header(EventHeader::AnswerState) {
-            Some(s) => Ok(Some(s.parse()?)),
-            None => Ok(None),
-        }
+        parse_opt(self.header(EventHeader::AnswerState))
     }
 
     /// Parse the `Call-Direction` header into a [`CallDirection`].
     ///
     /// Returns `Ok(None)` if the header is absent, `Err` if present but unparseable.
     fn call_direction(&self) -> Result<Option<CallDirection>, ParseCallDirectionError> {
-        match self.header(EventHeader::CallDirection) {
-            Some(s) => Ok(Some(s.parse()?)),
-            None => Ok(None),
-        }
+        parse_opt(self.header(EventHeader::CallDirection))
     }
 
     /// Parse the `priority` header value.
@@ -350,10 +328,7 @@ pub trait HeaderLookup: SipHeaderLookup {
     /// Returns `Ok(None)` if the header is absent, `Err` if present but unparseable.
     #[cfg(feature = "esl")]
     fn priority(&self) -> Result<Option<EslEventPriority>, ParsePriorityError> {
-        match self.header(EventHeader::Priority) {
-            Some(s) => Ok(Some(s.parse()?)),
-            None => Ok(None),
-        }
+        parse_opt(self.header(EventHeader::Priority))
     }
 
     /// Extract timetable from timestamp headers with the given prefix.
