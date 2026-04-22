@@ -517,11 +517,9 @@ impl EslParser {
                         text_buf.push_str(&decoded);
                     }
                 }
-                Ok(XmlEvent::GeneralRef(ref e)) => {
-                    if in_body || current_tag.is_some() {
-                        let resolved = Self::resolve_entity(e)?;
-                        text_buf.push_str(&resolved);
-                    }
+                Ok(XmlEvent::GeneralRef(ref e)) if in_body || current_tag.is_some() => {
+                    let resolved = Self::resolve_entity(e)?;
+                    text_buf.push_str(&resolved);
                 }
                 Ok(XmlEvent::Eof) => break,
                 Err(e) => return Err(e.into()),
