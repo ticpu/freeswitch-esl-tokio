@@ -7,6 +7,7 @@ use crate::{
     headers::EventHeader,
     lookup::HeaderLookup,
 };
+pub(crate) use freeswitch_types::wire_safety::contains_wire_terminator;
 use indexmap::IndexMap;
 use std::borrow::Cow;
 use std::fmt;
@@ -84,7 +85,7 @@ pub fn parse_api_body(body: &str) -> EslResult<&str> {
 /// ESL commands are line-delimited; embedded newlines would allow injection
 /// of arbitrary protocol commands.
 fn validate_no_newlines(s: &str, context: &str) -> EslResult<()> {
-    if s.contains('\n') || s.contains('\r') {
+    if contains_wire_terminator(s) {
         return Err(EslError::ProtocolError {
             message: format!("{} must not contain newlines", context),
         });
@@ -347,11 +348,13 @@ impl CommandBuilder {
         result.push_str(LINE_TERMINATOR);
 
         for (key, value) in &self.headers {
-            let _ = write!(result, "{}: {}{}", key, value, LINE_TERMINATOR);
+            write!(result, "{}: {}{}", key, value, LINE_TERMINATOR)
+                .expect("writing to String is infallible");
         }
 
         if let Some(body) = &self.body {
-            let _ = write!(result, "Content-Length: {}{}", body.len(), LINE_TERMINATOR);
+            write!(result, "Content-Length: {}{}", body.len(), LINE_TERMINATOR)
+                .expect("writing to String is infallible");
             result.push_str(LINE_TERMINATOR);
             result.push_str(body);
         } else {

@@ -142,9 +142,11 @@ impl EslParser {
             .buffer
             .len();
         if remaining > 0 {
-            let _ = self
-                .buffer
-                .advance(remaining);
+            self.buffer
+                .advance(remaining)
+                .expect(
+                    "advance(remaining) is in bounds: remaining was just measured by buffer.len()",
+                );
             self.buffer
                 .compact();
         }

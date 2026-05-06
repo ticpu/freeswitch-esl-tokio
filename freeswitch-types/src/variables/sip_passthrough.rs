@@ -134,7 +134,7 @@ const PREFIX_PATTERNS: &[(SipHeaderPrefix, &str)] = &[
 ];
 
 fn validate_header_name(name: &str) -> Result<(), InvalidHeaderName> {
-    if name.is_empty() || name.contains('\n') || name.contains('\r') {
+    if name.is_empty() || crate::wire_safety::contains_wire_terminator(name) {
         return Err(InvalidHeaderName(name.to_string()));
     }
     Ok(())

@@ -91,8 +91,8 @@ impl EslBuffer {
     pub fn extract_until_pattern(&mut self, pattern: &[u8]) -> Option<Vec<u8>> {
         if let Some(pos) = self.find_pattern(pattern) {
             let result = self.data()[..pos].to_vec();
-            // pos + pattern.len() <= self.len() is guaranteed by find_pattern
-            let _ = self.advance(pos + pattern.len());
+            self.advance(pos + pattern.len())
+                .expect("advance(pos + pattern.len()) is in bounds: pos was just located by find_pattern()");
             Some(result)
         } else {
             None
@@ -103,7 +103,8 @@ impl EslBuffer {
     pub fn extract_bytes(&mut self, count: usize) -> Option<Vec<u8>> {
         if self.len() >= count {
             let result = self.data()[..count].to_vec();
-            let _ = self.advance(count);
+            self.advance(count)
+                .expect("advance(count) is in bounds: self.len() >= count just checked above");
             Some(result)
         } else {
             None

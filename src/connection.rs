@@ -331,7 +331,7 @@ async fn authenticate(
     if message.message_type == MessageType::RudeRejection {
         let reason = message
             .body
-            .unwrap_or_else(|| "connection rejected by ACL".to_string());
+            .unwrap_or_else(|| "rude-rejection without body".to_string());
         return Err(EslError::AccessDenied { reason });
     }
 
@@ -624,7 +624,7 @@ async fn reader_loop_inner(
                     MessageType::RudeRejection => {
                         let reason = message
                             .body
-                            .unwrap_or_else(|| "connection rejected by ACL".to_string());
+                            .unwrap_or_else(|| "rude-rejection without body".to_string());
                         warn!("Rude rejection from server: {}", reason);
                         let _ = dispatch_event(
                             &event_tx,
@@ -909,7 +909,13 @@ impl EslClient {
         ))
     }
 
-    /// Accept outbound connection from FreeSWITCH
+    /// Accept outbound connection from FreeSWITCH.
+    ///
+    /// After `accept_outbound`, you MUST call [`Self::connect_session`] before
+    /// any other command. Calling [`Self::api`], [`Self::subscribe_events`],
+    /// etc. before `connect_session()` will leave the channel in an undefined
+    /// state. See [`docs/outbound-esl-quirks.md`](https://github.com/ticpu/freeswitch-esl-tokio/blob/master/docs/outbound-esl-quirks.md)
+    /// for full context.
     pub async fn accept_outbound(listener: &TcpListener) -> EslResult<(Self, EslEventStream)> {
         Self::accept_outbound_with_options(listener, EslConnectOptions::default()).await
     }
@@ -1088,7 +1094,8 @@ impl EslClient {
             .load(Ordering::Relaxed);
         let message = match timeout(Duration::from_millis(timeout_ms), rx).await {
             Ok(Ok(message)) => message,
-            Ok(Err(_)) => {
+            Ok(Err(e)) => {
+                debug!("pending reply channel closed: {e}");
                 drop(writer);
                 return Err(EslError::ConnectionClosed);
             }

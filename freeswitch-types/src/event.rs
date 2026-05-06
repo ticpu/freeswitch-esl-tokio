@@ -461,7 +461,7 @@ fn validate_wire_token(
     if reject_empty && s.is_empty() {
         return Err(EventSubscriptionError(format!("{} cannot be empty", label)));
     }
-    if s.contains('\n') || s.contains('\r') {
+    if crate::wire_safety::contains_wire_terminator(s) {
         return Err(EventSubscriptionError(format!(
             "{} contains newline: {:?}",
             label, s
@@ -1119,16 +1119,18 @@ impl EslEvent {
             if key == "Content-Length" {
                 continue;
             }
-            let _ = writeln!(
+            writeln!(
                 result,
                 "{}: {}",
                 key,
                 percent_encode(value.as_bytes(), NON_ALPHANUMERIC)
-            );
+            )
+            .expect("writing to String is infallible");
         }
 
         if let Some(body) = &self.body {
-            let _ = writeln!(result, "Content-Length: {}", body.len());
+            writeln!(result, "Content-Length: {}", body.len())
+                .expect("writing to String is infallible");
             result.push('\n');
             result.push_str(body);
         } else {

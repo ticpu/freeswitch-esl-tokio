@@ -805,6 +805,7 @@ impl fmt::Display for Originate {
             .timeout
             .is_some();
 
+        // Positional args; FS expects the literal "UNDEF" / "default" sentinels for missing slots, not an empty string.
         if dialplan.is_some() || has_ctx || has_name || has_num || has_timeout {
             let dp = dialplan
                 .as_ref()

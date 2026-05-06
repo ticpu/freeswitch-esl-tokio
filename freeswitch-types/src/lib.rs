@@ -32,6 +32,8 @@ pub mod lookup;
 pub mod prelude;
 pub mod sofia;
 pub mod variables;
+#[doc(hidden)]
+pub mod wire_safety;
 
 /// Default FreeSWITCH ESL port for inbound connections.
 pub const DEFAULT_ESL_PORT: u16 = 8021;
