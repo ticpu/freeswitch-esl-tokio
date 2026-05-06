@@ -35,17 +35,23 @@
 /// `#[cfg(test)] mod <module_ident>` containing exhaustive round-trip,
 /// wrong-case-rejection, and unknown-rejection tests. The module name must
 /// be unique within the enclosing scope.
+///
+/// An optional `numeric: <fn_name>(<repr>);` clause emits `from_number(n: <repr>)
+/// -> Option<Self>` and `as_number(&self) -> <repr>` based on the per-variant
+/// discriminants. Every variant must declare a discriminant (`= NUM`) when
+/// this clause is used.
 macro_rules! wire_enum {
-    // With tests: emit the base expansion then the test module.
+    // With tests + numeric: emit base + numeric + test module.
     (
         $(#[$enum_meta:meta])*
         $vis:vis enum $Enum:ident {
             $(
                 $(#[$var_meta:meta])*
-                $Variant:ident $(= $disc:literal)? => $wire:literal
+                $Variant:ident = $disc:literal => $wire:literal
             ),+ $(,)?
         }
         error $Error:ident($label:literal);
+        numeric: $numeric_fn:ident($repr:ty);
         tests: $tests_mod:ident;
     ) => {
         wire_enum! {
@@ -53,12 +59,21 @@ macro_rules! wire_enum {
             $vis enum $Enum {
                 $(
                     $(#[$var_meta])*
-                    $Variant $(= $disc)? => $wire
+                    $Variant = $disc => $wire
                 ),+
             }
             error $Error($label);
+            numeric: $numeric_fn($repr);
         }
 
+        wire_enum! { @tests $Enum, $Error, $label, $tests_mod, $($Variant => $wire),+ }
+    };
+
+    // Internal: emit the standard test module.
+    (
+        @tests $Enum:ident, $Error:ident, $label:literal, $tests_mod:ident,
+        $($Variant:ident => $wire:literal),+
+    ) => {
         #[cfg(test)]
         mod $tests_mod {
             use super::*;
@@ -109,6 +124,71 @@ macro_rules! wire_enum {
                 assert!(err.to_string().contains($label));
             }
         }
+    };
+
+    // Numeric only, no tests.
+    (
+        $(#[$enum_meta:meta])*
+        $vis:vis enum $Enum:ident {
+            $(
+                $(#[$var_meta:meta])*
+                $Variant:ident = $disc:literal => $wire:literal
+            ),+ $(,)?
+        }
+        error $Error:ident($label:literal);
+        numeric: $numeric_fn:ident($repr:ty);
+    ) => {
+        wire_enum! {
+            $(#[$enum_meta])*
+            $vis enum $Enum {
+                $(
+                    $(#[$var_meta])*
+                    $Variant = $disc => $wire
+                ),+
+            }
+            error $Error($label);
+        }
+
+        impl $Enum {
+            /// Look up by numeric discriminant.
+            pub fn $numeric_fn(n: $repr) -> Option<Self> {
+                match n {
+                    $( $disc => Some(Self::$Variant), )+
+                    _ => None,
+                }
+            }
+
+            /// Numeric discriminant value.
+            pub fn as_number(&self) -> $repr {
+                *self as $repr
+            }
+        }
+    };
+
+    // With tests: emit the base expansion then the test module.
+    (
+        $(#[$enum_meta:meta])*
+        $vis:vis enum $Enum:ident {
+            $(
+                $(#[$var_meta:meta])*
+                $Variant:ident $(= $disc:literal)? => $wire:literal
+            ),+ $(,)?
+        }
+        error $Error:ident($label:literal);
+        tests: $tests_mod:ident;
+    ) => {
+        wire_enum! {
+            $(#[$enum_meta])*
+            $vis enum $Enum {
+                $(
+                    $(#[$var_meta])*
+                    $Variant $(= $disc)? => $wire
+                ),+
+            }
+            error $Error($label);
+        }
+
+        wire_enum! { @tests $Enum, $Error, $label, $tests_mod, $($Variant => $wire),+ }
     };
 
     // Base expansion, no tests.
