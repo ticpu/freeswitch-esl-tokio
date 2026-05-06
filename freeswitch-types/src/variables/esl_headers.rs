@@ -22,7 +22,7 @@ use sip_header::{
 };
 
 use crate::lookup::HeaderLookup;
-use crate::variables::EslArray;
+use crate::variables::{EslArray, EslArrayError};
 
 /// A flat header store that decodes FreeSWITCH ARRAY and bracket encoding
 /// when answering typed SIP header queries.
@@ -118,8 +118,10 @@ fn strip_brackets(s: &str) -> &str {
 }
 
 /// Parse `value` as a `UriInfo`, handling both `ARRAY::` encoding and
-/// bracket wrapping. Non-array values fall through to the plain
-/// `UriInfo::parse` path.
+/// bracket wrapping. The plain `UriInfo::parse` path is only used when
+/// the value lacks the `ARRAY::` prefix; structural `EslArrayError`
+/// cases (e.g. `TooManyItems`) are surfaced via the closest-fit
+/// upstream variant rather than silently downgraded.
 fn parse_uri_info_value(value: &str) -> Result<UriInfo, UriInfoError> {
     let value = strip_brackets(value);
     match EslArray::parse(value) {
@@ -129,12 +131,20 @@ fn parse_uri_info_value(value: &str) -> Result<UriInfo, UriInfoError> {
                 .iter()
                 .map(String::as_str),
         ),
-        Err(_) => UriInfo::parse(value),
+        Err(EslArrayError::MissingPrefix) => UriInfo::parse(value),
+        // Upstream UriInfoError lacks a generic "structural array
+        // failure" variant; carry the cause in MissingAngleBrackets so
+        // operators see the actual reason in logs.
+        Err(other) => Err(UriInfoError::MissingAngleBrackets(format!(
+            "ARRAY:: parse failed: {other}"
+        ))),
     }
 }
 
 /// Parse `value` as a `HistoryInfo`, handling both `ARRAY::` encoding and
-/// bracket wrapping.
+/// bracket wrapping. Structural `EslArrayError` cases (e.g. `TooManyItems`)
+/// are surfaced as `HistoryInfoError::Empty` rather than silently falling
+/// back — upstream lacks a richer variant for non-entry array failures.
 fn parse_history_info_value(value: &str) -> Result<HistoryInfo, HistoryInfoError> {
     let value = strip_brackets(value);
     match EslArray::parse(value) {
@@ -144,7 +154,8 @@ fn parse_history_info_value(value: &str) -> Result<HistoryInfo, HistoryInfoError
                 .iter()
                 .map(String::as_str),
         ),
-        Err(_) => HistoryInfo::parse(value),
+        Err(EslArrayError::MissingPrefix) => HistoryInfo::parse(value),
+        Err(_) => Err(HistoryInfoError::Empty),
     }
 }
 
