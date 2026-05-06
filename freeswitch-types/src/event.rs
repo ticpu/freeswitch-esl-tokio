@@ -865,52 +865,19 @@ mod event_subscription_serde {
     }
 }
 
-/// Event priority levels matching FreeSWITCH `esl_priority_t`
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[non_exhaustive]
-pub enum EslEventPriority {
-    /// Default priority.
-    Normal,
-    /// Lower than normal.
-    Low,
-    /// Higher than normal.
-    High,
-}
-
-impl fmt::Display for EslEventPriority {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            EslEventPriority::Normal => write!(f, "NORMAL"),
-            EslEventPriority::Low => write!(f, "LOW"),
-            EslEventPriority::High => write!(f, "HIGH"),
-        }
+wire_enum! {
+    /// Event priority levels matching FreeSWITCH `esl_priority_t`
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub enum EslEventPriority {
+        /// Default priority.
+        Normal => "NORMAL",
+        /// Lower than normal.
+        Low => "LOW",
+        /// Higher than normal.
+        High => "HIGH",
     }
-}
-
-/// Error returned when parsing an invalid priority string.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParsePriorityError(pub String);
-
-impl fmt::Display for ParsePriorityError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "unknown priority: {}", self.0)
-    }
-}
-
-impl std::error::Error for ParsePriorityError {}
-
-impl FromStr for EslEventPriority {
-    type Err = ParsePriorityError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "NORMAL" => Ok(EslEventPriority::Normal),
-            "LOW" => Ok(EslEventPriority::Low),
-            "HIGH" => Ok(EslEventPriority::High),
-            _ => Err(ParsePriorityError(s.to_string())),
-        }
-    }
+    error ParsePriorityError("priority");
+    tests: esl_event_priority_wire_tests;
 }
 
 /// ESL Event structure containing headers and optional body

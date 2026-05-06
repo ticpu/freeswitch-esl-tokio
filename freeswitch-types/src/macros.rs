@@ -202,8 +202,8 @@ macro_rules! wire_enum {
         }
         error $Error:ident($label:literal);
     ) => {
-        $(#[$enum_meta])*
         #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+        $(#[$enum_meta])*
         #[non_exhaustive]
         #[allow(missing_docs)]
         $vis enum $Enum {

@@ -1,157 +1,56 @@
 //! Gateway registration state and ping status enums.
 
-use std::fmt;
-use std::str::FromStr;
-
-/// Error returned when parsing an unrecognized gateway registration state.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParseGatewayRegStateError(pub String);
-
-impl fmt::Display for ParseGatewayRegStateError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "unknown gateway reg state: {}", self.0)
+wire_enum! {
+    /// Gateway registration state from `sofia::gateway_state` events.
+    ///
+    /// The `State` header value, mapping to `reg_state_t` / `sofia_state_names[]`
+    /// in mod_sofia.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    #[cfg_attr(feature = "serde", serde(rename_all = "SCREAMING_SNAKE_CASE"))]
+    pub enum GatewayRegState {
+        #[cfg_attr(feature = "serde", serde(alias = "Unreged"))]
+        Unreged => "UNREGED",
+        #[cfg_attr(feature = "serde", serde(alias = "Trying"))]
+        Trying => "TRYING",
+        #[cfg_attr(feature = "serde", serde(alias = "Register"))]
+        Register => "REGISTER",
+        #[cfg_attr(feature = "serde", serde(alias = "Reged"))]
+        Reged => "REGED",
+        #[cfg_attr(feature = "serde", serde(alias = "Unregister"))]
+        Unregister => "UNREGISTER",
+        #[cfg_attr(feature = "serde", serde(alias = "Failed"))]
+        Failed => "FAILED",
+        #[cfg_attr(feature = "serde", serde(alias = "FailWait"))]
+        FailWait => "FAIL_WAIT",
+        #[cfg_attr(feature = "serde", serde(alias = "Expired"))]
+        Expired => "EXPIRED",
+        #[cfg_attr(feature = "serde", serde(alias = "Noreg"))]
+        Noreg => "NOREG",
+        #[cfg_attr(feature = "serde", serde(alias = "Down"))]
+        Down => "DOWN",
+        #[cfg_attr(feature = "serde", serde(alias = "Timeout"))]
+        Timeout => "TIMEOUT",
     }
+    error ParseGatewayRegStateError("gateway reg state");
+    tests: gateway_reg_state_wire_tests;
 }
 
-impl std::error::Error for ParseGatewayRegStateError {}
-
-/// Gateway registration state from `sofia::gateway_state` events.
-///
-/// The `State` header value, mapping to `reg_state_t` / `sofia_state_names[]`
-/// in mod_sofia.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "SCREAMING_SNAKE_CASE"))]
-#[non_exhaustive]
-#[allow(missing_docs)]
-pub enum GatewayRegState {
-    #[cfg_attr(feature = "serde", serde(alias = "Unreged"))]
-    Unreged,
-    #[cfg_attr(feature = "serde", serde(alias = "Trying"))]
-    Trying,
-    #[cfg_attr(feature = "serde", serde(alias = "Register"))]
-    Register,
-    #[cfg_attr(feature = "serde", serde(alias = "Reged"))]
-    Reged,
-    #[cfg_attr(feature = "serde", serde(alias = "Unregister"))]
-    Unregister,
-    #[cfg_attr(feature = "serde", serde(alias = "Failed"))]
-    Failed,
-    #[cfg_attr(feature = "serde", serde(alias = "FailWait"))]
-    FailWait,
-    #[cfg_attr(feature = "serde", serde(alias = "Expired"))]
-    Expired,
-    #[cfg_attr(feature = "serde", serde(alias = "Noreg"))]
-    Noreg,
-    #[cfg_attr(feature = "serde", serde(alias = "Down"))]
-    Down,
-    #[cfg_attr(feature = "serde", serde(alias = "Timeout"))]
-    Timeout,
-}
-
-impl GatewayRegState {
-    /// Wire-format string matching `sofia_state_names[]`.
-    pub const fn as_str(&self) -> &'static str {
-        match self {
-            Self::Unreged => "UNREGED",
-            Self::Trying => "TRYING",
-            Self::Register => "REGISTER",
-            Self::Reged => "REGED",
-            Self::Unregister => "UNREGISTER",
-            Self::Failed => "FAILED",
-            Self::FailWait => "FAIL_WAIT",
-            Self::Expired => "EXPIRED",
-            Self::Noreg => "NOREG",
-            Self::Down => "DOWN",
-            Self::Timeout => "TIMEOUT",
-        }
+wire_enum! {
+    /// Gateway ping status from `sofia::gateway_state` events.
+    ///
+    /// The `Ping-Status` header value, mapping to `sofia_gateway_status_name()`.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    #[cfg_attr(feature = "serde", serde(rename_all = "SCREAMING_SNAKE_CASE"))]
+    pub enum GatewayPingStatus {
+        #[cfg_attr(feature = "serde", serde(alias = "Down"))]
+        Down => "DOWN",
+        #[cfg_attr(feature = "serde", serde(alias = "Up"))]
+        Up => "UP",
+        #[cfg_attr(feature = "serde", serde(alias = "Invalid"))]
+        Invalid => "INVALID",
     }
-}
-
-impl fmt::Display for GatewayRegState {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
-impl FromStr for GatewayRegState {
-    type Err = ParseGatewayRegStateError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "UNREGED" => Ok(Self::Unreged),
-            "TRYING" => Ok(Self::Trying),
-            "REGISTER" => Ok(Self::Register),
-            "REGED" => Ok(Self::Reged),
-            "UNREGISTER" => Ok(Self::Unregister),
-            "FAILED" => Ok(Self::Failed),
-            "FAIL_WAIT" => Ok(Self::FailWait),
-            "EXPIRED" => Ok(Self::Expired),
-            "NOREG" => Ok(Self::Noreg),
-            "DOWN" => Ok(Self::Down),
-            "TIMEOUT" => Ok(Self::Timeout),
-            _ => Err(ParseGatewayRegStateError(s.to_string())),
-        }
-    }
-}
-
-/// Error returned when parsing an unrecognized gateway ping status.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParseGatewayPingStatusError(pub String);
-
-impl fmt::Display for ParseGatewayPingStatusError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "unknown gateway ping status: {}", self.0)
-    }
-}
-
-impl std::error::Error for ParseGatewayPingStatusError {}
-
-/// Gateway ping status from `sofia::gateway_state` events.
-///
-/// The `Ping-Status` header value, mapping to `sofia_gateway_status_name()`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "SCREAMING_SNAKE_CASE"))]
-#[non_exhaustive]
-#[allow(missing_docs)]
-pub enum GatewayPingStatus {
-    #[cfg_attr(feature = "serde", serde(alias = "Down"))]
-    Down,
-    #[cfg_attr(feature = "serde", serde(alias = "Up"))]
-    Up,
-    #[cfg_attr(feature = "serde", serde(alias = "Invalid"))]
-    Invalid,
-}
-
-impl GatewayPingStatus {
-    /// Wire-format string.
-    pub const fn as_str(&self) -> &'static str {
-        match self {
-            Self::Down => "DOWN",
-            Self::Up => "UP",
-            Self::Invalid => "INVALID",
-        }
-    }
-}
-
-impl fmt::Display for GatewayPingStatus {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
-impl FromStr for GatewayPingStatus {
-    type Err = ParseGatewayPingStatusError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "DOWN" => Ok(Self::Down),
-            "UP" => Ok(Self::Up),
-            "INVALID" => Ok(Self::Invalid),
-            _ => Err(ParseGatewayPingStatusError(s.to_string())),
-        }
-    }
+    error ParseGatewayPingStatusError("gateway ping status");
+    tests: gateway_ping_status_wire_tests;
 }
 
 #[cfg(test)]
