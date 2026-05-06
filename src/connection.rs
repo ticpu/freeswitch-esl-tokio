@@ -920,7 +920,13 @@ impl EslClient {
         Self::accept_outbound_with_options(listener, EslConnectOptions::default()).await
     }
 
-    /// Accept outbound connection from FreeSWITCH with custom options
+    /// Accept outbound connection from FreeSWITCH with custom options.
+    ///
+    /// After accepting, you MUST call [`Self::connect_session`] before any
+    /// other command. Calling [`Self::api`], [`Self::subscribe_events`], etc.
+    /// before `connect_session()` will leave the channel in an undefined
+    /// state. See [`docs/outbound-esl-quirks.md`](https://github.com/ticpu/freeswitch-esl-tokio/blob/master/docs/outbound-esl-quirks.md)
+    /// for full context.
     pub async fn accept_outbound_with_options(
         listener: &TcpListener,
         options: EslConnectOptions,
@@ -940,12 +946,24 @@ impl EslClient {
     ///
     /// Use this when you need control over the accept step (e.g. for
     /// timeouts, TLS wrapping, or custom accept logic).
+    ///
+    /// After this call, you MUST call [`Self::connect_session`] before any
+    /// other command. Calling [`Self::api`], [`Self::subscribe_events`], etc.
+    /// before `connect_session()` will leave the channel in an undefined
+    /// state. See [`docs/outbound-esl-quirks.md`](https://github.com/ticpu/freeswitch-esl-tokio/blob/master/docs/outbound-esl-quirks.md)
+    /// for full context.
     pub fn accept_outbound_stream(stream: TcpStream) -> (Self, EslEventStream) {
         Self::accept_outbound_stream_with_options(stream, EslConnectOptions::default())
     }
 
     /// Create an outbound-mode client from an already-accepted `TcpStream`
     /// with custom options.
+    ///
+    /// After this call, you MUST call [`Self::connect_session`] before any
+    /// other command. Calling [`Self::api`], [`Self::subscribe_events`], etc.
+    /// before `connect_session()` will leave the channel in an undefined
+    /// state. See [`docs/outbound-esl-quirks.md`](https://github.com/ticpu/freeswitch-esl-tokio/blob/master/docs/outbound-esl-quirks.md)
+    /// for full context.
     pub fn accept_outbound_stream_with_options(
         stream: TcpStream,
         options: EslConnectOptions,
