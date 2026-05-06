@@ -99,7 +99,7 @@ impl EslMessage {
 
     /// Convert to EslResponse
     pub fn into_response(self) -> EslResponse {
-        EslResponse::from_parsed(self.headers, self.body)
+        EslResponse::new(self.headers, self.body)
     }
 }
 

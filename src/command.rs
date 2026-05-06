@@ -116,41 +116,26 @@ pub struct EslResponse {
     headers: IndexMap<String, String>,
     body: Option<String>,
     status: ReplyStatus,
-    /// Maps lowercase header names to the canonical (stored) key so
-    /// header lookups can be case-insensitive without scanning the map.
-    /// Built by `from_parsed`; constructors that do not set this leave
-    /// the map empty and `header()` falls back to a case-sensitive
-    /// lookup against the canonical keys.
+    /// Lowercase alias map for case-insensitive lookup of dash-cased FS
+    /// framing headers (`Reply-Text`, `Content-Type`, `Job-UUID`, ...).
+    /// Keys containing `_` (channel variables and `sip_h_*` / `sip_i_*`
+    /// passthrough headers) are intentionally excluded so SIP wire
+    /// casing is preserved — same rule as `normalize_header_key`.
     case_index: IndexMap<String, String>,
 }
 
 impl EslResponse {
-    /// `ReplyStatus` is derived from the `Reply-Text` header.
-    ///
-    /// The headers map is taken verbatim. Lookups via
-    /// [`header()`](Self::header) are case-sensitive against whatever
-    /// keys are present. The parser path uses an internal constructor
-    /// that also builds a case-insensitive alias index.
+    /// `ReplyStatus` is derived from the `Reply-Text` header. Header
+    /// lookups via [`header()`](Self::header) are case-insensitive for
+    /// FS framing headers but case-sensitive for `variable_*`,
+    /// `sip_h_*`, and `sip_i_*` keys, which must preserve original SIP
+    /// wire casing.
     pub fn new(headers: IndexMap<String, String>, body: Option<String>) -> Self {
-        Self::build(headers, body, IndexMap::new())
-    }
-
-    /// Construct from a parsed message. Builds the case-insensitive
-    /// alias map so callers can do `r.header("reply-text")` regardless
-    /// of how FreeSWITCH cased the key on the wire.
-    pub(crate) fn from_parsed(headers: IndexMap<String, String>, body: Option<String>) -> Self {
         let case_index = headers
             .keys()
+            .filter(|k| !k.contains('_'))
             .map(|k| (k.to_ascii_lowercase(), k.clone()))
             .collect();
-        Self::build(headers, body, case_index)
-    }
-
-    fn build(
-        headers: IndexMap<String, String>,
-        body: Option<String>,
-        case_index: IndexMap<String, String>,
-    ) -> Self {
         let status = match headers
             .get(HEADER_REPLY_TEXT)
             .map(|s| s.as_str())
@@ -160,7 +145,6 @@ impl EslResponse {
             Some(t) if t.starts_with("-ERR") => ReplyStatus::Err,
             Some(_) => ReplyStatus::Other,
         };
-
         Self {
             headers,
             body,
@@ -185,12 +169,7 @@ impl EslResponse {
             .as_deref()
     }
 
-    /// Look up a response header by name.
-    ///
-    /// Case-insensitive when the response was constructed by the parser
-    /// (the path most callers hit). Responses built directly via
-    /// [`new()`](Self::new) — typically test fixtures — only resolve
-    /// the exact key in `headers`.
+    /// Look up a response header by name. Case-insensitive.
     pub fn header(&self, name: impl AsRef<str>) -> Option<&str> {
         self.lookup_header(name.as_ref())
     }
@@ -803,24 +782,36 @@ mod tests {
     use crate::event::EslEventType;
 
     #[test]
-    fn esl_response_case_insensitive_lookup_via_parsed() {
+    fn esl_response_header_lookup_is_case_insensitive() {
         let mut headers = IndexMap::new();
         headers.insert("Reply-Text".to_string(), "+OK".to_string());
-        let r = EslResponse::from_parsed(headers, None);
+        let r = EslResponse::new(headers, None);
         assert_eq!(r.header("Reply-Text"), Some("+OK"));
         assert_eq!(r.header("reply-text"), Some("+OK"));
         assert_eq!(r.header("REPLY-TEXT"), Some("+OK"));
     }
 
     #[test]
-    fn esl_response_new_is_case_sensitive() {
-        // Constructed via the public new() (no alias map) — only the
-        // exact key matches.
+    fn esl_response_underscored_keys_preserve_case() {
+        // variable_*, sip_h_*, sip_i_* must preserve original SIP wire
+        // casing — the lowercase fallback must not match these keys, or
+        // distinct headers like X-Foo and X-foo would collide.
         let mut headers = IndexMap::new();
-        headers.insert("Reply-Text".to_string(), "+OK".to_string());
+        headers.insert(
+            "variable_sip_h_X-MixedCase-Hdr".to_string(),
+            "value".to_string(),
+        );
+        headers.insert("variable_MyVar".to_string(), "vv".to_string());
         let r = EslResponse::new(headers, None);
-        assert_eq!(r.header("Reply-Text"), Some("+OK"));
-        assert_eq!(r.header("reply-text"), None);
+
+        // Exact case hits.
+        assert_eq!(r.header("variable_sip_h_X-MixedCase-Hdr"), Some("value"));
+        assert_eq!(r.header("variable_MyVar"), Some("vv"));
+
+        // Wrong case must NOT resolve via the lowercase fallback.
+        assert_eq!(r.header("variable_sip_h_x-mixedcase-hdr"), None);
+        assert_eq!(r.header("VARIABLE_SIP_H_X-MIXEDCASE-HDR"), None);
+        assert_eq!(r.header("variable_myvar"), None);
     }
 
     #[test]

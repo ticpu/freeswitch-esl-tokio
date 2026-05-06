@@ -3,6 +3,7 @@
 //! These tests require FreeSWITCH ESL on 127.0.0.1:8022 with password ClueCon.
 //! Run with: cargo test --test live_freeswitch -- --ignored
 
+use freeswitch_esl_tokio::commands::originate::{Variables, VariablesType};
 use freeswitch_esl_tokio::commands::{LoopbackEndpoint, UuidGetVar, UuidKill, UuidSetVar};
 use freeswitch_esl_tokio::{
     parse_api_body, Application, ConnectionStatus, DialplanType, DisconnectReason, Endpoint,
@@ -1567,6 +1568,103 @@ async fn live_connect_userauth_truncated_response() {
             commands.len() < 4,
             "Allowed-API has all 4 commands ({api}), expected truncation"
         );
+    }
+
+    drop(permit);
+}
+
+/// The outbound `connect` reply carries every channel variable as a
+/// `variable_<name>` header. SIP-passthrough variables (`variable_sip_h_*`)
+/// must preserve the original SIP wire casing — `EslResponse::header()`
+/// must not collapse `variable_sip_h_X-MixedCase` into a lowercase bucket.
+///
+/// Drives a real outbound socket against FS to verify the wire path.
+#[tokio::test]
+#[ignore]
+async fn live_outbound_connect_response_preserves_underscored_case() {
+    use tokio::net::TcpListener;
+
+    let (inbound, _events, permit) = connect().await;
+
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind outbound listener");
+    let port = listener
+        .local_addr()
+        .unwrap()
+        .port();
+
+    // Inject a channel variable with mixed-case underscored name.
+    // FS preserves the variable name verbatim and emits it as
+    // `variable_<name>` in the connect reply.
+    let mut vars = Variables::new(VariablesType::Default);
+    vars.insert("MyMixed_Case_Var", "preserved");
+
+    let endpoint = LoopbackEndpoint::new("9199")
+        .with_context("test")
+        .with_variables(vars);
+
+    let cmd = Originate::application(
+        Endpoint::Loopback(endpoint),
+        Application::new("socket", Some(format!("127.0.0.1:{} async full", port))),
+    );
+
+    // bgapi returns immediately; the call proceeds asynchronously and
+    // FS dials our listener.
+    inbound
+        .bgapi(&cmd.to_string())
+        .await
+        .expect("bgapi originate");
+
+    let (outbound, _outbound_events) = tokio::time::timeout(
+        Duration::from_secs(10),
+        EslClient::accept_outbound(&listener),
+    )
+    .await
+    .expect("timed out waiting for outbound connection")
+    .expect("accept_outbound failed");
+
+    let resp = outbound
+        .connect_session()
+        .await
+        .expect("connect_session failed");
+
+    // Case-sensitive: exact-cased variable name must hit.
+    assert_eq!(
+        resp.header("variable_MyMixed_Case_Var"),
+        Some("preserved"),
+        "exact-case variable lookup must succeed"
+    );
+
+    // Case-sensitive: wrong-cased variants must NOT match. If the
+    // case_index were unfiltered, lowercased lookups would resolve
+    // through the alias and return the wrong value (or worse, collapse
+    // distinct headers like X-Foo and X-foo).
+    assert_eq!(
+        resp.header("variable_mymixed_case_var"),
+        None,
+        "lowercased variable_* must not match — SIP wire casing is preserved"
+    );
+    assert_eq!(
+        resp.header("VARIABLE_MYMIXED_CASE_VAR"),
+        None,
+        "uppercased variable_* must not match"
+    );
+
+    // Case-insensitive: framing headers (no underscore) resolve in any case.
+    let canonical = resp
+        .header("Reply-Text")
+        .expect("Reply-Text must be present on connect reply");
+    assert_eq!(resp.header("reply-text"), Some(canonical));
+    assert_eq!(resp.header("REPLY-TEXT"), Some(canonical));
+
+    // Cleanup.
+    if let Some(uuid) = resp
+        .header("Channel-Unique-ID")
+        .or_else(|| resp.header("Unique-ID"))
+        .map(String::from)
+    {
+        kill_channel(&inbound, &uuid).await;
     }
 
     drop(permit);
