@@ -284,7 +284,7 @@ impl EslParser {
     /// contains invalid UTF-8 after decoding. `context` is inlined into the
     /// UTF-8 error message so the caller (outer envelope vs. inner event body)
     /// is visible to operators.
-    fn parse_header_line(line: &str, context: &str) -> EslResult<Option<(String, String)>> {
+    fn parse_header_line(line: &str, context: &'static str) -> EslResult<Option<(String, String)>> {
         let line = line
             .strip_suffix('\r')
             .unwrap_or(line);
@@ -303,8 +303,10 @@ impl EslParser {
         let value = percent_decode_str(raw_value)
             .decode_utf8()
             .map(|s| s.into_owned())
-            .map_err(|e| {
-                EslError::protocol_error(format!("invalid UTF-8 in {context} '{key}': {e}"))
+            .map_err(|e| EslError::InvalidUtf8InHeader {
+                context,
+                key: key.clone(),
+                source: e,
             })?;
         Ok(Some((key, value)))
     }
