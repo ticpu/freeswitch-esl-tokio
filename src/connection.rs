@@ -1919,11 +1919,11 @@ impl EslClient {
         let outer_timeout = Duration::from_millis(REEXEC_DRAIN_TIMEOUT_MS) + Duration::from_secs(1);
         let residual = timeout(outer_timeout, reexec.result_rx)
             .await
-            .map_err(|_| EslError::ReexecFailed {
-                reason: "timed out waiting for reader to stop".into(),
+            .map_err(|e| EslError::ReexecFailed {
+                reason: format!("timed out waiting for reader to stop: {e}"),
             })?
-            .map_err(|_| EslError::ReexecFailed {
-                reason: "reader task exited without sending result".into(),
+            .map_err(|e| EslError::ReexecFailed {
+                reason: format!("reader task exited without sending result: {e}"),
             })??;
 
         // Get fd from writer
