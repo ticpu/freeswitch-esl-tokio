@@ -447,60 +447,45 @@ pub struct EventSubscription {
     filters: Vec<(String, String)>,
 }
 
-/// Validates that a raw event name is safe for ESL wire use.
+/// Wire-safety validator shared by raw events, custom subclasses, and filter fields.
 ///
-/// Rejects empty strings, spaces (would split into multiple event names on
-/// the wire), and newline/carriage return injection.
+/// Newlines/CRs are always rejected (would inject extra ESL commands). When
+/// `reject_empty` is set the value must be non-empty. When `reject_space` is
+/// set spaces are rejected (token splitting on the wire).
+fn validate_wire_token(
+    s: &str,
+    label: &str,
+    reject_empty: bool,
+    reject_space: bool,
+) -> Result<(), EventSubscriptionError> {
+    if reject_empty && s.is_empty() {
+        return Err(EventSubscriptionError(format!("{} cannot be empty", label)));
+    }
+    if s.contains('\n') || s.contains('\r') {
+        return Err(EventSubscriptionError(format!(
+            "{} contains newline: {:?}",
+            label, s
+        )));
+    }
+    if reject_space && s.contains(' ') {
+        return Err(EventSubscriptionError(format!(
+            "{} contains space: {:?}",
+            label, s
+        )));
+    }
+    Ok(())
+}
+
 fn validate_raw_event(s: &str) -> Result<(), EventSubscriptionError> {
-    if s.is_empty() {
-        return Err(EventSubscriptionError("raw event cannot be empty".into()));
-    }
-    if s.contains('\n') || s.contains('\r') {
-        return Err(EventSubscriptionError(format!(
-            "raw event contains newline: {:?}",
-            s
-        )));
-    }
-    if s.contains(' ') {
-        return Err(EventSubscriptionError(format!(
-            "raw event contains space: {:?}",
-            s
-        )));
-    }
-    Ok(())
+    validate_wire_token(s, "raw event", true, true)
 }
 
-/// Validates that a custom subclass token is safe for ESL wire use.
 fn validate_custom_subclass(s: &str) -> Result<(), EventSubscriptionError> {
-    if s.is_empty() {
-        return Err(EventSubscriptionError(
-            "custom subclass cannot be empty".into(),
-        ));
-    }
-    if s.contains('\n') || s.contains('\r') {
-        return Err(EventSubscriptionError(format!(
-            "custom subclass contains newline: {:?}",
-            s
-        )));
-    }
-    if s.contains(' ') {
-        return Err(EventSubscriptionError(format!(
-            "custom subclass contains space: {:?}",
-            s
-        )));
-    }
-    Ok(())
+    validate_wire_token(s, "custom subclass", true, true)
 }
 
-/// Validates that a filter header or value has no newline characters.
 fn validate_filter_field(field: &str, label: &str) -> Result<(), EventSubscriptionError> {
-    if field.contains('\n') || field.contains('\r') {
-        return Err(EventSubscriptionError(format!(
-            "filter {} contains newline: {:?}",
-            label, field
-        )));
-    }
-    Ok(())
+    validate_wire_token(field, &format!("filter {}", label), false, false)
 }
 
 impl EventSubscription {
