@@ -145,23 +145,23 @@ mod tests {
 
     #[test]
     fn group_call_display() {
-        let ep = GroupCall::new("support", "domain.com");
-        assert_eq!(ep.to_string(), "${group_call(support@domain.com)}");
+        let ep = GroupCall::new("support", "example.com");
+        assert_eq!(ep.to_string(), "${group_call(support@example.com)}");
     }
 
     #[test]
     fn group_call_display_with_order() {
-        let ep = GroupCall::new("support", "domain.com").with_order(GroupCallOrder::All);
-        assert_eq!(ep.to_string(), "${group_call(support@domain.com+A)}");
+        let ep = GroupCall::new("support", "example.com").with_order(GroupCallOrder::All);
+        assert_eq!(ep.to_string(), "${group_call(support@example.com+A)}");
     }
 
     #[test]
     fn group_call_from_str() {
-        let ep: GroupCall = "${group_call(support@domain.com)}"
+        let ep: GroupCall = "${group_call(support@example.com)}"
             .parse()
             .unwrap();
         assert_eq!(ep.group, "support");
-        assert_eq!(ep.domain, "domain.com");
+        assert_eq!(ep.domain, "example.com");
         assert!(ep
             .order
             .is_none());
@@ -169,11 +169,11 @@ mod tests {
 
     #[test]
     fn group_call_from_str_with_order() {
-        let ep: GroupCall = "${group_call(support@domain.com+A)}"
+        let ep: GroupCall = "${group_call(support@example.com+A)}"
             .parse()
             .unwrap();
         assert_eq!(ep.group, "support");
-        assert_eq!(ep.domain, "domain.com");
+        assert_eq!(ep.domain, "example.com");
         assert_eq!(ep.order, Some(GroupCallOrder::All));
     }
 
@@ -189,7 +189,7 @@ mod tests {
 
     #[test]
     fn serde_group_call() {
-        let ep = GroupCall::new("support", "domain.com").with_order(GroupCallOrder::All);
+        let ep = GroupCall::new("support", "example.com").with_order(GroupCallOrder::All);
         let json = serde_json::to_string(&ep).unwrap();
         let parsed: GroupCall = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, ep);

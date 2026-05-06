@@ -359,7 +359,7 @@ mod tests {
 
     #[test]
     fn endpoint_from_str_sofia() {
-        let ep: Endpoint = "sofia/internal/1000@domain.com"
+        let ep: Endpoint = "sofia/internal/1000@example.com"
             .parse()
             .unwrap();
         assert!(matches!(ep, Endpoint::Sofia(_)));
@@ -383,7 +383,7 @@ mod tests {
 
     #[test]
     fn endpoint_from_str_user() {
-        let ep: Endpoint = "user/1000@domain.com"
+        let ep: Endpoint = "user/1000@example.com"
             .parse()
             .unwrap();
         assert!(matches!(ep, Endpoint::User(_)));
@@ -391,7 +391,7 @@ mod tests {
 
     #[test]
     fn endpoint_from_str_sofia_contact() {
-        let ep: Endpoint = "${sofia_contact(1000@domain.com)}"
+        let ep: Endpoint = "${sofia_contact(1000@example.com)}"
             .parse()
             .unwrap();
         assert!(matches!(ep, Endpoint::SofiaContact(_)));
@@ -399,7 +399,7 @@ mod tests {
 
     #[test]
     fn endpoint_from_str_group_call() {
-        let ep: Endpoint = "${group_call(support@domain.com+A)}"
+        let ep: Endpoint = "${group_call(support@example.com+A)}"
             .parse()
             .unwrap();
         assert!(matches!(ep, Endpoint::GroupCall(_)));
@@ -424,7 +424,7 @@ mod tests {
 
     #[test]
     fn endpoint_from_str_with_variables() {
-        let ep: Endpoint = "{timeout=30}sofia/internal/1000@domain.com"
+        let ep: Endpoint = "{timeout=30}sofia/internal/1000@example.com"
             .parse()
             .unwrap();
         if let Endpoint::Sofia(inner) = &ep {
@@ -443,10 +443,10 @@ mod tests {
     fn endpoint_display_delegates_to_inner() {
         let ep = Endpoint::Sofia(SofiaEndpoint {
             profile: "internal".into(),
-            destination: "1000@domain.com".into(),
+            destination: "1000@example.com".into(),
             variables: None,
         });
-        assert_eq!(ep.to_string(), "sofia/internal/1000@domain.com");
+        assert_eq!(ep.to_string(), "sofia/internal/1000@example.com");
     }
 
     // --- DialString trait ---
@@ -526,7 +526,7 @@ mod tests {
     fn serde_endpoint_enum_sofia() {
         let ep = Endpoint::Sofia(SofiaEndpoint {
             profile: "internal".into(),
-            destination: "1000@domain.com".into(),
+            destination: "1000@example.com".into(),
             variables: None,
         });
         let json = serde_json::to_string(&ep).unwrap();
@@ -575,7 +575,7 @@ mod tests {
     fn serde_endpoint_enum_sofia_contact() {
         let ep = Endpoint::SofiaContact(SofiaContact {
             user: "1000".into(),
-            domain: "domain.com".into(),
+            domain: "example.com".into(),
             profile: None,
             variables: None,
         });
@@ -589,7 +589,7 @@ mod tests {
     fn serde_endpoint_enum_group_call() {
         let ep = Endpoint::GroupCall(GroupCall {
             group: "support".into(),
-            domain: "domain.com".into(),
+            domain: "example.com".into(),
             order: Some(GroupCallOrder::All),
             variables: None,
         });
@@ -812,7 +812,7 @@ mod tests {
     fn from_sofia_endpoint() {
         let inner = SofiaEndpoint {
             profile: "internal".into(),
-            destination: "1000@domain.com".into(),
+            destination: "1000@example.com".into(),
             variables: None,
         };
         let ep: Endpoint = inner
@@ -861,7 +861,7 @@ mod tests {
     fn from_sofia_contact() {
         let inner = SofiaContact {
             user: "1000".into(),
-            domain: "domain.com".into(),
+            domain: "example.com".into(),
             profile: None,
             variables: None,
         };
@@ -873,7 +873,7 @@ mod tests {
 
     #[test]
     fn from_group_call() {
-        let inner = GroupCall::new("support", "domain.com").with_order(GroupCallOrder::All);
+        let inner = GroupCall::new("support", "example.com").with_order(GroupCallOrder::All);
         let ep: Endpoint = inner
             .clone()
             .into();

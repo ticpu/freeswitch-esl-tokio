@@ -303,8 +303,8 @@ The `Endpoint` enum wraps them for polymorphic storage and serde.
 use freeswitch_esl_tokio::commands::*;
 
 // Direct SIP profile routing
-let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "1000@domain.com"));
-assert_eq!(ep.to_string(), "sofia/internal/1000@domain.com");
+let ep = Endpoint::Sofia(SofiaEndpoint::new("internal", "1000@example.com"));
+assert_eq!(ep.to_string(), "sofia/internal/1000@example.com");
 
 // SIP gateway routing
 let ep = Endpoint::SofiaGateway(SofiaGateway::new("my_provider", "18005551234"));
@@ -459,7 +459,7 @@ endpoint: !sofia_gateway
 # Direct SIP profile routing
 endpoint: !sofia
   profile: internal
-  destination: "1000@domain.com"
+  destination: "1000@example.com"
 
 # Internal loopback
 endpoint: !loopback
@@ -468,7 +468,7 @@ endpoint: !loopback
 # Directory-based routing
 endpoint: !user
   name: "1001"
-  domain: domain.com
+  domain: example.com
 ```
 
 This is the format produced by `serde_yml`. JSON libraries represent the

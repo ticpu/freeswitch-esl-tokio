@@ -84,10 +84,10 @@ mod tests {
     fn user_endpoint_display() {
         let ep = UserEndpoint {
             name: "1000".into(),
-            domain: Some("domain.com".into()),
+            domain: Some("example.com".into()),
             variables: None,
         };
-        assert_eq!(ep.to_string(), "user/1000@domain.com");
+        assert_eq!(ep.to_string(), "user/1000@example.com");
     }
 
     #[test]
@@ -102,14 +102,14 @@ mod tests {
 
     #[test]
     fn user_endpoint_from_str() {
-        let ep: UserEndpoint = "user/1000@domain.com"
+        let ep: UserEndpoint = "user/1000@example.com"
             .parse()
             .unwrap();
         assert_eq!(ep.name, "1000");
         assert_eq!(
             ep.domain
                 .as_deref(),
-            Some("domain.com")
+            Some("example.com")
         );
     }
 
@@ -142,7 +142,7 @@ mod tests {
     fn serde_user_endpoint() {
         let ep = UserEndpoint {
             name: "1000".into(),
-            domain: Some("domain.com".into()),
+            domain: Some("example.com".into()),
             variables: None,
         };
         let json = serde_json::to_string(&ep).unwrap();

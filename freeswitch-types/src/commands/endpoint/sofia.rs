@@ -256,10 +256,10 @@ mod tests {
     fn sofia_endpoint_display() {
         let ep = SofiaEndpoint {
             profile: "internal".into(),
-            destination: "1000@domain.com".into(),
+            destination: "1000@example.com".into(),
             variables: None,
         };
-        assert_eq!(ep.to_string(), "sofia/internal/1000@domain.com");
+        assert_eq!(ep.to_string(), "sofia/internal/1000@example.com");
     }
 
     #[test]
@@ -268,22 +268,22 @@ mod tests {
         vars.insert("originate_timeout", "30");
         let ep = SofiaEndpoint {
             profile: "internal".into(),
-            destination: "1000@domain.com".into(),
+            destination: "1000@example.com".into(),
             variables: Some(vars),
         };
         assert_eq!(
             ep.to_string(),
-            "{originate_timeout=30}sofia/internal/1000@domain.com"
+            "{originate_timeout=30}sofia/internal/1000@example.com"
         );
     }
 
     #[test]
     fn sofia_endpoint_from_str() {
-        let ep: SofiaEndpoint = "sofia/internal/1000@domain.com"
+        let ep: SofiaEndpoint = "sofia/internal/1000@example.com"
             .parse()
             .unwrap();
         assert_eq!(ep.profile, "internal");
-        assert_eq!(ep.destination, "1000@domain.com");
+        assert_eq!(ep.destination, "1000@example.com");
         assert!(ep
             .variables
             .is_none());
@@ -291,11 +291,11 @@ mod tests {
 
     #[test]
     fn sofia_endpoint_from_str_with_variables() {
-        let ep: SofiaEndpoint = "{originate_timeout=30}sofia/internal/1000@domain.com"
+        let ep: SofiaEndpoint = "{originate_timeout=30}sofia/internal/1000@example.com"
             .parse()
             .unwrap();
         assert_eq!(ep.profile, "internal");
-        assert_eq!(ep.destination, "1000@domain.com");
+        assert_eq!(ep.destination, "1000@example.com");
         assert_eq!(
             ep.variables
                 .unwrap()
@@ -322,7 +322,7 @@ mod tests {
     fn serde_sofia_endpoint() {
         let ep = SofiaEndpoint {
             profile: "internal".into(),
-            destination: "1000@domain.com".into(),
+            destination: "1000@example.com".into(),
             variables: None,
         };
         let json = serde_json::to_string(&ep).unwrap();
@@ -336,7 +336,7 @@ mod tests {
         vars.insert("originate_timeout", "30");
         let ep = SofiaEndpoint {
             profile: "internal".into(),
-            destination: "1000@domain.com".into(),
+            destination: "1000@example.com".into(),
             variables: Some(vars),
         };
         let json = serde_json::to_string(&ep).unwrap();
@@ -460,58 +460,61 @@ mod tests {
     fn sofia_contact_display() {
         let ep = SofiaContact {
             user: "1000".into(),
-            domain: "domain.com".into(),
+            domain: "example.com".into(),
             profile: None,
             variables: None,
         };
-        assert_eq!(ep.to_string(), "${sofia_contact(1000@domain.com)}");
+        assert_eq!(ep.to_string(), "${sofia_contact(1000@example.com)}");
     }
 
     #[test]
     fn sofia_contact_display_with_profile() {
         let ep = SofiaContact {
             user: "1000".into(),
-            domain: "domain.com".into(),
+            domain: "example.com".into(),
             profile: Some("internal".into()),
             variables: None,
         };
-        assert_eq!(ep.to_string(), "${sofia_contact(internal/1000@domain.com)}");
+        assert_eq!(
+            ep.to_string(),
+            "${sofia_contact(internal/1000@example.com)}"
+        );
     }
 
     #[test]
     fn sofia_contact_display_all_profiles() {
         let ep = SofiaContact {
             user: "1000".into(),
-            domain: "domain.com".into(),
+            domain: "example.com".into(),
             profile: Some("*".into()),
             variables: None,
         };
-        assert_eq!(ep.to_string(), "${sofia_contact(*/1000@domain.com)}");
+        assert_eq!(ep.to_string(), "${sofia_contact(*/1000@example.com)}");
     }
 
     #[test]
     fn sofia_contact_display_with_variables() {
         let mut vars = Variables::new(VariablesType::Default);
-        vars.insert("presence_id", "1000@domain.com");
+        vars.insert("presence_id", "1000@example.com");
         let ep = SofiaContact {
             user: "1000".into(),
-            domain: "domain.com".into(),
+            domain: "example.com".into(),
             profile: None,
             variables: Some(vars),
         };
         assert_eq!(
             ep.to_string(),
-            "{presence_id=1000@domain.com}${sofia_contact(1000@domain.com)}"
+            "{presence_id=1000@example.com}${sofia_contact(1000@example.com)}"
         );
     }
 
     #[test]
     fn sofia_contact_from_str() {
-        let ep: SofiaContact = "${sofia_contact(1000@domain.com)}"
+        let ep: SofiaContact = "${sofia_contact(1000@example.com)}"
             .parse()
             .unwrap();
         assert_eq!(ep.user, "1000");
-        assert_eq!(ep.domain, "domain.com");
+        assert_eq!(ep.domain, "example.com");
         assert!(ep
             .profile
             .is_none());
@@ -519,11 +522,11 @@ mod tests {
 
     #[test]
     fn sofia_contact_from_str_with_profile() {
-        let ep: SofiaContact = "${sofia_contact(internal/1000@domain.com)}"
+        let ep: SofiaContact = "${sofia_contact(internal/1000@example.com)}"
             .parse()
             .unwrap();
         assert_eq!(ep.user, "1000");
-        assert_eq!(ep.domain, "domain.com");
+        assert_eq!(ep.domain, "example.com");
         assert_eq!(
             ep.profile
                 .as_deref(),
@@ -550,9 +553,9 @@ mod tests {
 
     #[test]
     fn sofia_contact_profile_with_at_sign() {
-        let ep = SofiaContact::new("1000", "domain.com").with_profile("user@realm");
+        let ep = SofiaContact::new("1000", "example.com").with_profile("user@realm");
         let s = ep.to_string();
-        assert_eq!(s, "${sofia_contact(user@realm/1000@domain.com)}");
+        assert_eq!(s, "${sofia_contact(user@realm/1000@example.com)}");
         // Round-trip: the first @ is in profile, the parser splits on / first
         // then finds @ in the user_at_domain part
         let parsed: SofiaContact = s
@@ -565,14 +568,14 @@ mod tests {
             Some("user@realm")
         );
         assert_eq!(parsed.user, "1000");
-        assert_eq!(parsed.domain, "domain.com");
+        assert_eq!(parsed.domain, "example.com");
     }
 
     #[test]
     fn serde_sofia_contact() {
         let ep = SofiaContact {
             user: "1000".into(),
-            domain: "domain.com".into(),
+            domain: "example.com".into(),
             profile: Some("*".into()),
             variables: None,
         };
