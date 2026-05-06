@@ -274,18 +274,11 @@ impl EslParser {
         }
     }
 
-    /// Resolve `Event-Name` on a freshly populated event into its typed
-    /// [`EslEventType`] and record it via `set_event_type`. No-op if the
-    /// header is missing; that leaves the event type as `None` and the
-    /// caller can decide whether to reject it or keep the raw headers.
-    fn finalize_event_type(event: &mut EslEvent) {
-        if let Some(name) = event
-            .header(EventHeader::EventName)
-            .map(|s| s.to_string())
-        {
-            event.set_event_type(EslEventType::parse_event_type(&name));
-        }
-    }
+    /// Previously cached the parsed event type into a struct field; the
+    /// type is now derived lazily from the `Event-Name` header on each
+    /// `event_type()` call, so this is a no-op kept only as a marker for
+    /// "headers are now finalized" in the parse flow.
+    fn finalize_event_type(_event: &mut EslEvent) {}
 
     /// Parse a single `Key: value` line, stripping `\r`, normalizing the key,
     /// and percent-decoding the value as UTF-8.
@@ -374,7 +367,10 @@ impl EslParser {
         if let Some(body) = message.body {
             event.set_body(body);
         }
-        event.set_event_type(Some(EslEventType::Log));
+        // Synthesize Event-Name so downstream event_type() resolves to
+        // EslEventType::Log; FreeSWITCH does not include this header on
+        // log/data envelopes.
+        event.set_header(EventHeader::EventName.as_str(), EslEventType::Log.as_str());
         Ok(event)
     }
 

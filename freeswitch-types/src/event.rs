@@ -884,7 +884,6 @@ wire_enum! {
 #[derive(Debug, Clone, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct EslEvent {
-    event_type: Option<EslEventType>,
     headers: IndexMap<String, String>,
     /// Alias map from original wire key to normalized key, populated only
     /// when the original differs from its normalized form (mixed-case
@@ -904,31 +903,31 @@ impl EslEvent {
     /// Create a new empty event
     pub fn new() -> Self {
         Self {
-            event_type: None,
             headers: IndexMap::new(),
             original_keys: IndexMap::new(),
             body: None,
         }
     }
 
-    /// Create event with specified type
+    /// Create event with the `Event-Name` header set to the given type's
+    /// wire name. The event type is derived lazily from this header on
+    /// every [`event_type()`](Self::event_type) call — there is no
+    /// separate `event_type` field.
     pub fn with_type(event_type: EslEventType) -> Self {
-        Self {
-            event_type: Some(event_type),
-            headers: IndexMap::new(),
-            original_keys: IndexMap::new(),
-            body: None,
-        }
+        let mut event = Self::new();
+        event.set_header(EventHeader::EventName.as_str(), event_type.as_str());
+        event
     }
 
-    /// Parsed event type, if recognized.
+    /// Parsed event type, derived from the `Event-Name` header.
+    ///
+    /// Returns `None` if the header is missing or carries a value that
+    /// is not a recognized [`EslEventType`] variant. Single source of
+    /// truth: the header. Mutating `Event-Name` via `set_header` will
+    /// be reflected on the next call.
     pub fn event_type(&self) -> Option<EslEventType> {
-        self.event_type
-    }
-
-    /// Override the event type.
-    pub fn set_event_type(&mut self, event_type: Option<EslEventType>) {
-        self.event_type = event_type;
+        self.header(EventHeader::EventName)
+            .and_then(EslEventType::parse_event_type)
     }
 
     /// Look up a header by its [`EventHeader`] enum variant (case-sensitive).
@@ -1099,7 +1098,7 @@ impl EslEvent {
 
     /// Check whether this event matches the given type.
     pub fn is_event_type(&self, event_type: EslEventType) -> bool {
-        self.event_type == Some(event_type)
+        self.event_type() == Some(event_type)
     }
 
     /// Serialize to ESL plain text wire format with percent-encoded header values.
@@ -1166,16 +1165,12 @@ impl sip_header::SipHeaderLookup for EslEvent {
 
 impl PartialEq for EslEvent {
     fn eq(&self, other: &Self) -> bool {
-        self.event_type == other.event_type
-            && self.headers == other.headers
-            && self.body == other.body
+        self.headers == other.headers && self.body == other.body
     }
 }
 
 impl std::hash::Hash for EslEvent {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.event_type
-            .hash(state);
         for (k, v) in &self.headers {
             k.hash(state);
             v.hash(state);
@@ -1191,15 +1186,19 @@ impl<'de> serde::Deserialize<'de> for EslEvent {
     where
         D: serde::Deserializer<'de>,
     {
+        // Accept (and silently discard) a legacy `event_type` field for
+        // backwards compatibility with previously-serialized payloads;
+        // the value is now derived from the Event-Name header.
         #[derive(serde::Deserialize)]
         struct Raw {
+            #[serde(default)]
+            #[allow(dead_code)]
             event_type: Option<EslEventType>,
             headers: IndexMap<String, String>,
             body: Option<String>,
         }
         let raw = Raw::deserialize(deserializer)?;
         let mut event = EslEvent::new();
-        event.event_type = raw.event_type;
         event.body = raw.body;
         for (k, v) in raw.headers {
             event.set_header(k, v);
