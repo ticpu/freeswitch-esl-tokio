@@ -459,6 +459,12 @@ impl EslParser {
         Ok(event)
     }
 
+    /// Map a `quick_xml::Error` to `EslError::XmlError` without leaking
+    /// the dependency type into our public `From` impls.
+    fn xml_err<E: std::fmt::Display>(e: E) -> EslError {
+        EslError::XmlError(format!("XML parse error: {e}"))
+    }
+
     /// Parse XML event using quick_xml.
     ///
     /// FreeSWITCH XML event format:
@@ -535,7 +541,7 @@ impl EslParser {
                 Ok(XmlEvent::Text(ref e)) => {
                     let decoded = e
                         .decode()
-                        .map_err(quick_xml::Error::from)?;
+                        .map_err(Self::xml_err)?;
                     if in_body || current_tag.is_some() {
                         text_buf.push_str(&decoded);
                     }
@@ -545,7 +551,7 @@ impl EslParser {
                     text_buf.push_str(&resolved);
                 }
                 Ok(XmlEvent::Eof) => break,
-                Err(e) => return Err(e.into()),
+                Err(e) => return Err(Self::xml_err(e)),
                 _ => {}
             }
         }
@@ -556,12 +562,15 @@ impl EslParser {
 
     /// Resolve an XML entity reference (`&name;` or `&#num;`) to its string value.
     fn resolve_entity(entity: &quick_xml::events::BytesRef<'_>) -> EslResult<String> {
-        if let Some(ch) = entity.resolve_char_ref()? {
+        if let Some(ch) = entity
+            .resolve_char_ref()
+            .map_err(Self::xml_err)?
+        {
             return Ok(ch.to_string());
         }
         let name = entity
             .decode()
-            .map_err(quick_xml::Error::from)?;
+            .map_err(Self::xml_err)?;
         match quick_xml::escape::resolve_xml_entity(&name) {
             Some(s) => Ok(s.to_string()),
             None => Err(EslError::protocol_error(format!(

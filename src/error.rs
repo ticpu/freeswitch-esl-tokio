@@ -178,12 +178,6 @@ impl From<serde_json::Error> for EslError {
     }
 }
 
-impl From<quick_xml::Error> for EslError {
-    fn from(e: quick_xml::Error) -> Self {
-        Self::XmlError(e.to_string())
-    }
-}
-
 impl EslError {
     /// Construct a generic error with a custom message.
     pub fn generic(message: impl Into<String>) -> Self {
