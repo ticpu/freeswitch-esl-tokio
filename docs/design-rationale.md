@@ -2,28 +2,6 @@
 
 Why this library exists and the architectural decisions behind it.
 
-## Why a new ESL library
-
-The existing Rust ESL crates each have fundamental limitations that make them
-unsuitable for production telephony applications:
-
-- **freeswitch-esl-rs** (6k downloads) — synchronous, single-threaded, blocking
-  I/O. Cannot read events while sending commands. Not thread-safe.
-
-- **freeswitch-esl** (3k downloads) — async/tokio but self-described WIP.
-  JSON-only events, no liveness detection, no command timeouts, no structured
-  command builders. Stale since September 2023.
-
-- **eslrs** (300 downloads) — newest async contender, still in release candidate.
-  Unified stream (not split reader/writer), silently discards unexpected
-  responses, no liveness detection or timeouts.
-
-None of them match the feature set of the C `libesl` library that ships with
-FreeSWITCH, let alone the higher-level patterns from .NET's NEventSocket. We
-needed a library that could handle production call control — concurrent commands
-and events, connection health monitoring, structured command building, and
-correct wire format handling.
-
 ## Split reader/writer architecture
 
 Previous designs used a single handle that owned the TCP stream. Every method
@@ -149,40 +127,6 @@ event headers. Header values are percent-decoded on parse. This matches the real
 FreeSWITCH wire protocol as implemented in `mod_event_socket.c` and consumed by
 the C ESL library in `esl.c`.
 
-## Error classification
-
-`EslError` variants carry `is_connection_error()` and `is_recoverable()` helpers
-so callers can decide handling without matching every variant. Connection errors
-(`Io`, `NotConnected`, `ConnectionClosed`, `HeartbeatExpired`) mean the TCP
-session is dead. Recoverable errors (`Timeout`, `CommandFailed`,
-`UnexpectedReply`, `QueueFull`) mean the connection is still usable.
-
-## Protocol correctness vs NEventSocket
-
-NEventSocket (.NET) is the most mature high-level ESL client. It works well in
-practice but makes trade-offs that silently absorb protocol errors:
-
-- **No Content-Type validation** — messages without Content-Type are accepted
-  silently. A corrupted Content-Length that causes protocol desync produces
-  garbage messages with no error signal. This library requires Content-Type on
-  every message; its absence returns a protocol error so the caller can
-  disconnect and reconnect from a known-good state.
-
-- **No message or buffer size limits** — NEventSocket pre-allocates whatever
-  Content-Length says with no upper bound. A malformed or malicious
-  Content-Length can cause unbounded memory allocation. This library enforces
-  8MB per message and 16MB total buffer.
-
-- **Silent error recovery** — parse exceptions are caught with an empty handler
-  and the stream continues. This masks protocol desync. This library propagates
-  all parse errors to the caller via `EslResult`, with `is_connection_error()`
-  and `is_recoverable()` helpers for classification.
-
-These differences reflect a design choice: NEventSocket prioritizes resilience
-(keep going), this library prioritizes correctness (stop and signal). For
-telephony applications where a desynced connection produces wrong call control
-decisions, explicit failure is safer than silent corruption.
-
 ## Typed state and header enums
 
 FreeSWITCH is an entirely string-based system — channel state, call direction,
@@ -191,10 +135,11 @@ ecosystem and most client libraries preserve this. The problem: typos in header
 names are silent, state comparisons are fragile string matches, and there's no
 way to know at compile time whether `"Channal-State"` is a valid header.
 
-v1.0 introduced typed state enums (`ChannelState`, `CallState`, `AnswerState`,
-`CallDirection`) with `FromStr`/`Display`. v1.1 added `ChannelTimetable` for
-call lifecycle timestamps. v1.2 added `EventHeader` and `ChannelVariable` enums
-for compile-time header and variable name checking.
+Typed state enums (`ChannelState`, `CallState`, `AnswerState`, `CallDirection`),
+`ChannelTimetable` for call lifecycle timestamps, and `EventHeader` /
+`ChannelVariable` for header and variable name checking all implement
+`FromStr`/`Display`. Typos surface at compile time; comparisons are exhaustive
+match arms instead of fragile string equality.
 
 ### Decoupling from EslEvent
 
@@ -297,7 +242,7 @@ and `FromStr` with no dependency on `EslClient`. They produce strings,
 - Round-trip testing (`parse` ↔ `to_string`)
 - Reuse in contexts beyond this library (logging, debugging, CLI tools)
 
-### Why serde on command builders
+### Serde on command builders for config-driven deployments
 
 The serde derives on `Originate`, `Endpoint`, `Variables`, and
 `BridgeDialString` exist because production callers need **config-driven
@@ -328,7 +273,7 @@ This is the pattern: **the library provides typed builders with serde, the
 caller deserializes from config and calls `.to_string()` at originate time**.
 No FreeSWITCH-specific knowledge is needed in the config layer.
 
-## Why freeswitch-types is a separate crate
+## freeswitch-types as a separate, async-free crate
 
 The domain types crate (`freeswitch-types`) has **zero async dependencies** —
 no tokio, no futures. This split exists because the types are useful without
@@ -342,19 +287,9 @@ a network connection:
 Pulling in `freeswitch-esl-tokio` for types alone would force tokio as a
 transitive dependency — unacceptable for a config parser or a static analysis
 tool. The split keeps the dependency boundary clean: `freeswitch-types` is
-pure data, `freeswitch-esl-tokio` is transport.
-
-With the 2.0 release the types crate reached 1.0. The `#[non_exhaustive]`
-policy on public enums and public-field structs is in place, the builders
-(`Originate`, endpoint types, `EventSubscription`) have accessor and
-mutator conventions documented, and downstream consumers — particularly
-`eido` and its NG9-1-1 tooling — need a stability signal. The types
-crate now versions independently from the transport crate, so a future
-breaking change in the types catalog does not force the transport
-crate's major version, and vice versa. A `freeswitch-esl-tokio` 2.x
-release stays compatible with any `freeswitch-types` 1.x, and a
-`freeswitch-types` 2.0 would be cut when we need to break the data
-layer without necessarily touching the transport.
+pure data, `freeswitch-esl-tokio` is transport. The two crates version
+independently so a breaking change in either layer does not force a major
+bump on the other.
 
 ## Wire security: newline injection prevention
 
@@ -431,7 +366,7 @@ decide what to do with it. This is why the library never reconnects
 automatically — it can't know whether a failure is permanent or transient in
 the caller's context.
 
-## Re-exec support: why it exists
+## Re-exec preserves the authenticated socket across binary upgrades
 
 Production ESL daemons like fs-eventd maintain a persistent TCP connection to
 FreeSWITCH and track live channel state (active calls, channel variables,
@@ -455,7 +390,7 @@ then returns the residual bytes for the new process to pre-seed its parser.
 
 See [docs/reexec.md](docs/reexec.md) for the full API and drain protocol.
 
-## HeaderLookup trait: why a trait, not methods on EslEvent
+## HeaderLookup as a trait, not methods on EslEvent
 
 Production ESL daemons don't keep `EslEvent` objects around. fs-eventd's
 channel tracker stores headers in a flat `HashMap<String, String>` and
@@ -476,34 +411,18 @@ The alternative — putting accessors only on `EslEvent` — would force callers
 to either keep `EslEvent` objects alive or reimplement the accessors on their
 own types. The trait makes the typed API composable.
 
-## NEventSocket comparison: specific lessons
+## Stop on protocol desync rather than absorb
 
-NEventSocket (.NET) is the most mature high-level ESL client and the
-primary reference for what a "complete" ESL library looks like. The Rust
-library deliberately diverges in three areas, each driven by a specific
-failure mode observed or reviewed:
-
-**Content-Type validation.** NEventSocket accepts messages without
-Content-Type silently. A corrupted Content-Length that causes protocol
-desync produces garbage messages with no error signal — the stream
-continues with corrupt data. In telephony, a desynced connection produces
-wrong call control decisions (hanging up the wrong call, bridging to the
-wrong destination). This library requires Content-Type on every message;
-its absence is a protocol error.
-
-**Buffer size limits.** NEventSocket pre-allocates whatever Content-Length
-claims with no upper bound. A malformed or malicious Content-Length can
-cause unbounded memory allocation. This library enforces 8MB per message
-and 16MB total buffer. These limits are generous for any legitimate ESL
-traffic (the largest normal messages are `show channels` responses with
-thousands of active calls).
-
-**Parse error propagation.** NEventSocket catches parse exceptions with an
-empty handler and continues. This masks protocol desync — the stream
-produces garbage silently. This library propagates all parse errors to the
-caller via `EslResult`. The caller can classify them (`is_connection_error()`
-vs `is_recoverable()`) and decide whether to disconnect and reconnect from
-a known-good state.
+NEventSocket (.NET) is the most mature high-level ESL client and absorbs
+protocol errors to keep the stream alive: messages without Content-Type are
+accepted silently, Content-Length is trusted as an allocation hint with no
+upper bound, and parse exceptions are caught and discarded. In telephony a
+desynced connection produces wrong call control decisions, so this library
+makes the opposite trade. Content-Type is required on every message, message
+and buffer sizes are capped (8 MB per message, 16 MB total), and parse errors
+propagate via `EslResult` with `is_connection_error()` /
+`is_recoverable()` so the caller can disconnect and reconnect from a
+known-good state.
 
 ## RFC 4575 conference-info XML namespace handling
 
@@ -566,8 +485,8 @@ iteration. The tracker lives in `freeswitch-esl-tokio` rather than
 
 ## sip-header as a standalone crate
 
-About 42% of `freeswitch-types` by line count (~4,300 lines) was pure RFC
-SIP standard code with zero FreeSWITCH coupling: the `SipHeaderAddr`
+A substantial fraction of `freeswitch-types` was pure RFC SIP standard code
+with zero FreeSWITCH coupling: the `SipHeaderAddr`
 name-addr parser (RFC 3261), `UriInfo` (RFC 3261 §20.9), `HistoryInfo`
 (RFC 7044), `SipGeolocation` (RFC 6442), the `SipHeaderLookup` trait, SIP
 message header extraction, and the full RFC 4575 conference-info XML
@@ -648,48 +567,17 @@ The type makes visible what was previously hidden:
 `EslArray` and pass pre-split entries without `sip-header` knowing
 anything about the ARRAY format.
 
-### HeaderLookup as a supertrait
+### HeaderLookup as a supertrait of SipHeaderLookup
 
-`freeswitch-types` previously bridged the two traits with a blanket
-`impl<T: HeaderLookup> SipHeaderLookup for T`. After extraction,
-`SipHeaderLookup` lives in `sip-header` and `HashMap` gets its impl
-there — making the blanket conflict with `sip-header`'s own
-`HashMap` impl under Rust coherence. The chosen fix was making
-`SipHeaderLookup` a supertrait of `HeaderLookup`:
-
-```rust
-pub trait HeaderLookup: SipHeaderLookup { ... }
-```
-
-Every `HeaderLookup` implementor must now also provide
-`SipHeaderLookup`. For stores that treat ESL and SIP headers as a
-single flat namespace — `EslEvent`, `EslResponse`, `BgJobResult`,
-`TrackedChannel` — it's a one-line delegation from `sip_header_str`
-to `header_str`. For `HashMap<String, String>` it comes from
-`sip-header`. For `EslHeaders` it comes from `freeswitch-types` with
-the ARRAY and bracket overrides described above.
-
-This was a breaking change and landed in the 2.0 window. The
-`IndexMap<String, String>` blanket `HeaderLookup` impl was dropped at
-the same time: orphan rules prevent `freeswitch-types` from impling
-the sip-header trait on an external type, and in practice ESL callers
-want the `EslHeaders` newtype anyway (ARRAY decoding, bracket
-stripping, `variable_` prefix handling are all correct for ESL data
-and wrong for a plain `IndexMap`).
-
-### What moves, what stays
-
-**Moved to sip-header:** `SipHeaderAddr`, `SipHeader` enum,
-`SipHeaderLookup` trait, `UriInfo`, `HistoryInfo`, `SipGeolocation`,
-`extract_header()`, the `define_header_enum!` macro,
-`split_comma_entries()`, and `conference_info/*`
-(feature-gated on `conference-info`).
-
-**Stays in freeswitch-types:** `EslArray`, `EslHeaders`,
-`SipPassthroughHeader` (FS `sip_h_*`/`sip_i_*`/etc. variable names),
-`MultipartBody` (100% ARRAY format), `HeaderLookup` trait,
-`EventHeader`, `ChannelVariable`, `SofiaVariable`, all channel state
-types, and all command builders.
+After extraction, `SipHeaderLookup` lives in `sip-header` along with its
+`HashMap<String, String>` impl, so the previous blanket
+`impl<T: HeaderLookup> SipHeaderLookup for T` would conflict with that
+foreign impl under Rust coherence. The fix was making `SipHeaderLookup` a
+supertrait of `HeaderLookup`. The same orphan rules forced dropping the
+`IndexMap<String, String>` blanket `HeaderLookup` impl: ESL callers want
+the `EslHeaders` newtype anyway because ARRAY decoding, bracket stripping,
+and `variable_` prefix handling are correct for ESL data and wrong for a
+plain `IndexMap`.
 
 ## Unified SIP passthrough headers over per-prefix enums
 
@@ -724,89 +612,31 @@ trying `SipHeader::from_str` on the re-hyphenated suffix. For unknown
 headers the reversal is lossy — original casing is lost — but this is
 inherent to FreeSWITCH's wire format, not a library limitation.
 
-## Truncated userauth response (mod_event_socket reply[512] overflow)
+## Salvage rather than fail on truncated userauth
 
-FreeSWITCH's `mod_event_socket.c` has a buffer overflow in the `userauth`
-response path that silently truncates the reply and drops the `\n\n`
-terminator our parser expects.
-
-The code in `listener_run()` declares `char reply[512]` (line 2704) as the
-final output buffer. The `userauth` handler at line 2009 formats the auth
-response into it:
-
-```c
-switch_snprintf(reply, reply_len,
-    "~Reply-Text: +OK accepted\n%s%s%s\n",
-    event_reply, api_reply, log_reply);
-```
-
-Each of `event_reply`, `api_reply`, and `log_reply` is itself a 512-byte
-buffer, but they all get concatenated into the same 512-byte `reply`.
-With a realistic `esl-allowed-events` list (28 event types plus CUSTOM
-subclasses), the `Allowed-Events` header alone consumes ~470 bytes of
-the reply buffer. After the `~Reply-Text: +OK accepted\n` prefix (~28
-bytes), only ~14 bytes remain for `Allowed-API` and `Allowed-LOG`.
-`switch_snprintf` silently truncates without writing the trailing `\n`
-that would complete the `\n\n` terminator.
-
-The wire data reaches the client as a valid-looking header block that
-simply never ends. The parser accumulates the data, never finds `\n\n`,
-and eventually the connect timeout fires.
-
-This only affects `userauth`, not `auth`. The plain `auth` command
-response is a simple `+OK accepted` (14 bytes) that fits easily.
-
-Our workaround lives in `authenticate()` in `connection.rs`. When the
-auth response read times out and the parser buffer contains data, we
-call `salvage_truncated_auth_response()` which:
-
-1. Extracts the buffer contents as UTF-8
-2. Finds the last complete line (ending with `\n`)
-3. Drops any trailing fragment without a colon (mid-header-name truncation)
-4. Parses the salvageable headers via the existing `parse_headers()` path
-5. Validates `Content-Type: command/reply` to confirm it's actually an
-   auth response
-6. Returns the partial `EslMessage` and drains the parser buffer
-
-The function is private to `connection.rs` and only called from
-`authenticate()`. It is not a general parser recovery mechanism — the
-`Content-Type` validation ensures it won't accidentally salvage
-non-auth data.
-
-The auth is valid on the FreeSWITCH side — `LFLAG_AUTHED` is set before
-the reply is sent. The truncated headers (`Allowed-API`, `Allowed-LOG`)
-are informational access-policy metadata, not required for the ESL
-session to function. We log a WARN so operators can identify the issue
-and either reduce their `esl-allowed-events` list or patch FreeSWITCH.
+FreeSWITCH `mod_event_socket.c` truncates long `userauth` replies into a
+512-byte buffer and drops the `\n\n` terminator (see the code comment on
+`salvage_truncated_auth_response` in `connection.rs` for the C-side
+mechanics). The auth itself is valid on the FreeSWITCH side — `LFLAG_AUTHED`
+is set before the reply is sent — and the truncated `Allowed-API` /
+`Allowed-LOG` headers are informational access-policy metadata, not
+required for the session to function. So `authenticate()` salvages the
+partial reply, validates `Content-Type: command/reply` to be sure it's
+actually an auth response (not arbitrary parser-recovery), and logs a
+WARN so operators can shrink their `esl-allowed-events` list or patch
+FreeSWITCH. The salvage is private to the auth path; the rest of the
+parser remains strict.
 
 ## Bounded ARRAY parsing
 
-FreeSWITCH stores repeating SIP headers as `ARRAY::v1|:v2|:...` strings.
-`EslArray::parse()` splits on `|:` and collects into a `Vec<String>`.
-Without a cap, a crafted ARRAY value from the wire can yield millions of
-String allocations — each tiny on the wire (2 bytes for `|:`) but ~56 bytes
-of heap per item, a ~19x amplification. A 100 MB ESL message could produce
-~1.87 GB of heap pressure.
-
-The ESL protocol has no `MAX_MESSAGE_SIZE` — the receive buffer grows
-dynamically via `content-length` with no hard cap. The only engineered
-limit in FreeSWITCH is in `switch_event_base_add_header()` in
-`switch_event.c`, which silently drops index-addressed writes above 4000
-(`if (index > -1 && index <= 4000)`). PUSH-based growth has no bound,
-but 4000 is the practical ceiling for legitimate data. Real-world SIP
-arrays (Via, Record-Route, P-Asserted-Identity, multipart) never exceed
-~100 items.
-
-`MAX_ARRAY_ITEMS = 4000` matches the FreeSWITCH ceiling while preventing
-OOM from adversarial input. `parse()` returns `Err(EslArrayError::TooManyItems)`
-above this limit.
-
-The programmatic constructors (`new()`, `push()`, `unshift()`) do not
-enforce the limit — they build arrays in trusted code under caller
-control. The bound is a wire-parsing defense, not a domain constraint.
-`push_header()` and `unshift_header()` on `EslEvent` check the limit
-before adding to an existing array, propagating the error to the caller
-rather than silently dropping the value.
+`EslArray::parse()` caps at `MAX_ARRAY_ITEMS = 4000` to match the only
+engineered ceiling in FreeSWITCH itself (`switch_event_base_add_header()`
+silently drops index-addressed writes above 4000) and to prevent
+heap-amplification OOM from a crafted wire value — each `|:` separator
+is two bytes on the wire but ~56 bytes of heap per resulting `String`.
+The cap is a wire-parsing defense only; programmatic constructors
+(`new()`, `push()`, `unshift()`) build arrays in trusted code and do not
+enforce it.
 
 ## EventSubscription as a reusable, serializable builder
 
@@ -870,40 +700,12 @@ fix here is one added match arm — the test suite
 (`from_sip_response_*` tests) enumerates every current code so drift
 from the C source is visible in diff.
 
-## Channel event ordering: CHANNEL_CREATE is not first, CHANNEL_DESTROY is not last
+## CHANNEL_STATE drives lifecycle tracking, not CHANNEL_CREATE/DESTROY
 
-FreeSWITCH's event emission order is a leaky abstraction that bites
-anyone writing a channel-lifecycle tracker against the typed event
-names. The intuitive story — "subscribe to `CHANNEL_CREATE` for
-start-of-life, `CHANNEL_DESTROY` for end-of-life" — is wrong, because
-`switch_core_state_machine.c` fires `CHANNEL_STATE(CS_INIT)` *before*
-`CHANNEL_CREATE` inside the same state-machine iteration, and
-`switch_core_session.c` fires `CHANNEL_STATE(CS_DESTROY)` *after*
-`CHANNEL_DESTROY` during session teardown. Trackers built on the
-`CREATE → DESTROY` assumption miss state at both ends.
+FreeSWITCH fires `CHANNEL_STATE(CS_INIT)` *before* `CHANNEL_CREATE` and
+`CHANNEL_STATE(CS_DESTROY)` *after* `CHANNEL_DESTROY`, so the intuitive
+`CREATE → DESTROY` window misses state at both ends. The typed accessors
+and the `channel_tracker` example use `CS_INIT` and `CS_DESTROY` from
+`CHANNEL_STATE` as the start- and end-of-life triggers. Full ordering
+notes live in the README — they belong with usage docs, not here.
 
-The fix is to subscribe to `CHANNEL_STATE` and use `CS_INIT` as the
-true start-of-life trigger and `CS_DESTROY` as the true end-of-life
-trigger. The typed `ChannelState` enum makes the comparison
-compile-checked. Events from different channels still interleave
-freely on the wire, so the per-channel ordering is a per-UUID
-invariant, not a global one.
-
-The full sequence (creation order, teardown order, plus a note on
-`CHANNEL_ORIGINATE` only firing on outbound) lives in the
-[README §"Channel event ordering"](../README.md#channel-event-ordering)
-because it's the first place someone writing a tracker looks. The
-`channel_tracker` example uses the correct triggers.
-
-## Reconnection: see the example
-
-The [`reconnecting_client`](../examples/reconnecting_client.rs) example
-is the reference implementation of the reconnect pattern described in
-§"Disconnection and reconnection" above: error classification via
-`is_recoverable()` / `is_connection_error()`, exponential backoff bounded
-by a max interval, and the caller's responsibility to rebuild
-application state (channel tracker, pending bgapi jobs, etc.) after each
-successful reconnect. Consult the example rather than re-deriving the
-pattern from the rationale — the code is the source of truth for the
-sequence of calls and what to do with a `DisconnectReason::AuthenticationFailed`
-versus `HeartbeatExpired`.
