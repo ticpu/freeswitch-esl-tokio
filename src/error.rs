@@ -214,6 +214,15 @@ impl EslError {
     ///
     /// Matches: `Io`, `NotConnected`, `ConnectionClosed`, `HeartbeatExpired`,
     /// `ProtocolError`.
+    ///
+    /// Returns `true` for errors that indicate the TCP session is no longer
+    /// usable, *during* an established connection. Authentication failures
+    /// are returned synchronously by [`EslClient::connect`] and never reach
+    /// this classifier — callers retrying a connect() loop should instead
+    /// check [`Self::is_recoverable`] which returns `false` for
+    /// `AuthenticationFailed` to break the loop.
+    ///
+    /// [`EslClient::connect`]: crate::EslClient::connect
     pub fn is_connection_error(&self) -> bool {
         match self {
             EslError::Io(_)

@@ -53,7 +53,15 @@ impl MessageType {
     }
 }
 
-/// Parsed ESL message
+/// Parsed ESL message.
+///
+/// This is an internal protocol-parsing intermediate, not part of the
+/// publicly-stable surface. It is constructed by the parser and consumed
+/// by the connection module within this crate; public visibility exists
+/// for module organization only. External API stability comes from
+/// [`EslResponse`] and [`crate::event::EslEvent`], not from `EslMessage` —
+/// which is why this struct intentionally does not carry `#[non_exhaustive]`
+/// despite having public fields.
 #[derive(Debug, Clone)]
 pub struct EslMessage {
     /// Message type

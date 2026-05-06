@@ -207,7 +207,9 @@ impl EslResponse {
     /// - **Error responses** (`-ERR <message>`, `-USAGE: <usage>`)
     ///   return [`EslError::CommandFailed`].
     ///
-    /// All successful results are trimmed of leading/trailing whitespace.
+    /// On success, a single trailing `\n` (then a single trailing `\r`, for
+    /// `\r\n` wire endings) is stripped along with the `+OK ` prefix on
+    /// action commands. No leading-whitespace trimming is performed.
     ///
     /// Returns [`EslError::ProtocolError`] if the body is missing or empty.
     ///
