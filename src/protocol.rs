@@ -16,8 +16,14 @@ use crate::{
 use indexmap::IndexMap;
 use percent_encoding::percent_decode_str;
 
-/// ESL message types
+/// ESL message types.
+///
+/// Marked `#[non_exhaustive]` because new ESL `Content-Type` values added
+/// upstream will turn into new variants here rather than a catch-all
+/// `Unknown` — unrecognized content-types are now hard protocol errors,
+/// surfaced by [`MessageType::from_content_type`].
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum MessageType {
     /// Authentication request from server
     AuthRequest,
@@ -31,24 +37,29 @@ pub enum MessageType {
     Disconnect,
     /// Connection rejected by ACL (text/rude-rejection)
     RudeRejection,
-    /// Unknown message type
-    Unknown(String),
 }
 
 impl MessageType {
-    /// Parse message type from Content-Type header
-    pub fn from_content_type(content_type: &str) -> Self {
+    /// Parse message type from a `Content-Type` header value.
+    ///
+    /// Returns [`EslError::ProtocolError`] if the value is not one of
+    /// the recognized wire content-types — there is no `Unknown` fallback
+    /// since correctness over recovery is preferred (see project
+    /// CLAUDE.md). Mirrors the precedent set for `EventFormat`.
+    pub fn from_content_type(content_type: &str) -> EslResult<Self> {
         match content_type {
-            CONTENT_TYPE_AUTH_REQUEST => MessageType::AuthRequest,
-            CONTENT_TYPE_COMMAND_REPLY => MessageType::CommandReply,
-            CONTENT_TYPE_API_RESPONSE => MessageType::ApiResponse,
+            CONTENT_TYPE_AUTH_REQUEST => Ok(MessageType::AuthRequest),
+            CONTENT_TYPE_COMMAND_REPLY => Ok(MessageType::CommandReply),
+            CONTENT_TYPE_API_RESPONSE => Ok(MessageType::ApiResponse),
             CONTENT_TYPE_TEXT_EVENT_PLAIN
             | CONTENT_TYPE_TEXT_EVENT_JSON
             | CONTENT_TYPE_TEXT_EVENT_XML
-            | CONTENT_TYPE_LOG_DATA => MessageType::Event,
-            "text/disconnect-notice" => MessageType::Disconnect,
-            "text/rude-rejection" => MessageType::RudeRejection,
-            _ => MessageType::Unknown(content_type.to_string()),
+            | CONTENT_TYPE_LOG_DATA => Ok(MessageType::Event),
+            "text/disconnect-notice" => Ok(MessageType::Disconnect),
+            "text/rude-rejection" => Ok(MessageType::RudeRejection),
+            other => Err(EslError::protocol_error(format!(
+                "Unrecognized Content-Type: {other}"
+            ))),
         }
     }
 }
@@ -191,7 +202,7 @@ impl EslParser {
                                 "Missing Content-Type header -- likely protocol desync",
                             )
                         })?;
-                    let message_type = MessageType::from_content_type(content_type);
+                    let message_type = MessageType::from_content_type(content_type)?;
 
                     // Check if we need a body
                     if let Some(length_str) = headers.get(HEADER_CONTENT_LENGTH) {
@@ -1368,8 +1379,14 @@ mod tests {
 
     #[test]
     fn test_rude_rejection_message_type() {
-        let mt = MessageType::from_content_type("text/rude-rejection");
+        let mt = MessageType::from_content_type("text/rude-rejection").unwrap();
         assert_eq!(mt, MessageType::RudeRejection);
+    }
+
+    #[test]
+    fn test_unknown_content_type_is_protocol_error() {
+        let err = MessageType::from_content_type("text/something-new").unwrap_err();
+        assert!(matches!(err, EslError::ProtocolError { .. }));
     }
 
     #[test]

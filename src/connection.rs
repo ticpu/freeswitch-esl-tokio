@@ -454,7 +454,7 @@ fn salvage_truncated_auth_response(parser: &mut EslParser) -> EslResult<Option<E
         )));
     }
 
-    let message_type = MessageType::from_content_type(content_type);
+    let message_type = MessageType::from_content_type(content_type)?;
     let message = EslMessage::new(message_type, headers, None);
 
     parser.drain_buffer();
@@ -661,9 +661,6 @@ async fn reader_loop_inner(
                                 DisconnectReason::ProtocolError(reason),
                             ));
                         return;
-                    }
-                    MessageType::Unknown(_) => {
-                        debug!("Ignoring unexpected message: {:?}", message.message_type);
                     }
                 }
                 continue;
