@@ -99,6 +99,8 @@ pub enum DisconnectReason {
     /// Client initiated re-exec teardown
     #[cfg(unix)]
     ReexecTeardown,
+    /// Protocol-level desync (e.g. unsolicited auth/request after login)
+    ProtocolError(String),
 }
 
 impl std::fmt::Display for DisconnectReason {
@@ -120,6 +122,7 @@ impl std::fmt::Display for DisconnectReason {
             DisconnectReason::ClientRequested => write!(f, "client requested disconnect"),
             #[cfg(unix)]
             DisconnectReason::ReexecTeardown => write!(f, "re-exec teardown"),
+            DisconnectReason::ProtocolError(msg) => write!(f, "protocol error: {}", msg),
         }
     }
 }
@@ -640,7 +643,26 @@ async fn reader_loop_inner(
                             )));
                         return;
                     }
-                    MessageType::AuthRequest | MessageType::Unknown(_) => {
+                    MessageType::AuthRequest => {
+                        // After authentication, an unsolicited auth/request
+                        // means FreeSWITCH and the client are out of sync —
+                        // treat as a protocol error and tear down.
+                        let reason =
+                            "unsolicited auth/request received after authentication".to_string();
+                        warn!("{reason}");
+                        let _ = dispatch_event(
+                            &event_tx,
+                            &shared,
+                            Err(EslError::protocol_error(reason.clone())),
+                        );
+                        let _ = shared
+                            .status_tx
+                            .send(ConnectionStatus::Disconnected(
+                                DisconnectReason::ProtocolError(reason),
+                            ));
+                        return;
+                    }
+                    MessageType::Unknown(_) => {
                         debug!("Ignoring unexpected message: {:?}", message.message_type);
                     }
                 }
