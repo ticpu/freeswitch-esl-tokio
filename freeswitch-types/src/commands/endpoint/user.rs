@@ -1,7 +1,7 @@
 use std::fmt;
 use std::str::FromStr;
 
-use super::{extract_variables, write_variables};
+use super::{strip_endpoint_prefix, write_variables};
 use crate::commands::originate::{OriginateError, Variables};
 
 /// Directory-based endpoint: `user/{name}[@{domain}]`.
@@ -62,10 +62,7 @@ impl FromStr for UserEndpoint {
     type Err = OriginateError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (variables, uri) = extract_variables(s)?;
-        let rest = uri
-            .strip_prefix("user/")
-            .ok_or_else(|| OriginateError::ParseError("not a user endpoint".into()))?;
+        let (variables, rest) = strip_endpoint_prefix(s, "user/", "user")?;
         let (name, domain) = if let Some((n, d)) = rest.split_once('@') {
             (n.to_string(), Some(d.to_string()))
         } else {

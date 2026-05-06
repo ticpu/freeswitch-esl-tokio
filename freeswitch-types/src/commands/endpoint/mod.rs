@@ -51,6 +51,22 @@ fn write_variables(f: &mut fmt::Formatter<'_>, vars: &Option<Variables>) -> fmt:
     Ok(())
 }
 
+/// Strip the leading variable block then a fixed endpoint prefix.
+///
+/// Returns `(variables, rest_after_prefix)`. The `kind` label is used in the
+/// `not a {kind} endpoint` error when the prefix is missing.
+pub(super) fn strip_endpoint_prefix<'a>(
+    s: &'a str,
+    prefix: &str,
+    kind: &str,
+) -> Result<(Option<Variables>, &'a str), OriginateError> {
+    let (variables, uri) = extract_variables(s)?;
+    let rest = uri
+        .strip_prefix(prefix)
+        .ok_or_else(|| OriginateError::ParseError(format!("not a {} endpoint", kind)))?;
+    Ok((variables, rest))
+}
+
 /// Extract a leading variable block (`{...}`, `[...]`, or `<...>`) from a
 /// dial string, returning the parsed variables and the remaining URI portion.
 ///

@@ -1,7 +1,7 @@
 use std::fmt;
 use std::str::FromStr;
 
-use super::{extract_variables, write_variables};
+use super::{extract_variables, strip_endpoint_prefix, write_variables};
 use crate::commands::originate::{OriginateError, Variables};
 
 /// SIP endpoint via a named profile: `sofia/{profile}/{destination}`.
@@ -181,10 +181,7 @@ impl FromStr for SofiaEndpoint {
     type Err = OriginateError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (variables, uri) = extract_variables(s)?;
-        let rest = uri
-            .strip_prefix("sofia/")
-            .ok_or_else(|| OriginateError::ParseError("not a sofia endpoint".into()))?;
+        let (variables, rest) = strip_endpoint_prefix(s, "sofia/", "sofia")?;
         let (profile, destination) = rest
             .split_once('/')
             .ok_or_else(|| {
@@ -202,10 +199,7 @@ impl FromStr for SofiaGateway {
     type Err = OriginateError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (variables, uri) = extract_variables(s)?;
-        let rest = uri
-            .strip_prefix("sofia/gateway/")
-            .ok_or_else(|| OriginateError::ParseError("not a sofia gateway endpoint".into()))?;
+        let (variables, rest) = strip_endpoint_prefix(s, "sofia/gateway/", "sofia gateway")?;
         let (gateway_part, destination) = rest
             .split_once('/')
             .ok_or_else(|| {

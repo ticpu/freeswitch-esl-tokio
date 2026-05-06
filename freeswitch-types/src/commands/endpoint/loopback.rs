@@ -1,7 +1,7 @@
 use std::fmt;
 use std::str::FromStr;
 
-use super::{extract_variables, write_variables};
+use super::{strip_endpoint_prefix, write_variables};
 use crate::commands::originate::{OriginateError, Variables};
 
 /// Internal loopback endpoint: `loopback/{extension}[/{context}]`.
@@ -63,10 +63,7 @@ impl FromStr for LoopbackEndpoint {
     type Err = OriginateError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (variables, uri) = extract_variables(s)?;
-        let rest = uri
-            .strip_prefix("loopback/")
-            .ok_or_else(|| OriginateError::ParseError("not a loopback endpoint".into()))?;
+        let (variables, rest) = strip_endpoint_prefix(s, "loopback/", "loopback")?;
         let (extension, context) = match rest.split_once('/') {
             Some((ext, ctx)) => (ext, Some(ctx.to_string())),
             None => (rest, None),
