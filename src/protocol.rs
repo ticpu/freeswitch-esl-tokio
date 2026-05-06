@@ -274,12 +274,6 @@ impl EslParser {
         }
     }
 
-    /// Previously cached the parsed event type into a struct field; the
-    /// type is now derived lazily from the `Event-Name` header on each
-    /// `event_type()` call, so this is a no-op kept only as a marker for
-    /// "headers are now finalized" in the parse flow.
-    fn finalize_event_type(_event: &mut EslEvent) {}
-
     /// Parse a single `Key: value` line, stripping `\r`, normalizing the key,
     /// and percent-decoding the value as UTF-8.
     ///
@@ -417,7 +411,6 @@ impl EslParser {
             }
         }
 
-        Self::finalize_event_type(&mut event);
         Ok(event)
     }
 
@@ -451,7 +444,6 @@ impl EslParser {
             }
         }
 
-        Self::finalize_event_type(&mut event);
         Ok(event)
     }
 
@@ -552,7 +544,6 @@ impl EslParser {
             }
         }
 
-        Self::finalize_event_type(&mut event);
         Ok(event)
     }
 
