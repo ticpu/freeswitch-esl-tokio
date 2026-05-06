@@ -217,12 +217,30 @@ impl EslError {
             EslError::NotConnected => false,
             EslError::ConnectionClosed => false,
             EslError::AuthenticationFailed { .. } => false,
+            EslError::AccessDenied { .. } => false,
             EslError::HeartbeatExpired { .. } => false,
             EslError::Timeout { .. } => true,
             EslError::CommandFailed { .. } => true,
             EslError::UnexpectedReply { .. } => true,
             EslError::QueueFull => true,
-            _ => false,
+            // Parse/protocol failures: correctness over recovery — never
+            // hand back partial data, never paper over wire-format breaks.
+            EslError::ProtocolError { .. } => false,
+            EslError::InvalidEventFormat { .. } => false,
+            EslError::JsonError(_) => false,
+            EslError::XmlError(_) => false,
+            EslError::Utf8Error(_) => false,
+            EslError::InvalidUtf8InHeader { .. } => false,
+            EslError::InvalidHeader { .. } => false,
+            EslError::MissingHeader { .. } => false,
+            EslError::InvalidUuid { .. } => false,
+            // Stream resync impossible after BufferOverflow.
+            EslError::BufferOverflow { .. } => false,
+            // Per-call: don't retry the same command/originate as-is.
+            EslError::Originate(_) => false,
+            EslError::Generic { .. } => false,
+            #[cfg(unix)]
+            EslError::ReexecFailed { .. } => false,
         }
     }
 
@@ -241,15 +259,37 @@ impl EslError {
     /// [`EslClient::connect`]: crate::EslClient::connect
     pub fn is_connection_error(&self) -> bool {
         match self {
-            EslError::Io(_)
-            | EslError::NotConnected
-            | EslError::ConnectionClosed
-            | EslError::AccessDenied { .. }
-            | EslError::HeartbeatExpired { .. }
-            | EslError::ProtocolError { .. } => true,
+            EslError::Io(_) => true,
+            EslError::NotConnected => true,
+            EslError::ConnectionClosed => true,
+            EslError::AccessDenied { .. } => true,
+            EslError::HeartbeatExpired { .. } => true,
+            EslError::ProtocolError { .. } => true,
+            // Stream resync impossible after BufferOverflow — the next
+            // bytes have no recoverable framing.
+            EslError::BufferOverflow { .. } => true,
+            // Auth is reported synchronously by connect(); see the
+            // method-level docs for the rationale.
+            EslError::AuthenticationFailed { .. } => false,
+            EslError::CommandFailed { .. } => false,
+            EslError::UnexpectedReply { .. } => false,
+            EslError::Timeout { .. } => false,
+            EslError::QueueFull => false,
+            // Parse failures don't necessarily imply the TCP is dead.
+            EslError::InvalidEventFormat { .. } => false,
+            EslError::JsonError(_) => false,
+            EslError::XmlError(_) => false,
+            EslError::Utf8Error(_) => false,
+            EslError::InvalidUtf8InHeader { .. } => false,
+            EslError::InvalidHeader { .. } => false,
+            EslError::MissingHeader { .. } => false,
+            EslError::InvalidUuid { .. } => false,
+            EslError::Originate(_) => false,
+            EslError::Generic { .. } => false,
+            // Re-exec teardown attempt failed; the original socket is
+            // still alive — caller can keep using it.
             #[cfg(unix)]
-            EslError::ReexecFailed { .. } => true,
-            _ => false,
+            EslError::ReexecFailed { .. } => false,
         }
     }
 }
