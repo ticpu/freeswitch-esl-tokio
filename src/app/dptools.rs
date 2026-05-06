@@ -13,66 +13,45 @@ use crate::commands::originate::DialplanType;
 /// The `uuid` field is `None` -- set it on the command or pass it to `sendmsg()`.
 pub struct AppCommand;
 
+fn execute(app: &str, args: Option<String>) -> EslCommand {
+    EslCommand::Execute {
+        app: app.to_string(),
+        args,
+        uuid: None,
+        options: ExecuteOptions::default(),
+    }
+}
+
 impl AppCommand {
     /// Answer the channel. In outbound mode, answers the incoming call.
     pub fn answer() -> EslCommand {
-        EslCommand::Execute {
-            app: "answer".to_string(),
-            args: None,
-            uuid: None,
-            options: ExecuteOptions::default(),
-        }
+        execute("answer", None)
     }
 
     /// Hang up the channel with an optional cause code.
     pub fn hangup(cause: Option<HangupCause>) -> EslCommand {
-        EslCommand::Execute {
-            app: "hangup".to_string(),
-            args: cause.map(|c| c.to_string()),
-            uuid: None,
-            options: ExecuteOptions::default(),
-        }
+        execute("hangup", cause.map(|c| c.to_string()))
     }
 
     /// `file`: path, `tone_stream://`, or any FreeSWITCH file-like URI.
     pub fn playback(file: &str) -> EslCommand {
-        EslCommand::Execute {
-            app: "playback".to_string(),
-            args: Some(file.to_string()),
-            uuid: None,
-            options: ExecuteOptions::default(),
-        }
+        execute("playback", Some(file.to_string()))
     }
 
     /// `destination`: dial string for the B-leg. Accepts `&str`,
     /// [`BridgeDialString`](crate::commands::BridgeDialString), [`Endpoint`](crate::Endpoint), etc.
     pub fn bridge(destination: impl fmt::Display) -> EslCommand {
-        EslCommand::Execute {
-            app: "bridge".to_string(),
-            args: Some(destination.to_string()),
-            uuid: None,
-            options: ExecuteOptions::default(),
-        }
+        execute("bridge", Some(destination.to_string()))
     }
 
     /// Set a channel variable (`set` application).
     pub fn set_var(name: &str, value: &str) -> EslCommand {
-        EslCommand::Execute {
-            app: "set".to_string(),
-            args: Some(format!("{}={}", name, value)),
-            uuid: None,
-            options: ExecuteOptions::default(),
-        }
+        execute("set", Some(format!("{}={}", name, value)))
     }
 
     /// Park the channel (suspends dialplan execution until another command picks it up).
     pub fn park() -> EslCommand {
-        EslCommand::Execute {
-            app: "park".to_string(),
-            args: None,
-            uuid: None,
-            options: ExecuteOptions::default(),
-        }
+        execute("park", None)
     }
 
     /// Transfer the channel to another dialplan extension.
@@ -98,12 +77,7 @@ impl AppCommand {
             args.push_str(ctx);
         }
 
-        EslCommand::Execute {
-            app: "transfer".to_string(),
-            args: Some(args),
-            uuid: None,
-            options: ExecuteOptions::default(),
-        }
+        execute("transfer", Some(args))
     }
 }
 
