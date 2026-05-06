@@ -661,7 +661,12 @@ impl EslCommand {
                             .header(EventHeader::EventName)
                             .map(|s| s.to_string())
                     })
-                    .unwrap_or_else(|| "CUSTOM".to_string());
+                    .ok_or_else(|| {
+                        EslError::protocol_error(
+                            "sendevent requires Event-Name header or event_type set on the EslEvent",
+                        )
+                    })?;
+                validate_no_newlines(&event_name, "sendevent event name")?;
 
                 let mut builder = CommandBuilder::new(&format!("sendevent {}", event_name));
 
@@ -1074,7 +1079,9 @@ mod tests {
     }
 
     #[test]
-    fn test_sendevent_no_event_type() {
+    fn test_sendevent_event_name_only_no_typed_variant() {
+        // Event-Name set as a raw header (no event_type) is accepted —
+        // the wire-format serializer falls back to the header.
         let mut event = EslEvent::new();
         event.set_header("Event-Name", "CUSTOM");
 
@@ -1083,13 +1090,18 @@ mod tests {
             .to_wire_format()
             .unwrap();
         assert!(wire.starts_with("sendevent CUSTOM\n"));
+    }
 
+    #[test]
+    fn test_sendevent_without_event_name_errors() {
+        // Bare EslEvent with no event_type and no Event-Name header is
+        // a hard error — we refuse to silently mislabel as "CUSTOM".
         let bare_event = EslEvent::new();
-        let cmd2 = EslCommand::SendEvent { event: bare_event };
-        let wire2 = cmd2
+        let cmd = EslCommand::SendEvent { event: bare_event };
+        let err = cmd
             .to_wire_format()
-            .unwrap();
-        assert!(wire2.starts_with("sendevent CUSTOM\n"));
+            .unwrap_err();
+        assert!(matches!(err, EslError::ProtocolError { .. }));
     }
 
     #[test]
