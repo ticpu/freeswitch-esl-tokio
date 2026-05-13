@@ -754,6 +754,83 @@ async fn test_getvar_command() {
 }
 
 #[tokio::test]
+async fn test_getvar_opt_set_value() {
+    let (mut mock, client, _events) = setup_connected_pair("ClueCon").await;
+
+    let task = tokio::spawn({
+        let client = client.clone();
+        async move {
+            client
+                .getvar_opt("caller_id_name")
+                .await
+        }
+    });
+
+    let cmd = mock
+        .read_command()
+        .await;
+    assert_eq!(cmd, "getvar caller_id_name\n\n");
+    mock.reply_raw_text("John Doe")
+        .await;
+
+    let value = task
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(value, Some("John Doe".to_string()));
+}
+
+#[tokio::test]
+async fn test_getvar_opt_undef_sentinel() {
+    let (mut mock, client, _events) = setup_connected_pair("ClueCon").await;
+
+    let task = tokio::spawn({
+        let client = client.clone();
+        async move {
+            client
+                .getvar_opt("missing_var")
+                .await
+        }
+    });
+
+    mock.read_command()
+        .await;
+    mock.reply_raw_text("_undef_")
+        .await;
+
+    let value = task
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(value, None);
+}
+
+#[tokio::test]
+async fn test_getvar_opt_empty_reply() {
+    let (mut mock, client, _events) = setup_connected_pair("ClueCon").await;
+
+    let task = tokio::spawn({
+        let client = client.clone();
+        async move {
+            client
+                .getvar_opt("missing_var")
+                .await
+        }
+    });
+
+    mock.read_command()
+        .await;
+    mock.reply_raw_text("")
+        .await;
+
+    let value = task
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(value, None);
+}
+
+#[tokio::test]
 async fn test_outbound_connect_session() {
     use tokio::net::{TcpListener, TcpStream};
 
