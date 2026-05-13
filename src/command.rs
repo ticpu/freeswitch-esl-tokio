@@ -509,7 +509,12 @@ impl EslCommand {
                             .header("Event-Name")
                             .map(|s| s.to_string())
                     })
-                    .unwrap_or_else(|| "CUSTOM".to_string());
+                    .ok_or_else(|| {
+                        EslError::protocol_error(
+                            "sendevent requires Event-Name header or event_type set on the EslEvent",
+                        )
+                    })?;
+                validate_no_newlines(&event_name, "sendevent event name")?;
 
                 let mut builder = CommandBuilder::new(&format!("sendevent {}", event_name));
 
