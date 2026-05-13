@@ -90,6 +90,23 @@ pub enum EslError {
     #[error("UTF-8 conversion error: {0}")]
     Utf8Error(#[from] std::str::Utf8Error),
 
+    /// Invalid UTF-8 in a parsed header value.
+    ///
+    /// Carries `context` (e.g. `"outer header"` or `"event header"`) and the
+    /// header `key` for diagnostics, plus the underlying `Utf8Error` as the
+    /// error source so callers walking `Error::source()` see the exact decoder
+    /// failure (byte offset, valid_up_to).
+    #[error("invalid UTF-8 in {context} '{key}': {source}")]
+    InvalidUtf8InHeader {
+        /// Where the bad header was read from (outer envelope vs. event body).
+        context: &'static str,
+        /// Header name whose percent-decoded value failed UTF-8 validation.
+        key: String,
+        /// Underlying decoder error.
+        #[source]
+        source: std::str::Utf8Error,
+    },
+
     /// Buffer overflow - message too large
     #[error("Buffer overflow: message size {size} exceeds limit {limit}")]
     BufferOverflow {

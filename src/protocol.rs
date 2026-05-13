@@ -273,11 +273,10 @@ impl EslParser {
                 let value = percent_decode_str(raw_value)
                     .decode_utf8()
                     .map(|s| s.into_owned())
-                    .map_err(|e| {
-                        EslError::protocol_error(format!(
-                            "invalid UTF-8 in header '{}': {}",
-                            key, e
-                        ))
+                    .map_err(|e| EslError::InvalidUtf8InHeader {
+                        context: "outer header",
+                        key: key.clone(),
+                        source: e,
                     })?;
                 headers.insert(key, value);
             } else {
@@ -372,11 +371,10 @@ impl EslParser {
                 let value = percent_decode_str(raw_value)
                     .decode_utf8()
                     .map(|s| s.into_owned())
-                    .map_err(|e| {
-                        EslError::protocol_error(format!(
-                            "invalid UTF-8 in event header '{}': {}",
-                            key, e
-                        ))
+                    .map_err(|e| EslError::InvalidUtf8InHeader {
+                        context: "event header",
+                        key: key.clone(),
+                        source: e,
                     })?;
                 event.set_header(key, value);
             } else {
