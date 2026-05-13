@@ -47,11 +47,41 @@ pub struct EslResponse {
     headers: HashMap<String, String>,
     body: Option<String>,
     status: ReplyStatus,
+    /// Maps lowercase header names to the canonical (stored) key so
+    /// header lookups can be case-insensitive without scanning the map.
+    /// Built by `from_parsed`; constructors that do not set this leave
+    /// the map empty and `header()` falls back to a case-sensitive
+    /// lookup against the canonical keys.
+    case_index: HashMap<String, String>,
 }
 
 impl EslResponse {
     /// `ReplyStatus` is derived from the `Reply-Text` header.
+    ///
+    /// The headers map is taken verbatim. Lookups via
+    /// [`header()`](Self::header) are case-sensitive against whatever
+    /// keys are present. The parser path uses an internal constructor
+    /// that also builds a case-insensitive alias index.
     pub fn new(headers: HashMap<String, String>, body: Option<String>) -> Self {
+        Self::build(headers, body, HashMap::new())
+    }
+
+    /// Construct from a parsed message. Builds the case-insensitive
+    /// alias map so callers can do `r.header("reply-text")` regardless
+    /// of how FreeSWITCH cased the key on the wire.
+    pub(crate) fn from_parsed(headers: HashMap<String, String>, body: Option<String>) -> Self {
+        let case_index = headers
+            .keys()
+            .map(|k| (k.to_ascii_lowercase(), k.clone()))
+            .collect();
+        Self::build(headers, body, case_index)
+    }
+
+    fn build(
+        headers: HashMap<String, String>,
+        body: Option<String>,
+        case_index: HashMap<String, String>,
+    ) -> Self {
         let status = match headers
             .get(HEADER_REPLY_TEXT)
             .map(|s| s.as_str())
@@ -66,6 +96,7 @@ impl EslResponse {
             headers,
             body,
             status,
+            case_index,
         }
     }
 
@@ -98,9 +129,28 @@ impl EslResponse {
     }
 
     /// Look up a response header by name.
+    ///
+    /// Case-insensitive when the response was constructed by the parser
+    /// (the path most callers hit). Responses built directly via
+    /// [`new()`](Self::new) — typically test fixtures — only resolve
+    /// the exact key in `headers`.
     pub fn header(&self, name: impl AsRef<str>) -> Option<&str> {
-        self.headers
-            .get(name.as_ref())
+        self.lookup_header(name.as_ref())
+    }
+
+    fn lookup_header(&self, name: &str) -> Option<&str> {
+        if let Some(v) = self
+            .headers
+            .get(name)
+        {
+            return Some(v.as_str());
+        }
+        self.case_index
+            .get(&name.to_ascii_lowercase())
+            .and_then(|canonical| {
+                self.headers
+                    .get(canonical)
+            })
             .map(|s| s.as_str())
     }
 
@@ -169,9 +219,7 @@ impl EslResponse {
 
 impl HeaderLookup for EslResponse {
     fn header_str(&self, name: &str) -> Option<&str> {
-        self.headers
-            .get(name)
-            .map(|s| s.as_str())
+        self.lookup_header(name)
     }
 
     fn variable_str(&self, name: &str) -> Option<&str> {
