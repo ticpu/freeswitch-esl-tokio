@@ -1043,6 +1043,33 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_headers_invalid_utf8_preserves_source() {
+        // %C3 is the first byte of a two-byte UTF-8 sequence; on its own it's
+        // invalid. percent_decode produces those raw bytes and decode_utf8
+        // then fails. We expect a typed InvalidUtf8InHeader variant whose
+        // source chain exposes the underlying str::Utf8Error.
+        let parser = EslParser::new();
+        let err = parser
+            .parse_headers("X-Bad: %C3")
+            .unwrap_err();
+
+        match &err {
+            EslError::InvalidUtf8InHeader { context, key, .. } => {
+                assert_eq!(*context, "outer header");
+                assert_eq!(key, "X-Bad");
+            }
+            other => panic!("expected InvalidUtf8InHeader, got {:?}", other),
+        }
+
+        let src = std::error::Error::source(&err).expect("source chain must be present");
+        assert!(
+            src.downcast_ref::<std::str::Utf8Error>()
+                .is_some(),
+            "source must be std::str::Utf8Error, got {src}"
+        );
+    }
+
+    #[test]
     fn test_parse_connect_response() {
         use percent_encoding::{percent_encode, NON_ALPHANUMERIC};
 
