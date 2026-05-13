@@ -1195,6 +1195,23 @@ impl EslClient {
             .to_string())
     }
 
+    /// Read a channel variable, distinguishing "unset" from a present value.
+    ///
+    /// FreeSWITCH does not signal a missing variable with `-ERR`; some
+    /// versions reply with the literal string `_undef_`, others reply with
+    /// an empty `Reply-Text`. This method normalizes both to `Ok(None)`
+    /// so callers don't have to special-case either sentinel.
+    pub async fn getvar_opt(&self, name: &str) -> EslResult<Option<String>> {
+        let v = self
+            .getvar(name)
+            .await?;
+        Ok(if v.is_empty() || v == "_undef_" {
+            None
+        } else {
+            Some(v)
+        })
+    }
+
     /// Enable FreeSWITCH log forwarding at the given level.
     ///
     /// Log messages stream as events with `Content-Type: log/data`.
