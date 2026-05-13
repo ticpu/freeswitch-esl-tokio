@@ -188,12 +188,44 @@ A future **wrapper crate** will own the typed command-and-response layer:
 **Do not add response parsing or high-level command methods to `EslClient`.**
 Keep the boundary clean — `EslClient` sends strings and returns `EslResponse`.
 
-## v1.5 Backports and Deprecations
+## v1.x Backports and Deprecations
 
 This branch (v1) receives backports from 2.0 and deprecation warnings to
-ease migration. Last backport base: master commit 8ff4e23 (fix: work
-around FreeSWITCH mod_event_socket reply[512] overflow on userauth).
-Key changes in v1.5:
+ease migration. Last backport base: upstream master commit 5f150ae
+(refactor(protocol): drop no-op finalize_event_type marker).
+
+### Shipped in v1.7
+
+**Backported from 2.0:**
+
+- `EslClient::getvar_opt()` — normalizes `_undef_` and empty Reply-Text to
+  `Ok(None)` so callers don't have to know which sentinel applies. (06691b3)
+- `EslResponse::header()` is case-insensitive on parser-built responses via
+  an internal `pub(crate) from_parsed()` constructor that builds a
+  lowercase-keyed alias map. `EslResponse::new()` stays case-sensitive for
+  hand-rolled test fixtures. (0f02250)
+
+**Bug fixes backported from 2.0:**
+
+- `EslCommand::SendEvent` hard-errors when neither `event_type` nor an
+  `Event-Name` header is set, instead of silently defaulting to `CUSTOM`
+  and mislabeling caller-built events on the wire. (e737cb4)
+- New `EslError::InvalidUtf8InHeader { context, key, #[source] }` replaces
+  `format!()`-stringified UTF-8 errors in `parse_headers`/`parse_plain_event`
+  so `Error::source()` exposes the underlying `std::str::Utf8Error`. (69dcc54)
+
+### Shipped in v1.6 (v1.6.0 / v1.6.1)
+
+**Bug fixes backported from 2.0:**
+
+- Replace `.trim()` on wire content with explicit protocol suffix stripping
+  in `parse_api_body`, protocol header parsing, `event_uuid`, and
+  `redact_wire`. (ec4cdc2)
+- Work around FreeSWITCH `mod_event_socket.c` `reply[512]` overflow that
+  truncates `userauth` responses and drops the `\n\n` terminator. Salvages
+  partial headers from the parser buffer on auth timeout. (8ff4e23)
+
+### Shipped in v1.5
 
 **Backported from 2.0:**
 
@@ -216,28 +248,41 @@ Key changes in v1.5:
   `Application-Response`, `Application-UUID`) in `EventHeader`. (e83e503)
 - `^^` alternate separator in `Variables::from_str`. (6cd7b27)
 
-**Bug fixes backported from 2.0:**
-
-- Replace `.trim()` on wire content with explicit protocol suffix stripping
-  in `parse_api_body`, protocol header parsing, `event_uuid`, and
-  `redact_wire`. (ec4cdc2)
-- Work around FreeSWITCH `mod_event_socket.c` `reply[512]` overflow that
-  truncates `userauth` responses and drops the `\n\n` terminator. Salvages
-  partial headers from the parser buffer on auth timeout. (8ff4e23)
-
-**Deprecated (use the replacement before upgrading to 2.0):**
+**Deprecated in v1.5 (use the replacement before upgrading to 2.0):**
 
 - `linger(Option<u32>)` -> `linger_timeout(Option<Duration>)` (79bc32d)
 - `body_string()` -> `body().unwrap_or_default()` (79bc32d)
 - `EventFormat::from_content_type()` -> `try_from_content_type()` (79bc32d)
 
-**2.0 breaking changes with no deprecation path in 1.x:**
+### 2.0 breaking changes with no deprecation path in 1.x
 
-- `DisconnectReason::ServerNotice` becomes struct variant
-- `EslConnectOptions::event_queue_size` field becomes private
-- `HeaderLookup` typed accessors return `Result<Option<T>>` not `Option<T>`
-- `Originate` switches from struct literal to builder pattern
-- `HashMap` -> `IndexMap` for header storage
+Surface changes the v1 → 2.0 jump will require even after every
+deprecation above has been addressed.
+
+- `DisconnectReason::ServerNotice` becomes struct variant; new
+  `DisconnectReason::ProtocolError(String)` variant surfaces hard
+  protocol violations from the reader (e.g. post-auth `auth/request`).
+- `EslConnectOptions::event_queue_size` field becomes private.
+- `HeaderLookup` typed accessors return `Result<Option<T>>` not
+  `Option<T>`; trait gains a `SipHeaderLookup` supertrait and an
+  `EslHeaders` companion trait.
+- `Originate` switches from struct literal to builder pattern.
+- `HashMap` -> `IndexMap` for header storage.
+- `MessageType::Unknown(String)` removed and the enum becomes
+  `#[non_exhaustive]`; the parser hard-errors on unrecognized
+  `Content-Type` instead of silently absorbing it.
+- `impl From<quick_xml::Error> for EslError` removed (dep type no
+  longer leaks).
+- `EslError::is_recoverable` / `is_connection_error` drop their
+  wildcard arms — every variant is classified explicitly. Notable
+  changes: `AccessDenied` is non-recoverable, `BufferOverflow` is a
+  connection error, parse errors are non-recoverable but only
+  `ProtocolError` is a connection error.
+- `EslEvent::event_type` is derived lazily from the `Event-Name`
+  header on access rather than stored at parse time.
+- `EslArray::parse` is bounded by `MAX_ARRAY_ITEMS` and returns a
+  `Result`; sip-header dep bumped to 0.3.
+- MSRV raised to 1.75.
 
 ## Source Layout
 

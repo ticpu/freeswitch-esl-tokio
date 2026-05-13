@@ -13,8 +13,8 @@ Async Rust client for FreeSWITCH
 [ESL](https://developer.signalwire.com/freeswitch/FreeSWITCH-Explained/Client-and-Developer-Interfaces/Event-Socket-Library/).
 Typed events, typed commands, split reader/writer, liveness detection.
 
-> **v1.5** adds deprecation warnings for APIs that change in 2.0 and
-> backports features like `BgJobTracker`. See [Migrating to 2.0](#migrating-to-20).
+> v1.x backports fixes and additive features from 2.0 and ships
+> deprecations for APIs that change. See [Migrating to 2.0](#migrating-to-20).
 
 ```rust
 use freeswitch_esl_tokio::{parse_api_body, *};
@@ -405,23 +405,32 @@ implementation using `HeaderLookup` for channel lifecycle monitoring.
 
 ## Migrating to 2.0
 
-v1.5 introduces deprecation warnings for APIs that change in 2.0:
+Deprecated in v1.x — switch before upgrading:
 
-| v1 (deprecated) | v2 replacement | Reason |
-|---|---|---|
-| `linger(Option<u32>)` | `linger_timeout(Option<Duration>)` | Duration for all timeouts |
-| `body_string()` | `body().unwrap_or_default()` | `body()` returns `Option` to accurately represent absent vs empty body |
-| `EventFormat::from_content_type()` | `EventFormat::try_from_content_type()` | Returns `Result` instead of silently defaulting |
+| v1 (deprecated) | v2 replacement |
+|---|---|
+| `linger(Option<u32>)` | `linger_timeout(Option<Duration>)` |
+| `body_string()` | `body().unwrap_or_default()` |
+| `EventFormat::from_content_type()` | `try_from_content_type()` |
 
-Additional breaking changes in 2.0 (no deprecation path in 1.x):
+Breaking changes in 2.0 with no deprecation path:
 
-- `EslError::JsonError` and `XmlError` payloads change from dependency types to `String`
-  (already done in 1.5 to stop leaking `serde_json::Error` / `quick_xml::Error`)
-- `EslConnectOptions::event_queue_size` field becomes private (use `event_queue_size()` accessor)
-- `DisconnectReason::ServerNotice` becomes a struct variant with `controlled_session_uuid` and `body` fields
-- `HeaderLookup` typed accessors return `Result<Option<T>, ParseErr>` instead of `Option<T>`
-- `Originate` uses builder pattern instead of struct literal construction
-- `HashMap` replaced by `IndexMap` for header storage (preserves insertion order)
+- `EslConnectOptions::event_queue_size` field becomes private (accessor remains).
+- `DisconnectReason::ServerNotice` becomes a struct variant; new
+  `DisconnectReason::ProtocolError(String)` for hard wire-desync.
+- `HeaderLookup` typed accessors return `Result<Option<T>, _>`; gains
+  `SipHeaderLookup` supertrait and `EslHeaders` companion trait.
+- `Originate` switches to a builder.
+- `HashMap` → `IndexMap` for header storage.
+- `MessageType::Unknown` removed; parser hard-errors on unrecognized
+  `Content-Type`.
+- `impl From<quick_xml::Error> for EslError` removed.
+- `EslError::is_recoverable` / `is_connection_error` lose wildcard arms
+  — every variant is classified explicitly.
+- `EslEvent::event_type` is derived lazily from `Event-Name` on access.
+- `EslArray::parse` bounded by `MAX_ARRAY_ITEMS`, returns `Result`;
+  sip-header bumped to 0.3.
+- MSRV raised to 1.75.
 
 ## Development
 
