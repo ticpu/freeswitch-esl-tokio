@@ -964,6 +964,28 @@ mod tests {
     }
 
     #[test]
+    fn esl_response_case_insensitive_lookup_via_parsed() {
+        let mut headers = HashMap::new();
+        headers.insert("Reply-Text".to_string(), "+OK".to_string());
+        let r = EslResponse::from_parsed(headers, None);
+        assert_eq!(r.header("Reply-Text"), Some("+OK"));
+        assert_eq!(r.header("reply-text"), Some("+OK"));
+        assert_eq!(r.header("REPLY-TEXT"), Some("+OK"));
+    }
+
+    #[test]
+    fn esl_response_new_is_case_sensitive() {
+        // Public new() does not build the alias map — only the
+        // exact key matches. Test fixtures shouldn't pay for the
+        // alias map they don't need.
+        let mut headers = HashMap::new();
+        headers.insert("Reply-Text".to_string(), "+OK".to_string());
+        let r = EslResponse::new(headers, None);
+        assert_eq!(r.header("Reply-Text"), Some("+OK"));
+        assert_eq!(r.header("reply-text"), None);
+    }
+
+    #[test]
     fn test_reply_status_ok() {
         let headers: HashMap<String, String> =
             [("Reply-Text".into(), "+OK accepted".into())].into();
