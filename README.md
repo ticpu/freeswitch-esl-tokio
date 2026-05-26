@@ -678,8 +678,7 @@ The pre-commit hook enforces:
 - `cargo fmt --check` -- formatting
 - `cargo clippy -- -D warnings` -- lint warnings as errors
 - `RUSTDOCFLAGS="-D missing_docs" cargo doc` -- all public items documented
-- `hooks/check-event-types.sh` -- `EslEventType` enum matches C ESL `EVENT_NAMES[]`
-- `hooks/check-sip-header-prefixes.sh` -- `SipHeader` variants cover all `sip_i_*` names in sofia.c
+- `hooks/check-enums.py` -- validates `EslEventType`, `HangupCause`, `ChannelState`, `CallState`, and `SipHeader` enums against FreeSWITCH C source
 
 ### Testing
 

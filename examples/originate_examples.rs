@@ -181,6 +181,7 @@ fn print_endpoint_examples() {
     vars.insert("originate_timeout", "20");
     // Typed SIP passthrough header -- produces "sip_h_X-Tenant" on the wire
     vars.insert(
+        // Safe unwrap: "X-Tenant" is a valid SIP header name (alphanumeric + hyphens)
         SipPassthroughHeader::request_raw("X-Tenant").unwrap(),
         "acme",
     );
@@ -218,6 +219,7 @@ fn print_endpoint_examples() {
         Endpoint::SofiaGateway(SofiaGateway::new("gw1", "18005551234")),
         "1000",
     )
+    // Safe unwrap: DialplanType::Xml is a valid dialplan for extensions
     .dialplan(DialplanType::Xml)
     .unwrap()
     .context("default");
@@ -247,8 +249,10 @@ fn print_endpoint_examples() {
             Application::simple("hangup"),
         ],
     )
+    // Safe unwrap: non-empty application list is valid
     .unwrap()
     // DialplanType::Inline is emitted as "inline" on the wire
+    // Safe unwrap: DialplanType::Inline is valid for inline applications
     .dialplan(DialplanType::Inline)
     .unwrap();
     // originate sofia/gateway/gw1/18005551234 conference:test_room,hangup inline
