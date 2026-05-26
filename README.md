@@ -701,6 +701,38 @@ cargo test --test live_freeswitch -- --ignored
 - Rust 1.75+
 - Tokio async runtime
 
+## Migrating from 1.x
+
+Breaking changes in 2.0:
+
+| 1.x | 2.0 replacement |
+|-----|-----------------|
+| `Originate { endpoint, applications, .. }` struct literal | `Originate::application()`, `Originate::extension()`, `Originate::inline()` builders |
+| `Endpoint::SofiaGateway { gateway, uri, .. }` | `Endpoint::SofiaGateway(SofiaGateway::new(gateway, uri))` |
+| `Endpoint::Sofia { profile, uri, .. }` | `Endpoint::Sofia(SofiaEndpoint::new(profile, uri))` |
+| `Endpoint::Loopback { extension, .. }` | `Endpoint::Loopback(LoopbackEndpoint::new(extension))` |
+| `Endpoint::User { user, .. }` | `Endpoint::User(UserEndpoint::new(user))` |
+| `HeaderLookup` typed accessors return `Option<T>` | Now return `Result<Option<T>, ParseError>` (parse errors no longer silently become `None`) |
+| `HeaderLookup` trait alone | Requires `SipHeaderLookup` supertrait |
+| `Variables::vars_type` public field | Private; use `scope()` accessor |
+| `ChannelVariable` | Renamed to `VariableName` |
+| `linger(Option<u32>)` | `linger_timeout(Option<Duration>)` (deprecated in 1.x) |
+
+New in 2.0:
+
+- **Serde support** for all command builders (feature-gated)
+- **`EventSubscription`** unifies format/events/filters into reusable config
+- **Typed endpoint builders** with `_mut()` accessors for deserialized configs
+- **`EslResponse::api_result()`** convenience method
+- **`getvar_opt()`** distinguishes unset variables from empty strings
+
+Upgrade steps:
+
+1. Replace endpoint struct literals with typed constructors (`SofiaGateway::new()`, etc.)
+2. Replace `Originate` struct literals with builder methods
+3. Add `SipHeaderLookup` supertrait to custom `HeaderLookup` impls
+4. Handle `Result` wrapper on typed header accessors (add `?` or `.unwrap()`)
+
 ## Other Rust ESL crates
 
 - [freeswitch-esl](https://crates.io/crates/freeswitch-esl) -- async/tokio,
