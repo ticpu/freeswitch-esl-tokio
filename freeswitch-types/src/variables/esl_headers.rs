@@ -117,45 +117,80 @@ fn strip_brackets(s: &str) -> &str {
     s
 }
 
-/// Parse `value` as a `UriInfo`, handling both `ARRAY::` encoding and
-/// bracket wrapping. The plain `UriInfo::parse` path is only used when
-/// the value lacks the `ARRAY::` prefix; structural `EslArrayError`
-/// cases (e.g. `TooManyItems`) are surfaced via the closest-fit
-/// upstream variant rather than silently downgraded.
-fn parse_uri_info_value(value: &str) -> Result<UriInfo, UriInfoError> {
-    let value = strip_brackets(value);
-    match EslArray::parse(value) {
-        Ok(array) => UriInfo::from_entries(
-            array
-                .items()
-                .iter()
-                .map(String::as_str),
-        ),
-        Err(EslArrayError::MissingPrefix) => UriInfo::parse(value),
-        // Upstream UriInfoError lacks a generic "structural array
-        // failure" variant; carry the cause in MissingAngleBrackets so
-        // operators see the actual reason in logs.
-        Err(other) => Err(UriInfoError::MissingAngleBrackets(format!(
-            "ARRAY:: parse failed: {other}"
-        ))),
+impl EslHeaders {
+    /// Parse a FreeSWITCH-transported SIP URI-list value into typed [`UriInfo`]
+    /// entries, handling both `ARRAY::` encoding and bracket wrapping.
+    ///
+    /// Use this when you hold a *raw* value — e.g. the `sip_call_info` /
+    /// `sip_alert_info` channel variable fetched over ESL — rather than a
+    /// populated [`EslHeaders`]. It accepts any of the forms FreeSWITCH emits:
+    ///
+    /// - **Single RFC entry**: `<sip:a@example.test>;purpose=emergency-CallId`
+    /// - **ARRAY encoding**: `ARRAY::<sip:a@example.test>;purpose=icon|:<sip:b@example.test>`
+    /// - **Bracket-wrapped**: `[<sip:a@example.test>;purpose=icon]`
+    ///
+    /// This is the same decoding the [`call_info`](SipHeaderLookup::call_info)
+    /// and [`alert_info`](SipHeaderLookup::alert_info) methods apply; iterate
+    /// the result via `.entries()`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`UriInfoError`] if the value is malformed or if the `ARRAY::`
+    /// structure is invalid. Structural `EslArrayError` cases (e.g.
+    /// `TooManyItems`) are surfaced via [`UriInfoError::MissingAngleBrackets`]
+    /// carrying the cause so operators see the actual reason in logs.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use freeswitch_types::EslHeaders;
+    ///
+    /// let value = "ARRAY::<urn:emergency:uid:callid:bcf.test>;purpose=emergency-CallId\
+    ///              |:<urn:emergency:uid:incidentid:bcf.test>;purpose=emergency-IncidentId";
+    /// let info = EslHeaders::parse_uri_info(value).unwrap();
+    /// assert_eq!(info.entries().len(), 2);
+    /// ```
+    pub fn parse_uri_info(value: &str) -> Result<UriInfo, UriInfoError> {
+        let value = strip_brackets(value);
+        match EslArray::parse(value) {
+            Ok(array) => UriInfo::from_entries(
+                array
+                    .items()
+                    .iter()
+                    .map(String::as_str),
+            ),
+            Err(EslArrayError::MissingPrefix) => UriInfo::parse(value),
+            // Upstream UriInfoError lacks a generic "structural array
+            // failure" variant; carry the cause in MissingAngleBrackets so
+            // operators see the actual reason in logs.
+            Err(other) => Err(UriInfoError::MissingAngleBrackets(format!(
+                "ARRAY:: parse failed: {other}"
+            ))),
+        }
     }
-}
 
-/// Parse `value` as a `HistoryInfo`, handling both `ARRAY::` encoding and
-/// bracket wrapping. Structural `EslArrayError` cases (e.g. `TooManyItems`)
-/// are surfaced as `HistoryInfoError::Empty` rather than silently falling
-/// back — upstream lacks a richer variant for non-entry array failures.
-fn parse_history_info_value(value: &str) -> Result<HistoryInfo, HistoryInfoError> {
-    let value = strip_brackets(value);
-    match EslArray::parse(value) {
-        Ok(array) => HistoryInfo::from_entries(
-            array
-                .items()
-                .iter()
-                .map(String::as_str),
-        ),
-        Err(EslArrayError::MissingPrefix) => HistoryInfo::parse(value),
-        Err(_) => Err(HistoryInfoError::Empty),
+    /// Parse a FreeSWITCH-transported `History-Info` value into a typed
+    /// [`HistoryInfo`], handling both `ARRAY::` encoding and bracket wrapping.
+    ///
+    /// The raw-value counterpart to [`history_info`](SipHeaderLookup::history_info).
+    ///
+    /// # Errors
+    ///
+    /// Structural `EslArrayError` cases (e.g. `TooManyItems`) are surfaced as
+    /// [`HistoryInfoError::Empty`] rather than silently falling back — upstream
+    /// lacks a richer variant for non-entry array failures.
+    pub fn parse_history_info(value: &str) -> Result<HistoryInfo, HistoryInfoError> {
+        let value = strip_brackets(value);
+        match EslArray::parse(value) {
+            Ok(array) => HistoryInfo::from_entries(
+                array
+                    .items()
+                    .iter()
+                    .map(String::as_str),
+            ),
+            Err(EslArrayError::MissingPrefix) => HistoryInfo::parse(value),
+            Err(_) => Err(HistoryInfoError::Empty),
+        }
     }
 }
 
@@ -168,21 +203,21 @@ impl SipHeaderLookup for EslHeaders {
 
     fn call_info(&self) -> Result<Option<UriInfo>, UriInfoError> {
         match self.sip_header(SipHeader::CallInfo) {
-            Some(s) => parse_uri_info_value(s).map(Some),
+            Some(s) => Self::parse_uri_info(s).map(Some),
             None => Ok(None),
         }
     }
 
     fn history_info(&self) -> Result<Option<HistoryInfo>, HistoryInfoError> {
         match self.sip_header(SipHeader::HistoryInfo) {
-            Some(s) => parse_history_info_value(s).map(Some),
+            Some(s) => Self::parse_history_info(s).map(Some),
             None => Ok(None),
         }
     }
 
     fn alert_info(&self) -> Result<Option<UriInfo>, UriInfoError> {
         match self.sip_header(SipHeader::AlertInfo) {
-            Some(s) => parse_uri_info_value(s).map(Some),
+            Some(s) => Self::parse_uri_info(s).map(Some),
             None => Ok(None),
         }
     }
@@ -313,5 +348,71 @@ mod tests {
         h.insert(EventHeader::ChannelName.as_str(), "sofia/a/b");
         assert_eq!(h.unique_id(), Some("uuid-1"));
         assert_eq!(h.channel_name(), Some("sofia/a/b"));
+    }
+
+    #[test]
+    fn parse_uri_info_array_form() {
+        let value = "ARRAY::<urn:emergency:uid:callid:bcf.example.test>;purpose=emergency-CallId\
+                     |:<urn:emergency:uid:incidentid:bcf.example.test>;purpose=emergency-IncidentId\
+                     |:<https://eido.example.test/v1/bcf.example.test/abc?test-call=true>;purpose=emergency-eido";
+        let info = EslHeaders::parse_uri_info(value).expect("parse ARRAY form");
+        let entries = info.entries();
+        assert_eq!(entries.len(), 3);
+        assert_eq!(entries[0].purpose(), Some("emergency-CallId"));
+        assert_eq!(entries[1].purpose(), Some("emergency-IncidentId"));
+        assert_eq!(entries[2].purpose(), Some("emergency-eido"));
+    }
+
+    #[test]
+    fn parse_uri_info_single_entry() {
+        let value = "<urn:emergency:uid:callid:test>;purpose=emergency-CallId";
+        let info = EslHeaders::parse_uri_info(value).expect("parse single entry");
+        assert_eq!(
+            info.entries()
+                .len(),
+            1
+        );
+        assert_eq!(info.entries()[0].purpose(), Some("emergency-CallId"));
+    }
+
+    #[test]
+    fn parse_uri_info_empty_value() {
+        // Empty string is an error (no angle brackets)
+        let result = EslHeaders::parse_uri_info("");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_uri_info_malformed_no_panic() {
+        // sip-header UriInfo is lenient - this parses without angle brackets
+        let info = EslHeaders::parse_uri_info("sip:bare@example.test").expect("lenient parse");
+        assert_eq!(
+            info.entries()
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn parse_uri_info_bracket_wrapped() {
+        let value = "[<urn:emergency:uid:callid:test>;purpose=emergency-CallId]";
+        let info = EslHeaders::parse_uri_info(value).expect("parse bracket-wrapped");
+        assert_eq!(
+            info.entries()
+                .len(),
+            1
+        );
+        assert_eq!(info.entries()[0].purpose(), Some("emergency-CallId"));
+    }
+
+    #[test]
+    fn parse_history_info_array_form() {
+        let value = "ARRAY::<sip:a@example.com>;index=1|:<sip:b@example.com>;index=1.1";
+        let info = EslHeaders::parse_history_info(value).expect("parse ARRAY form");
+        assert_eq!(
+            info.entries()
+                .len(),
+            2
+        );
     }
 }

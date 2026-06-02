@@ -567,6 +567,12 @@ The type makes visible what was previously hidden:
 `EslArray` and pass pre-split entries without `sip-header` knowing
 anything about the ARRAY format.
 
+The same peeling is exposed as the associated functions
+`EslHeaders::parse_uri_info` / `parse_history_info`, for callers that hold a
+raw channel-variable string (e.g. `sip_call_info` fetched over ESL) rather than
+a populated map — so they reuse the canonical decoder instead of re-deriving
+the ARRAY/bracket handling.
+
 ### HeaderLookup as a supertrait of SipHeaderLookup
 
 After extraction, `SipHeaderLookup` lives in `sip-header` along with its
