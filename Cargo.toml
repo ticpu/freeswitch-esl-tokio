@@ -18,7 +18,7 @@ rust-version = "1.75"
 exclude = ["CLAUDE.md", "hooks/", "tests/", "docs/"]
 
 [dependencies]
-freeswitch-types = { path = "freeswitch-types", version = "=1.0.0" }
+freeswitch-types = { path = "freeswitch-types", version = "1" }
 indexmap = "2"
 tokio = { version = "1.47", features = ["net", "io-util", "rt", "rt-multi-thread", "sync", "time", "macros"] }
 bytes = "1.11"
