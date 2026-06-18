@@ -925,7 +925,7 @@ impl EslClient {
 
         let connect_timeout = options.connect_timeout;
         let mut stream = tcp_connect_with_timeout(host, port, connect_timeout).await?;
-        let mut parser = EslParser::new();
+        let mut parser = EslParser::new().with_strict_header_utf8(options.strict_header_utf8());
         let mut read_buffer = [0u8; SOCKET_BUF_SIZE];
 
         let auth_response = authenticate(
@@ -1005,7 +1005,12 @@ impl EslClient {
         stream: TcpStream,
         options: EslConnectOptions,
     ) -> (Self, EslEventStream) {
-        Self::split_and_spawn_with_options(stream, EslParser::new(), options, None)
+        Self::split_and_spawn_with_options(
+            stream,
+            EslParser::new().with_strict_header_utf8(options.strict_header_utf8()),
+            options,
+            None,
+        )
     }
 
     /// Create an `EslClient` from an already-authenticated TCP stream.
@@ -1034,7 +1039,7 @@ impl EslClient {
         residual_bytes: &[u8],
         options: EslConnectOptions,
     ) -> EslResult<(Self, EslEventStream)> {
-        let mut parser = EslParser::new();
+        let mut parser = EslParser::new().with_strict_header_utf8(options.strict_header_utf8());
         if !residual_bytes.is_empty() {
             parser.add_data(residual_bytes)?;
         }

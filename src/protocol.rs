@@ -118,6 +118,7 @@ enum ParseState {
 pub struct EslParser {
     buffer: EslBuffer,
     state: ParseState,
+    strict_header_utf8: bool,
 }
 
 impl EslParser {
@@ -126,7 +127,14 @@ impl EslParser {
         Self {
             buffer: EslBuffer::new(),
             state: ParseState::WaitingForHeaders,
+            strict_header_utf8: false,
         }
+    }
+
+    /// Set strict UTF-8 validation on event-body header values.
+    pub fn with_strict_header_utf8(mut self, strict: bool) -> Self {
+        self.strict_header_utf8 = strict;
+        self
     }
 
     /// Unconsumed bytes remaining in the parser buffer.
