@@ -193,6 +193,7 @@ struct SharedState {
 pub struct EslConnectOptions {
     event_queue_size: usize,
     connect_timeout: Duration,
+    strict_header_utf8: bool,
 }
 
 impl EslConnectOptions {
@@ -213,6 +214,17 @@ impl EslConnectOptions {
         self
     }
 
+    /// Strict UTF-8 validation on event-body header values.
+    ///
+    /// When `true`, invalid UTF-8 in percent-decoded event-body values returns
+    /// `EslError::InvalidUtf8InHeader` and stops the stream. When `false`
+    /// (default), invalid bytes are decoded lossily (U+FFFD) and surfaced via
+    /// `EslEvent::lossy_values()` for inspection/recovery.
+    pub fn with_strict_header_utf8(mut self, strict: bool) -> Self {
+        self.strict_header_utf8 = strict;
+        self
+    }
+
     /// Capacity of the mpsc channel delivering events. Default: 1000.
     pub fn event_queue_size(&self) -> usize {
         self.event_queue_size
@@ -222,6 +234,11 @@ impl EslConnectOptions {
     pub fn connect_timeout(&self) -> Duration {
         self.connect_timeout
     }
+
+    /// Whether to fail on invalid UTF-8 in event-body values. Default: false.
+    pub fn strict_header_utf8(&self) -> bool {
+        self.strict_header_utf8
+    }
 }
 
 impl Default for EslConnectOptions {
@@ -229,6 +246,7 @@ impl Default for EslConnectOptions {
         Self {
             event_queue_size: MAX_EVENT_QUEUE_SIZE,
             connect_timeout: Duration::from_millis(DEFAULT_TIMEOUT_MS),
+            strict_header_utf8: false,
         }
     }
 }
