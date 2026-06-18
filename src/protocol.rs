@@ -82,6 +82,10 @@ pub struct EslMessage {
     pub headers: IndexMap<String, String>,
     /// Message body (optional)
     pub body: Option<String>,
+    /// Header keys whose percent-decoded value was not valid UTF-8 and was
+    /// decoded lossily. Empty for framing-only envelopes; populated for
+    /// serialized responses such as the outbound `connect` channel data.
+    pub lossy_values: LossyValues,
 }
 
 impl EslMessage {
@@ -95,12 +99,19 @@ impl EslMessage {
             message_type,
             headers,
             body,
+            lossy_values: LossyValues::default(),
         }
+    }
+
+    /// Attach the lossy-decode signal recorded while parsing the headers.
+    pub fn with_lossy_values(mut self, lossy_values: LossyValues) -> Self {
+        self.lossy_values = lossy_values;
+        self
     }
 
     /// Convert to EslResponse
     pub fn into_response(self) -> EslResponse {
-        EslResponse::new(self.headers, self.body)
+        EslResponse::new(self.headers, self.body).with_lossy_values(self.lossy_values)
     }
 }
 
@@ -200,7 +211,7 @@ impl EslParser {
                     let headers_str = String::from_utf8(headers_data)
                         .map_err(|_| EslError::protocol_error("Invalid UTF-8 in headers"))?;
 
-                    let headers = self.parse_headers(&headers_str)?;
+                    let (headers, lossy_values) = self.parse_headers(&headers_str)?;
 
                     // Every ESL message must have Content-Type. Missing means
                     // protocol desync (e.g. from a corrupted Content-Length).
@@ -230,6 +241,14 @@ impl EslParser {
                         }
 
                         if length > 0 {
+                            // Body-bearing messages have framing-only envelopes
+                            // (Content-Length/Content-Type/Reply-Text), which
+                            // FreeSWITCH never percent-encodes, so no value here
+                            // can decode lossily.
+                            debug_assert!(
+                                lossy_values.is_empty(),
+                                "framing envelope produced a lossy value"
+                            );
                             // Transition to waiting for body
                             self.state = ParseState::WaitingForBody {
                                 message_type,
@@ -240,13 +259,18 @@ impl EslParser {
                             self.parse_message()
                         } else {
                             // No body needed, complete message
-                            let message = EslMessage::new(message_type, headers, None);
+                            let message = EslMessage::new(message_type, headers, None)
+                                .with_lossy_values(lossy_values);
                             self.state = ParseState::WaitingForHeaders;
                             Ok(Some(message))
                         }
                     } else {
-                        // No Content-Length header, complete message without body
-                        let message = EslMessage::new(message_type, headers, None);
+                        // No Content-Length header, complete message without body.
+                        // The outbound `connect` response arrives this way: a
+                        // serialized event whose channel-data values ARE
+                        // percent-encoded, so lossy_values may be populated.
+                        let message = EslMessage::new(message_type, headers, None)
+                            .with_lossy_values(lossy_values);
                         self.state = ParseState::WaitingForHeaders;
                         Ok(Some(message))
                     }
@@ -307,15 +331,36 @@ impl EslParser {
         Ok(Some((key, raw_value.to_string())))
     }
 
-    /// Parse envelope headers (never percent-encoded).
-    pub(crate) fn parse_headers(&self, headers_str: &str) -> EslResult<IndexMap<String, String>> {
+    /// Parse a header block, percent-decoding each value.
+    ///
+    /// FreeSWITCH percent-encodes serialized-event values, including the
+    /// outbound `connect` response channel data that flows through this path.
+    /// Pushed-event framing headers (`Content-Length`/`Content-Type`) are not
+    /// encoded, but decoding them is a no-op. Non-UTF-8 values are decoded
+    /// lossily and recorded in the returned `LossyValues` unless
+    /// `strict_header_utf8` is set, in which case they error.
+    pub(crate) fn parse_headers(
+        &self,
+        headers_str: &str,
+    ) -> EslResult<(IndexMap<String, String>, LossyValues)> {
         let mut headers = IndexMap::new();
+        let mut lossy = LossyValues::default();
         for line in headers_str.lines() {
-            if let Some((key, value)) = Self::parse_header_line(line)? {
+            if let Some((key, raw_value)) = Self::parse_header_line(line)? {
+                let value = Self::decode_value(
+                    &key,
+                    &raw_value,
+                    "header",
+                    if self.strict_header_utf8 {
+                        None
+                    } else {
+                        Some(&mut lossy)
+                    },
+                )?;
                 headers.insert(key, value);
             }
         }
-        Ok(headers)
+        Ok((headers, lossy))
     }
 
     /// Parse event from message, handling different formats.
@@ -366,21 +411,24 @@ impl EslParser {
         Ok(event)
     }
 
-    /// Decode an event-body header value (percent-encoded on the wire).
+    /// Percent-decode a header value (FreeSWITCH percent-encodes serialized
+    /// event values). `context` labels the error site (`"header"` for the
+    /// envelope/response block, `"event header"` for an event body).
     ///
     /// - `lossy == None` (strict): invalid UTF-8 returns `InvalidUtf8InHeader`.
     /// - `lossy == Some` (lenient): invalid UTF-8 is decoded lossily (U+FFFD)
     ///   and the key + on-wire `raw_value` are recorded in the accumulator.
-    fn decode_event_value(
+    fn decode_value(
         key: &str,
         raw_value: &str,
+        context: &'static str,
         lossy: Option<&mut LossyValues>,
     ) -> EslResult<String> {
         match percent_decode_str(raw_value).decode_utf8() {
             Ok(cow) => Ok(cow.into_owned()),
             Err(source) => match lossy {
                 None => Err(EslError::InvalidUtf8InHeader {
-                    context: "event header",
+                    context,
                     key: key.to_string(),
                     source,
                 }),
@@ -426,9 +474,10 @@ impl EslParser {
         // Parse and decode event-body headers
         for line in header_section.lines() {
             if let Some((key, raw_value)) = Self::parse_header_line(line)? {
-                let value = Self::decode_event_value(
+                let value = Self::decode_value(
                     &key,
                     &raw_value,
+                    "event header",
                     if self.strict_header_utf8 {
                         None
                     } else {
@@ -621,7 +670,7 @@ mod tests {
     fn test_parse_headers() {
         let parser = EslParser::new();
         let headers_str = "Content-Type: auth/request\r\nContent-Length: 0";
-        let headers = parser
+        let (headers, _lossy) = parser
             .parse_headers(headers_str)
             .unwrap();
 
@@ -643,7 +692,7 @@ mod tests {
     fn parsed_headers_preserve_insertion_order() {
         let parser = EslParser::new();
         let headers_str = "Alpha: 1\r\nBravo: 2\r\nCharlie: 3\r\nDelta: 4";
-        let headers = parser
+        let (headers, _lossy) = parser
             .parse_headers(headers_str)
             .unwrap();
         let keys: Vec<&str> = headers
@@ -1070,48 +1119,28 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_envelope_headers_not_percent_decoded() {
-        // Envelope headers are never percent-encoded by FreeSWITCH
+    fn test_parse_headers_percent_decodes_values() {
+        // parse_headers decodes values: the outbound connect response is a
+        // serialized event (switch_event_serialize SWITCH_TRUE) whose values
+        // are percent-encoded, and that response flows through this path.
         let parser = EslParser::new();
-        let headers = parser
-            .parse_headers("Content-Type: command/reply\nReply-Text: +OK")
+        let (headers, lossy) = parser
+            .parse_headers("Channel-Name: sofia/internal/1000%40example.com\nX-Space: a%20b")
             .unwrap();
 
         assert_eq!(
             headers
-                .get("Content-Type")
+                .get("Channel-Name")
                 .map(|s| s.as_str()),
-            Some("command/reply")
+            Some("sofia/internal/1000@example.com")
         );
         assert_eq!(
             headers
-                .get("Reply-Text")
+                .get("X-Space")
                 .map(|s| s.as_str()),
-            Some("+OK")
+            Some("a b")
         );
-    }
-
-    #[test]
-    fn test_parse_envelope_literal_percent_preserved() {
-        // Literal %XX in envelope stays verbatim (not decoded)
-        let parser = EslParser::new();
-        let headers = parser
-            .parse_headers("X-Percent: %ZZinvalid\nX-Good: clean")
-            .unwrap();
-
-        assert_eq!(
-            headers
-                .get("X-Percent")
-                .map(|s| s.as_str()),
-            Some("%ZZinvalid"),
-            "Literal percent sequences in envelope preserved as-is"
-        );
-        assert_eq!(
-            headers
-                .get("X-Good")
-                .map(|s| s.as_str()),
-            Some("clean")
-        );
+        assert!(lossy.is_empty());
     }
 
     #[test]
@@ -1139,24 +1168,18 @@ mod tests {
     fn test_parse_connect_response() {
         let mut parser = EslParser::new();
 
-        // FreeSWITCH connect response is a command/reply envelope with
-        // plain (not percent-encoded) header values.
-        let headers = [
-            ("Content-Type", "command/reply"),
-            ("Reply-Text", "+OK"),
-            ("Socket-Mode", "async"),
-            ("Control", "full"),
-            ("Event-Name", "CHANNEL_DATA"),
-            ("Channel-Name", "sofia/internal/1000@example.com"),
-            ("Unique-ID", "abcd-1234"),
-            ("Caller-Caller-ID-Name", "Test User"),
-        ];
-
-        let mut data = String::new();
-        for (key, value) in &headers {
-            data.push_str(&format!("{}: {}\n", key, value));
-        }
-        data.push('\n');
+        // FreeSWITCH serializes the outbound `connect` response with
+        // switch_event_serialize(SWITCH_TRUE): every value is percent-encoded,
+        // including the channel data. The parser must percent-decode them.
+        let data = "Content-Type: command/reply\n\
+             Reply-Text: +OK\n\
+             Socket-Mode: async\n\
+             Control: full\n\
+             Event-Name: CHANNEL_DATA\n\
+             Channel-Name: sofia/internal/1000%40example.com\n\
+             Unique-ID: abcd-1234\n\
+             Caller-Caller-ID-Name: Test%20User\n\
+             \n";
 
         parser
             .add_data(data.as_bytes())
@@ -1199,6 +1222,59 @@ mod tests {
         let response = message.into_response();
         assert!(response.is_success());
         assert_eq!(response.reply_text(), Some("+OK"));
+        assert!(response
+            .lossy_values()
+            .is_empty());
+    }
+
+    #[test]
+    fn test_connect_response_non_utf8_value_lossy() {
+        // A channel-data value that is not valid UTF-8 after percent-decoding
+        // (a Latin-1 caller name) is decoded lossily by default and surfaced
+        // on the response, not a hard error.
+        let mut parser = EslParser::new();
+        let data = "Content-Type: command/reply\n\
+             Reply-Text: +OK\n\
+             Caller-Caller-ID-Name: Andr%E9\n\
+             \n";
+        parser
+            .add_data(data.as_bytes())
+            .unwrap();
+        let response = parser
+            .parse_message()
+            .unwrap()
+            .unwrap()
+            .into_response();
+
+        assert!(response.is_success());
+        assert_eq!(
+            response.header("Caller-Caller-ID-Name"),
+            Some("Andr\u{FFFD}")
+        );
+        let lossy = response.lossy_values();
+        assert_eq!(
+            lossy
+                .iter()
+                .count(),
+            1
+        );
+        let entry = lossy
+            .iter()
+            .next()
+            .unwrap();
+        assert_eq!(entry.key(), "Caller-Caller-ID-Name");
+        assert_eq!(entry.raw_value(), "Andr%E9");
+    }
+
+    #[test]
+    fn test_connect_response_non_utf8_value_strict_error() {
+        let mut parser = EslParser::new().with_strict_header_utf8(true);
+        let data = "Content-Type: command/reply\nCaller-Caller-ID-Name: Andr%E9\n\n";
+        parser
+            .add_data(data.as_bytes())
+            .unwrap();
+        let result = parser.parse_message();
+        assert!(matches!(result, Err(EslError::InvalidUtf8InHeader { .. })));
     }
 
     #[test]
@@ -1606,21 +1682,6 @@ Channel-State: CS_INIT\n\
             matches!(err, EslError::InvalidUtf8InHeader { .. }),
             "expected InvalidUtf8InHeader, got: {:?}",
             err
-        );
-    }
-
-    #[test]
-    fn test_envelope_literal_percent_not_decoded() {
-        // Envelope value containing literal %XX is stored verbatim (regression test)
-        let parser = EslParser::new();
-        let headers = parser
-            .parse_headers("Reply-Text: 50% complete")
-            .unwrap();
-        assert_eq!(
-            headers
-                .get("Reply-Text")
-                .map(|s| s.as_str()),
-            Some("50% complete")
         );
     }
 

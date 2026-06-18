@@ -454,7 +454,7 @@ fn salvage_truncated_auth_response(parser: &mut EslParser) -> EslResult<Option<E
         &data_str[..last_nl]
     };
 
-    let headers = parser.parse_headers(header_block)?;
+    let (headers, lossy_values) = parser.parse_headers(header_block)?;
 
     // Validate this is actually a command/reply (auth response).
     let content_type = headers
@@ -473,7 +473,7 @@ fn salvage_truncated_auth_response(parser: &mut EslParser) -> EslResult<Option<E
     }
 
     let message_type = MessageType::from_content_type(content_type)?;
-    let message = EslMessage::new(message_type, headers, None);
+    let message = EslMessage::new(message_type, headers, None).with_lossy_values(lossy_values);
 
     parser.drain_buffer();
 

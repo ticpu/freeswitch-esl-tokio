@@ -6,6 +6,7 @@ use crate::{
     event::EslEvent,
     headers::EventHeader,
     lookup::HeaderLookup,
+    LossyValues,
 };
 pub(crate) use freeswitch_types::wire_safety::contains_wire_terminator;
 use indexmap::IndexMap;
@@ -122,6 +123,10 @@ pub struct EslResponse {
     /// passthrough headers) are intentionally excluded so SIP wire
     /// casing is preserved — same rule as `normalize_header_key`.
     case_index: IndexMap<String, String>,
+    /// Header keys whose percent-decoded value was not valid UTF-8 and was
+    /// decoded lossily. Populated for serialized responses such as the
+    /// outbound `connect` channel data; empty in the normal case.
+    lossy_values: LossyValues,
 }
 
 impl EslResponse {
@@ -150,7 +155,23 @@ impl EslResponse {
             body,
             status,
             case_index,
+            lossy_values: LossyValues::default(),
         }
+    }
+
+    /// Attach the lossy-decode signal recorded while parsing the response
+    /// headers (used by [`EslMessage::into_response`](crate::EslMessage)).
+    pub(crate) fn with_lossy_values(mut self, lossy_values: LossyValues) -> Self {
+        self.lossy_values = lossy_values;
+        self
+    }
+
+    /// Header keys whose percent-decoded value was not valid UTF-8 and was
+    /// decoded lossily (U+FFFD). Each entry carries the on-wire value. Mainly
+    /// relevant to the outbound `connect` response, whose channel-data values
+    /// are percent-encoded by FreeSWITCH. Empty in the normal case.
+    pub fn lossy_values(&self) -> &LossyValues {
+        &self.lossy_values
     }
 
     /// `true` if Reply-Text is `+OK` or absent.
