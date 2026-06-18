@@ -12,6 +12,7 @@ use crate::{
     error::{EslError, EslResult},
     event::{EslEvent, EslEventType, EventFormat},
     headers::{normalize_header_key, EventHeader},
+    LossyValue, LossyValues,
 };
 use indexmap::IndexMap;
 use percent_encoding::percent_decode_str;
@@ -282,15 +283,12 @@ impl EslParser {
         }
     }
 
-    /// Parse a single `Key: value` line, stripping `\r`, normalizing the key,
-    /// and percent-decoding the value as UTF-8.
+    /// Parse a single `Key: value` line, stripping `\r` and normalizing the key.
     ///
-    /// Returns `Ok(None)` for blank lines (caller keeps looping), `Ok(Some((k,
-    /// v)))` on success, `Err` when the line is non-blank but lacks a colon or
-    /// contains invalid UTF-8 after decoding. `context` is inlined into the
-    /// UTF-8 error message so the caller (outer envelope vs. inner event body)
-    /// is visible to operators.
-    fn parse_header_line(line: &str, context: &'static str) -> EslResult<Option<(String, String)>> {
+    /// Returns the on-wire `(key, value)` without percent-decoding. Returns
+    /// `Ok(None)` for blank lines (caller keeps looping), `Ok(Some((k, v)))`
+    /// on success, `Err` when the line is non-blank but lacks a colon.
+    fn parse_header_line(line: &str) -> EslResult<Option<(String, String)>> {
         let line = line
             .strip_suffix('\r')
             .unwrap_or(line);
@@ -306,22 +304,14 @@ impl EslParser {
         let raw_value = line[colon_pos + 1..]
             .strip_prefix(' ')
             .unwrap_or(&line[colon_pos + 1..]);
-        let value = percent_decode_str(raw_value)
-            .decode_utf8()
-            .map(|s| s.into_owned())
-            .map_err(|e| EslError::InvalidUtf8InHeader {
-                context,
-                key: key.clone(),
-                source: e,
-            })?;
-        Ok(Some((key, value)))
+        Ok(Some((key, raw_value.to_string())))
     }
 
-    /// Parse headers from string
+    /// Parse envelope headers (never percent-encoded).
     pub(crate) fn parse_headers(&self, headers_str: &str) -> EslResult<IndexMap<String, String>> {
         let mut headers = IndexMap::new();
         for line in headers_str.lines() {
-            if let Some((key, value)) = Self::parse_header_line(line, "header")? {
+            if let Some((key, value)) = Self::parse_header_line(line)? {
                 headers.insert(key, value);
             }
         }
@@ -376,6 +366,34 @@ impl EslParser {
         Ok(event)
     }
 
+    /// Decode an event-body header value (percent-encoded on the wire).
+    ///
+    /// - `lossy == None` (strict): invalid UTF-8 returns `InvalidUtf8InHeader`.
+    /// - `lossy == Some` (lenient): invalid UTF-8 is decoded lossily (U+FFFD)
+    ///   and the key + on-wire `raw_value` are recorded in the accumulator.
+    fn decode_event_value(
+        key: &str,
+        raw_value: &str,
+        lossy: Option<&mut LossyValues>,
+    ) -> EslResult<String> {
+        match percent_decode_str(raw_value).decode_utf8() {
+            Ok(cow) => Ok(cow.into_owned()),
+            Err(source) => match lossy {
+                None => Err(EslError::InvalidUtf8InHeader {
+                    context: "event header",
+                    key: key.to_string(),
+                    source,
+                }),
+                Some(acc) => {
+                    acc.push(LossyValue::new(key.to_string(), raw_value.to_string()));
+                    Ok(percent_decode_str(raw_value)
+                        .decode_utf8_lossy()
+                        .into_owned())
+                }
+            },
+        }
+    }
+
     /// Parse plain text event
     ///
     /// FreeSWITCH text/event-plain wire format uses a two-part structure:
@@ -395,6 +413,7 @@ impl EslParser {
             .ok_or_else(|| EslError::protocol_error("Plain event missing body"))?;
 
         let mut event = EslEvent::new();
+        let mut lossy = LossyValues::default();
 
         // Split event body into headers and optional inner body.
         // Event headers are terminated by \n\n; anything after is the inner body.
@@ -404,12 +423,23 @@ impl EslParser {
             (body, None)
         };
 
-        // Parse event headers from the body, percent-decoding values
+        // Parse and decode event-body headers
         for line in header_section.lines() {
-            if let Some((key, value)) = Self::parse_header_line(line, "event header")? {
+            if let Some((key, raw_value)) = Self::parse_header_line(line)? {
+                let value = Self::decode_event_value(
+                    &key,
+                    &raw_value,
+                    if self.strict_header_utf8 {
+                        None
+                    } else {
+                        Some(&mut lossy)
+                    },
+                )?;
                 event.set_header(key, value);
             }
         }
+
+        event.set_lossy_values(lossy);
 
         // If the event headers contain their own Content-Length, the inner body
         // is that many bytes after the header section
@@ -1040,28 +1070,8 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_headers_percent_decodes_values() {
-        let parser = EslParser::new();
-        let headers = parser
-            .parse_headers("Content-Type: command%2Freply\nReply-Text: %2BOK")
-            .unwrap();
-
-        assert_eq!(
-            headers
-                .get("Content-Type")
-                .map(|s| s.as_str()),
-            Some("command/reply")
-        );
-        assert_eq!(
-            headers
-                .get("Reply-Text")
-                .map(|s| s.as_str()),
-            Some("+OK")
-        );
-    }
-
-    #[test]
-    fn test_parse_headers_noop_for_plain_values() {
+    fn test_parse_envelope_headers_not_percent_decoded() {
+        // Envelope headers are never percent-encoded by FreeSWITCH
         let parser = EslParser::new();
         let headers = parser
             .parse_headers("Content-Type: command/reply\nReply-Text: +OK")
@@ -1082,18 +1092,19 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_headers_invalid_percent_sequence() {
+    fn test_parse_envelope_literal_percent_preserved() {
+        // Literal %XX in envelope stays verbatim (not decoded)
         let parser = EslParser::new();
         let headers = parser
-            .parse_headers("X-Bad: %ZZinvalid\nX-Good: clean")
+            .parse_headers("X-Percent: %ZZinvalid\nX-Good: clean")
             .unwrap();
 
         assert_eq!(
             headers
-                .get("X-Bad")
+                .get("X-Percent")
                 .map(|s| s.as_str()),
             Some("%ZZinvalid"),
-            "Invalid percent sequence passes through as-is (still valid UTF-8)"
+            "Literal percent sequences in envelope preserved as-is"
         );
         assert_eq!(
             headers
@@ -1104,26 +1115,9 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_headers_invalid_utf8_is_error() {
-        let parser = EslParser::new();
-        // %FF decodes to byte 0xFF which is invalid UTF-8
-        let result = parser.parse_headers("X-Bad: %FF");
-        assert!(
-            result.is_err(),
-            "invalid UTF-8 after percent-decode must be an error"
-        );
-        let err = result.unwrap_err();
-        assert!(
-            err.to_string()
-                .contains("invalid UTF-8"),
-            "error should mention invalid UTF-8: {}",
-            err
-        );
-    }
-
-    #[test]
-    fn test_parse_plain_event_invalid_utf8_is_error() {
-        let parser = EslParser::new();
+    fn test_parse_plain_event_invalid_utf8_strict_error() {
+        // Event-body header with invalid UTF-8 in strict mode
+        let parser = EslParser::new().with_strict_header_utf8(true);
         let body = "Event-Name: HEARTBEAT\nX-Bad: %FF\n\n";
         let msg = EslMessage::new(
             MessageType::Event,
@@ -1137,18 +1131,16 @@ mod tests {
         let result = parser.parse_event(msg, EventFormat::Plain);
         assert!(
             result.is_err(),
-            "invalid UTF-8 in event header must be an error"
+            "invalid UTF-8 in event header with strict mode must be an error"
         );
     }
 
     #[test]
     fn test_parse_connect_response() {
-        use percent_encoding::{percent_encode, NON_ALPHANUMERIC};
-
         let mut parser = EslParser::new();
 
-        // Simulate FreeSWITCH's connect response: switch_event_serialize()
-        // encodes ALL values, sent as a flat blob (no outer envelope wrapper).
+        // FreeSWITCH connect response is a command/reply envelope with
+        // plain (not percent-encoded) header values.
         let headers = [
             ("Content-Type", "command/reply"),
             ("Reply-Text", "+OK"),
@@ -1162,11 +1154,7 @@ mod tests {
 
         let mut data = String::new();
         for (key, value) in &headers {
-            data.push_str(&format!(
-                "{}: {}\n",
-                key,
-                percent_encode(value.as_bytes(), NON_ALPHANUMERIC)
-            ));
+            data.push_str(&format!("{}: {}\n", key, value));
         }
         data.push('\n');
 
@@ -1553,5 +1541,178 @@ Channel-State: CS_INIT\n\
         assert_eq!(parsed.event_type(), original.event_type());
         assert_eq!(parsed.headers(), original.headers());
         assert_eq!(parsed.body(), original.body());
+    }
+
+    #[test]
+    fn test_event_body_lossy_decode_default() {
+        // Event-body value with %E9 (invalid UTF-8) is decoded lossily by default
+        let parser = EslParser::new();
+        let body = "Event-Name: HEARTBEAT\nvariable_dp_match: %E9foo\nvalid_key: normal\n\n";
+        let msg = EslMessage::new(
+            MessageType::Event,
+            {
+                let mut h = IndexMap::new();
+                h.insert("Content-Type".to_string(), "text/event-plain".to_string());
+                h
+            },
+            Some(body.to_string()),
+        );
+        let event = parser
+            .parse_event(msg, EventFormat::Plain)
+            .unwrap();
+
+        // Lossy decode produced U+FFFD
+        assert!(event
+            .header_str("variable_dp_match")
+            .unwrap()
+            .contains('\u{FFFD}'));
+        // LossyValues tracks the affected key
+        let lossy = event.lossy_values();
+        assert!(!lossy.is_empty());
+        assert_eq!(
+            lossy
+                .iter()
+                .count(),
+            1
+        );
+        let entry = lossy
+            .iter()
+            .next()
+            .unwrap();
+        assert_eq!(entry.key(), "variable_dp_match");
+        assert_eq!(entry.raw_value(), "%E9foo");
+        // Well-formed header unaffected
+        assert_eq!(event.header_str("valid_key"), Some("normal"));
+    }
+
+    #[test]
+    fn test_event_body_strict_utf8_fails() {
+        // Same input with strict option => error
+        let parser = EslParser::new().with_strict_header_utf8(true);
+        let body = "Event-Name: HEARTBEAT\nvariable_dp_match: %E9foo\n\n";
+        let msg = EslMessage::new(
+            MessageType::Event,
+            {
+                let mut h = IndexMap::new();
+                h.insert("Content-Type".to_string(), "text/event-plain".to_string());
+                h
+            },
+            Some(body.to_string()),
+        );
+        let result = parser.parse_event(msg, EventFormat::Plain);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            matches!(err, EslError::InvalidUtf8InHeader { .. }),
+            "expected InvalidUtf8InHeader, got: {:?}",
+            err
+        );
+    }
+
+    #[test]
+    fn test_envelope_literal_percent_not_decoded() {
+        // Envelope value containing literal %XX is stored verbatim (regression test)
+        let parser = EslParser::new();
+        let headers = parser
+            .parse_headers("Reply-Text: 50% complete")
+            .unwrap();
+        assert_eq!(
+            headers
+                .get("Reply-Text")
+                .map(|s| s.as_str()),
+            Some("50% complete")
+        );
+    }
+
+    #[test]
+    fn test_missing_colon_invalid_header() {
+        let result = EslParser::parse_header_line("NoColonHere");
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            EslError::InvalidHeader { .. }
+        ));
+    }
+
+    #[test]
+    fn test_lossy_values_serde_roundtrip() {
+        let parser = EslParser::new();
+        let body = "Event-Name: HEARTBEAT\nkey1: %E9value\n\n";
+        let msg = EslMessage::new(
+            MessageType::Event,
+            {
+                let mut h = IndexMap::new();
+                h.insert("Content-Type".to_string(), "text/event-plain".to_string());
+                h
+            },
+            Some(body.to_string()),
+        );
+        let event = parser
+            .parse_event(msg, EventFormat::Plain)
+            .unwrap();
+
+        let json = serde_json::to_string(&event).unwrap();
+        let deserialized: EslEvent = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(
+            deserialized
+                .lossy_values()
+                .iter()
+                .count(),
+            1
+        );
+        assert_eq!(
+            deserialized
+                .lossy_values()
+                .iter()
+                .next()
+                .unwrap()
+                .key(),
+            "Key1"
+        );
+        assert_eq!(
+            deserialized
+                .lossy_values()
+                .iter()
+                .next()
+                .unwrap()
+                .raw_value(),
+            "%E9value"
+        );
+    }
+
+    #[test]
+    fn test_lossy_values_old_json_without_field() {
+        // Old JSON without lossy_values field deserializes to empty
+        let json = r#"{"headers":{"Event-Name":"HEARTBEAT"},"body":null}"#;
+        let event: EslEvent = serde_json::from_str(json).unwrap();
+        assert!(event
+            .lossy_values()
+            .is_empty());
+    }
+
+    #[test]
+    fn test_lossy_values_display_keys_only() {
+        let parser = EslParser::new();
+        let body = "Event-Name: HEARTBEAT\nkey1: %E9foo\nkey2: %FFbar\n\n";
+        let msg = EslMessage::new(
+            MessageType::Event,
+            {
+                let mut h = IndexMap::new();
+                h.insert("Content-Type".to_string(), "text/event-plain".to_string());
+                h
+            },
+            Some(body.to_string()),
+        );
+        let event = parser
+            .parse_event(msg, EventFormat::Plain)
+            .unwrap();
+
+        let display = event
+            .lossy_values()
+            .to_string();
+        assert_eq!(display, "Key1, Key2");
+        assert!(!display.contains("%E9"));
+        assert!(!display.contains("foo"));
     }
 }

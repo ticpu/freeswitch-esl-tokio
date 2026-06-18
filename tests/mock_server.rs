@@ -227,12 +227,10 @@ impl MockClient {
         let mut data = String::new();
 
         // Channel data headers first (like switch_channel_event_set_data)
+        // Note: connect response is a command/reply envelope, which FreeSWITCH
+        // does NOT percent-encode (only event-body values are percent-encoded).
         for (key, value) in channel_headers {
-            data.push_str(&format!(
-                "{}: {}\n",
-                key,
-                percent_encode(value.as_bytes(), NON_ALPHANUMERIC)
-            ));
+            data.push_str(&format!("{}: {}\n", key, value));
         }
 
         // Protocol headers last (like switch_event_add_header_string STACK_BOTTOM)
@@ -243,11 +241,7 @@ impl MockClient {
             ("Control", "full"),
         ];
         for (key, value) in &protocol_headers {
-            data.push_str(&format!(
-                "{}: {}\n",
-                key,
-                percent_encode(value.as_bytes(), NON_ALPHANUMERIC)
-            ));
+            data.push_str(&format!("{}: {}\n", key, value));
         }
         data.push('\n');
 

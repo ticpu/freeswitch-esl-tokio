@@ -2,6 +2,7 @@
 
 use crate::headers::{normalize_header_key, EventHeader};
 use crate::lookup::HeaderLookup;
+use crate::lossy_values::LossyValues;
 use crate::sofia::SofiaEventSubclass;
 use crate::variables::{EslArray, EslArrayError};
 use indexmap::IndexMap;
@@ -897,6 +898,11 @@ pub struct EslEvent {
     #[cfg_attr(feature = "serde", serde(skip))]
     original_keys: IndexMap<String, String>,
     body: Option<String>,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "LossyValues::is_empty")
+    )]
+    lossy_values: LossyValues,
 }
 
 impl EslEvent {
@@ -906,6 +912,7 @@ impl EslEvent {
             headers: IndexMap::new(),
             original_keys: IndexMap::new(),
             body: None,
+            lossy_values: LossyValues::default(),
         }
     }
 
@@ -1017,6 +1024,25 @@ impl EslEvent {
     /// Set the event body.
     pub fn set_body(&mut self, body: impl Into<String>) {
         self.body = Some(body.into());
+    }
+
+    /// Headers whose percent-decoded value contained invalid UTF-8 and was
+    /// decoded lossily (U+FFFD substituted).
+    ///
+    /// Each entry carries the on-wire `raw_value()` (the percent-encoded source
+    /// text) so the app can re-decode it (e.g. as Latin-1) or audit it instead
+    /// of being stuck with the U+FFFD-substituted string in `headers`. Empty in
+    /// the normal case.
+    pub fn lossy_values(&self) -> &LossyValues {
+        &self.lossy_values
+    }
+
+    /// Set the lossy values.
+    ///
+    /// Used internally by the ESL parser; consumers don't call this directly.
+    #[doc(hidden)]
+    pub fn set_lossy_values(&mut self, v: LossyValues) {
+        self.lossy_values = v;
     }
 
     /// Sets the `priority` header carried on the event.
@@ -1196,10 +1222,13 @@ impl<'de> serde::Deserialize<'de> for EslEvent {
             event_type: Option<EslEventType>,
             headers: IndexMap<String, String>,
             body: Option<String>,
+            #[serde(default)]
+            lossy_values: LossyValues,
         }
         let raw = Raw::deserialize(deserializer)?;
         let mut event = EslEvent::new();
         event.body = raw.body;
+        event.lossy_values = raw.lossy_values;
         for (k, v) in raw.headers {
             event.set_header(k, v);
         }
