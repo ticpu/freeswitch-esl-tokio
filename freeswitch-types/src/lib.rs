@@ -29,6 +29,8 @@ pub mod commands;
 pub mod event;
 pub mod headers;
 pub mod lookup;
+#[cfg(feature = "esl")]
+pub mod lossy_values;
 pub mod prelude;
 pub mod sofia;
 pub mod variables;
@@ -60,6 +62,8 @@ pub use event::{
 };
 pub use headers::{normalize_header_key, EventHeader, ParseEventHeaderError};
 pub use lookup::HeaderLookup;
+#[cfg(feature = "esl")]
+pub use lossy_values::{LossyValue, LossyValues};
 pub use sip_header::{
     extract_header, HistoryInfo, HistoryInfoEntry, HistoryInfoError, HistoryInfoReason,
     ParseSipHeaderAddrError, ParseSipHeaderError, SipGeolocation, SipGeolocationRef, SipHeader,
