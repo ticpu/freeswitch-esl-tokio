@@ -427,21 +427,22 @@ is the next section.
 
 ## Lossy event-value decode is not a desync
 
-A non-UTF-8 byte that appears only *after* percent-decoding an event-body value
-is no framing break: FreeSWITCH percent-encodes event-body values (and only
-those — the envelope is plain ASCII), so the stream is synchronized; the decoded
-bytes just aren't UTF-8 (a Latin-1 dialed string, say). A production consumer
-took the hard `InvalidUtf8InHeader` as non-recoverable, exited, and dragged a
-supervised sibling down with it — over one stray byte. So event-body values now
-decode lossily (U+FFFD) by default while the connection lives, and the affected
-keys plus their unparsed on-wire value ride back as *data* on `EslEvent` (a
-`LossyValues` channel), not a library log line or a collapsed `None`: the signal
-is inspectable, and the caller owns the warning and the PII call on the value.
-`strict_header_utf8` restores the old hard-fail; framing faults (missing
-`Content-Type`, no colon, oversize) stay fatal. The same investigation fixed a
-latent bug — the parser was also percent-decoding the envelope, which FreeSWITCH
-never encodes, corrupting a literal `%XX` in `Reply-Text`; envelope values are
-now stored verbatim.
+A non-UTF-8 byte that appears only *after* percent-decoding a header value is no
+framing break: FreeSWITCH percent-encodes serialized-event values, so the stream
+is synchronized; the decoded bytes just aren't UTF-8 (a Latin-1 dialed string or
+caller name, say). A production consumer took the hard `InvalidUtf8InHeader` as
+non-recoverable, exited, and dragged a supervised sibling down with it — over one
+stray byte. So such values now decode lossily (U+FFFD) by default while the
+connection lives, and the affected keys plus their unparsed on-wire value ride
+back as *data* — `EslEvent::lossy_values()` for events, `EslResponse::lossy_values()`
+for command/connect replies — not a library log line or a collapsed `None`: the
+signal is inspectable, and the caller owns the warning and the PII call on the
+value. `strict_header_utf8` restores the old hard-fail; framing faults (missing
+`Content-Type`, no colon, oversize) stay fatal. Both paths need this: the
+outbound `connect` response is itself a serialized event
+(`switch_event_serialize(..., SWITCH_TRUE)`), so its channel-data values are
+percent-encoded and can carry the same non-UTF-8 bytes as an inbound event body —
+decoding is required on both, and so is the lossy carve-out.
 
 ## RFC 4575 conference-info XML namespace handling
 
