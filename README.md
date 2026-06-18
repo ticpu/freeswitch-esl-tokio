@@ -533,6 +533,13 @@ let direction = event.call_direction(); // Result<Option<CallDirection>, _>
 let cause = event.hangup_cause();       // Result<Option<HangupCause>, _>
 ```
 
+A header value that isn't valid UTF-8 after percent-decoding (e.g. a Latin-1
+byte in a dialed string) is decoded lossily (U+FFFD) by default rather than
+failing the event. The affected keys, with their unparsed on-wire value, are
+exposed as data on `event.lossy_values()` for the caller to log or recover --
+the library never logs them itself. Opt back into the old hard
+`InvalidUtf8InHeader` error with `EslConnectOptions::with_strict_header_utf8(true)`.
+
 ### Channel timetable
 
 Call lifecycle timestamps via `ChannelTimetable`:

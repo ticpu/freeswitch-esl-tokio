@@ -197,6 +197,17 @@ data. If a header is present but its value doesn't parse, that's a
 protocol violation — return `Err`, don't collapse it into `None` where
 it becomes indistinguishable from a missing header.
 
+## Warnings Ride as Data, Never as a Flag in `Result`
+
+Best-effort recovery (e.g. lossy UTF-8 decode) carries its signal as **data on
+the result type**, never a positional flag in the `Ok` payload, never a library
+log line. Thread a `&mut`-accumulator through parse helpers (`Option<&mut _>`
+folds strict-vs-lenient into one param: `None` = hard-error, `Some` = record);
+the `Ok` payload stays the pure value; warnings land on a named, `Display`-able
+type that keeps the **unparsed on-wire source** for the caller to re-decode.
+`LossyValues`/`LossyValue` on `EslEvent` is the reference example (cf. eido's
+`Parsed<T>`). `Err` stays for hard/structural failures only.
+
 ## Design Principles
 
 See [docs/design-rationale.md](docs/design-rationale.md) for the full
