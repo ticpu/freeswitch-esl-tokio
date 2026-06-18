@@ -176,6 +176,62 @@ async fn live_recv_custom_sendevent() {
     panic!("did not receive custom event with subclass {}", subclass);
 }
 
+/// End-to-end percent-decode against real FreeSWITCH: a header value with
+/// characters FS percent-encodes (space, `@`, and a multibyte UTF-8 char)
+/// must arrive decoded. Events delivered to ESL go through
+/// `switch_event_serialize(SWITCH_TRUE)`, so the value is `%20`/`%40`/`%C3%A9`
+/// on the wire and the parser must reconstruct the original. The lossy path
+/// (genuinely non-UTF-8 bytes) can't be exercised here because a Rust `&str`
+/// is always valid UTF-8 -- it stays unit-tested.
+#[tokio::test]
+#[ignore]
+async fn live_recv_custom_sendevent_percent_decoded() {
+    let (client, mut events, _permit) = connect().await;
+
+    let subclass = format!("esl_test::decode_{}", std::process::id());
+    let value = "Jean Dupont@héllo";
+
+    client
+        .subscribe_events_raw(EventFormat::Plain, &format!("CUSTOM {}", subclass))
+        .await
+        .unwrap();
+    let mut event = EslEvent::with_type(EslEventType::Custom);
+    event.set_header("Event-Name", "CUSTOM");
+    event.set_header("Event-Subclass", subclass.clone());
+    event.set_priority(EslEventPriority::Normal);
+    event.set_header("X-Decode-Test", value);
+
+    client
+        .sendevent(event)
+        .await
+        .unwrap();
+
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    while tokio::time::Instant::now() < deadline {
+        match tokio::time::timeout_at(deadline, events.recv()).await {
+            Ok(Some(Ok(evt))) => {
+                if evt.header(EventHeader::EventSubclass) == Some(subclass.as_str()) {
+                    assert_eq!(
+                        evt.header_str("X-Decode-Test"),
+                        Some(value),
+                        "FS percent-encodes the value on the wire; the parser must decode it"
+                    );
+                    assert!(
+                        evt.lossy_values()
+                            .is_empty(),
+                        "valid UTF-8 is not lossy"
+                    );
+                    return;
+                }
+            }
+            Ok(Some(Err(e))) => panic!("event error: {}", e),
+            Ok(None) => panic!("event stream closed"),
+            Err(_) => break,
+        }
+    }
+    panic!("did not receive custom event with subclass {}", subclass);
+}
+
 #[tokio::test]
 #[ignore]
 async fn live_api_multiple_commands() {
