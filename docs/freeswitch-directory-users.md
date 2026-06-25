@@ -62,6 +62,16 @@ Standard FreeSWITCH event types: `CHANNEL_CREATE`, `CHANNEL_DESTROY`, `CHANNEL_S
 
 Custom event subclasses from modules are also supported (see section below).
 
+**Long allow-lists corrupt the session.** mod_event_socket builds the
+`Allowed-Events` userauth response header in a fixed 512-byte buffer
+(`char event_reply[512]`). An allow-list whose names exceed that — roughly 25+
+event types, or fewer once CUSTOM subclasses like `sofia::gateway_state` are
+added — produces a truncated header that breaks the client's auth-response
+parsing and corrupts the stream. There is no per-list length check in
+FreeSWITCH. If a client needs that many events, omit `esl-allowed-events`
+entirely (the `all` default sends a short fixed header) and rely on the client's
+own `event ...` subscription to scope what it actually receives.
+
 #### esl-allowed-api
 
 Controls which API commands the user can execute.
@@ -93,6 +103,46 @@ Parameters can be set at three levels (in order of precedence, later overrides e
 1. Domain level (`<domain>` → `<params>`)
 2. Group level (`<group>` → `<params>`)
 3. User level (`<user>` → `<params>`)
+
+## A dedicated domain for ESL service users
+
+An ESL client authenticates as a directory user but never registers a SIP
+endpoint and never places calls through a domain's `dial-string`. Putting such a
+user in a real SIP domain couples it to things it does not use: its auth domain
+becomes a runtime variable (`$${domain}`), it inherits `dial-string` and presence
+params, and in multi-tenant setups its file sits among tenant user files.
+
+A standalone `system.local` domain avoids all of that. It has no `dial-string`,
+no groups, and no domain variable, so the service user has a stable auth domain
+(`user@system.local`) independent of whichever SIP domains the switch serves, and
+its files live in their own tree with their own permissions.
+
+`directory/system-local.xml` declares the domain and includes its users:
+
+```xml
+<include>
+    <domain name="system.local">
+        <users>
+            <X-PRE-PROCESS cmd="include" data="system.local/*.xml"/>
+        </users>
+    </domain>
+</include>
+```
+
+One file per user under `directory/system.local/`, e.g. `monitor.xml`:
+
+```xml
+<include>
+  <user id="monitor">
+    <params>
+      <param name="esl-password" value="..."/>
+      <param name="esl-allowed-api" value="show status uptime"/>
+      <param name="esl-allowed-events" value="CHANNEL_CREATE CHANNEL_ANSWER CHANNEL_HANGUP"/>
+      <param name="esl-allowed-log" value="false"/>
+    </params>
+  </user>
+</include>
+```
 
 ## Example Configurations
 
