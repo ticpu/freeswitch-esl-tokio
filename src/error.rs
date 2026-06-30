@@ -286,6 +286,20 @@ impl EslError {
             EslError::ReexecFailed { .. } => false,
         }
     }
+
+    /// `true` if a command was rejected for lack of permission
+    /// (`-ERR permission denied`).
+    ///
+    /// FreeSWITCH returns this when a restricted ESL user (e.g.
+    /// `esl-allowed-events` without `HEARTBEAT`, or an `esl-allowed-api`
+    /// gate) issues a command it is not authorized for. The denial is
+    /// recoverable: the connection stays usable, only the command failed.
+    /// Lets the caller distinguish "you may not do this" from a generic
+    /// command failure without matching `reply_text` by hand.
+    pub fn is_permission_denied(&self) -> bool {
+        matches!(self, EslError::CommandFailed { reply_text }
+            if reply_text.to_ascii_lowercase().contains("permission denied"))
+    }
 }
 
 #[cfg(test)]
