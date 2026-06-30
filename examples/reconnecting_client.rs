@@ -25,6 +25,10 @@ use tracing::{error, info, warn};
 const BACKOFF_INITIAL: Duration = Duration::from_secs(1);
 const BACKOFF_MAX: Duration = Duration::from_secs(30);
 
+/// Liveness threshold. Fed by HEARTBEAT (~20s) when we are allowed to
+/// subscribe; only enabled when that subscription succeeds.
+const LIVENESS_TIMEOUT: Duration = Duration::from_secs(60);
+
 /// sysexits.h EX_CONFIG -- systemd RestartPreventExitStatus=78 keeps the
 /// service down on permanent config errors.
 const EX_CONFIG: i32 = 78;
@@ -46,10 +50,11 @@ async fn main() {
 
     // Build the subscription once, reuse on every reconnection.
     // EventSubscription is pure data -- no connection state, safe to Clone.
+    // HEARTBEAT is subscribed separately in run_session (it gates the liveness
+    // timer and may be permission-denied) -- keep only functional events here.
     let subscription = EventSubscription::new(EventFormat::Plain)
         .event(EslEventType::ChannelAnswer)
-        .event(EslEventType::ChannelHangupComplete)
-        .event(EslEventType::Heartbeat);
+        .event(EslEventType::ChannelHangupComplete);
 
     let mut backoff = BACKOFF_INITIAL;
 
@@ -101,6 +106,24 @@ async fn run_session(
     client
         .apply_subscription(subscription)
         .await?;
+
+    // HEARTBEAT is the idle-traffic source for the liveness timer. The library
+    // never sends keepalives on its own, so without inbound traffic an idle
+    // socket cannot be kept alive. Subscribe to it on its own command (bundling
+    // it with the functional events above would let a denial sink the whole
+    // subscription). A permission-restricted user (esl-allowed-events without
+    // HEARTBEAT) gets -ERR permission denied here: recoverable, the connection
+    // stays up. Warn and run without idle-liveness rather than reconnect-looping.
+    match client
+        .subscribe_events(EventFormat::Plain, &[EslEventType::Heartbeat])
+        .await
+    {
+        Ok(()) => client.set_liveness_timeout(LIVENESS_TIMEOUT),
+        Err(e) if e.is_permission_denied() => {
+            warn!("heartbeat denied ({e}); idle-liveness disabled for this user");
+        }
+        Err(e) => return Err(e),
+    }
 
     while let Some(result) = events
         .recv()
