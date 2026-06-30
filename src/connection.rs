@@ -1844,9 +1844,22 @@ impl EslClient {
     /// Set liveness timeout. Any inbound TCP traffic resets the timer.
     /// Set to zero to disable (default).
     ///
-    /// Requires an active subscription to [`EslEventType::Heartbeat`] so
-    /// FreeSWITCH sends periodic traffic on idle connections. Without it,
-    /// the timer will expire and the connection will be closed.
+    /// The library never sends keepalives on its own -- the timer is fed only
+    /// by traffic the server pushes. On a busy connection, ordinary event
+    /// traffic keeps it alive. On an **idle** connection you must arrange the
+    /// traffic yourself, typically by subscribing to [`EslEventType::Heartbeat`]
+    /// (`subscribe_events(.., &[EslEventType::Heartbeat])`); FreeSWITCH then
+    /// emits a `HEARTBEAT` every ~20s.
+    ///
+    /// If that subscription is **denied** -- a permission-restricted user
+    /// (`esl-allowed-events` without `HEARTBEAT`) gets `-ERR permission denied`,
+    /// detectable via [`EslError::is_permission_denied`] -- the subscribe call
+    /// returns a recoverable error and the connection stays usable, but no
+    /// heartbeats arrive. Do not enable this timeout for such a connection, or
+    /// it will trip on idle while the socket is perfectly healthy. See
+    /// `examples/reconnecting_client.rs` for the gated pattern.
+    ///
+    /// [`EslError::is_permission_denied`]: crate::EslError::is_permission_denied
     pub fn set_liveness_timeout(&self, duration: Duration) {
         self.shared
             .liveness_timeout_ms
