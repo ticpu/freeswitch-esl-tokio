@@ -34,19 +34,24 @@ storing state.
 
 ## Liveness detection
 
-FreeSWITCH sends `HEARTBEAT` events every 20 seconds by default (configurable
-via `event-heartbeat-interval` in `switch.conf`). The library does not implement
-its own keepalive; instead it relies on the server's heartbeat as the
-idle-traffic source — the same approach the C ESL library takes.
+`set_liveness_timeout()` arms a threshold the reader trips
+(`Disconnected(HeartbeatExpired)`) when no inbound traffic arrives in time. The
+deliberate choice is that the library feeds this timer with nothing of its own:
+it sends no keepalive, ping, or `noop`. An internal keepalive was considered and
+rejected — it would put commands on the wire the caller never asked for, which
+spams the FreeSWITCH command log on every interval and breaks the rule that the
+caller owns and can account for every byte sent. Liveness therefore watches only
+server-pushed traffic; on idle connections the caller supplies it, conventionally
+by subscribing to `HEARTBEAT`.
 
-`set_liveness_timeout()` configures a threshold. Any inbound TCP traffic (not
-just heartbeats) resets the timer. If the threshold is exceeded, the reader task
-sets the connection status to `Disconnected(HeartbeatExpired)` and exits, which
-closes the event channel.
-
-The caller must subscribe to `HEARTBEAT` events for liveness detection to work
-on idle connections. On busy connections, regular event traffic keeps the timer
-alive.
+That subscription can be denied — a permission-restricted user
+(`esl-allowed-events` without `HEARTBEAT`) is rejected with `-ERR permission
+denied`, so no heartbeats arrive and an enabled timer would trip on a healthy
+idle socket. The denial is surfaced as recoverable data
+(`EslError::is_permission_denied()`, a `CommandFailed`, not a connection error)
+rather than worked around: the caller keeps the connection, warns, and declines
+to enable idle-liveness for that user. Whether an idle restricted connection is
+worth keeping is the caller's call to make, not the library's.
 
 ## Disconnection and reconnection
 
