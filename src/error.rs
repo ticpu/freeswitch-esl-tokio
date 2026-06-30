@@ -320,4 +320,37 @@ mod tests {
         };
         assert!(err.is_recoverable());
     }
+
+    #[test]
+    fn permission_denied_detected() {
+        for reply in [
+            "-ERR permission denied",
+            "-ERR Permission Denied",
+            "-ERR PERMISSION DENIED",
+        ] {
+            let err = EslError::CommandFailed {
+                reply_text: reply.into(),
+            };
+            assert!(err.is_permission_denied(), "should detect: {reply}");
+            assert!(err.is_recoverable());
+            assert!(!err.is_connection_error());
+        }
+    }
+
+    #[test]
+    fn other_command_failure_not_permission_denied() {
+        let err = EslError::CommandFailed {
+            reply_text: "-ERR no such command".into(),
+        };
+        assert!(!err.is_permission_denied());
+    }
+
+    #[test]
+    fn non_command_failure_not_permission_denied() {
+        assert!(!EslError::QueueFull.is_permission_denied());
+        assert!(!EslError::AccessDenied {
+            reason: "ACL".into()
+        }
+        .is_permission_denied());
+    }
 }

@@ -185,6 +185,59 @@ async fn test_command_after_disconnect() {
 }
 
 #[tokio::test]
+async fn test_subscribe_permission_denied_recoverable() {
+    let (mut mock, client, _events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
+
+    // Restricted user: FreeSWITCH rejects `event plain HEARTBEAT` with
+    // -ERR permission denied. The subscribe call must surface that as a
+    // recoverable error and leave the connection usable.
+    let subscribe_task = tokio::spawn({
+        let client = client.clone();
+        async move {
+            client
+                .subscribe_events(EventFormat::Plain, &[EslEventType::Heartbeat])
+                .await
+        }
+    });
+
+    let _cmd = mock
+        .read_command()
+        .await;
+    mock.reply_err("permission denied")
+        .await;
+
+    let err = subscribe_task
+        .await
+        .unwrap()
+        .expect_err("subscribe should fail");
+    assert!(err.is_permission_denied(), "got: {err}");
+    assert!(err.is_recoverable());
+    assert!(!err.is_connection_error());
+
+    // Connection stays up: a follow-up command on the same socket still works.
+    assert!(client.is_connected());
+    let api_task = tokio::spawn({
+        let client = client.clone();
+        async move {
+            client
+                .api("status")
+                .await
+        }
+    });
+    let cmd = mock
+        .read_command()
+        .await;
+    assert!(cmd.starts_with("api status"));
+    mock.reply_api("UP 0 years")
+        .await;
+    let resp = api_task
+        .await
+        .unwrap()
+        .expect("api should succeed");
+    assert_eq!(resp.body(), Some("UP 0 years"));
+}
+
+#[tokio::test]
 async fn test_liveness_expired() {
     let (_mock, client, mut events) = setup_connected_pair(DEFAULT_ESL_PASSWORD).await;
 
