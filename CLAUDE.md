@@ -180,6 +180,14 @@ without validation can inject arbitrary ESL commands. `to_wire_format()`
 validates all user-supplied fields and rejects `\n`/`\r`. See
 [docs/design-rationale.md](docs/design-rationale.md) for the full story.
 
+**Never autonomously send commands to the server.** The library puts a command
+on the wire only as the direct result of an explicit caller action. No internal
+keepalives, liveness pings, polls, or background `noop`/`api` traffic. The caller
+owns what hits the socket — every command is theirs to account for in the
+FreeSWITCH logs and the protocol's serial reply correlation. A convenience that
+would require the library to emit an unrequested command is rejected by design;
+surface the condition as data (a `Result`/status) and let the caller decide.
+
 ## Correctness Over Recovery
 
 Correctness is the highest priority. Never silently absorb protocol violations
