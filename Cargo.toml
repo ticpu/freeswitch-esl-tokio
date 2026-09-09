@@ -38,6 +38,9 @@ tracing = "0.1"
 futures-util = "0.3"
 
 [dev-dependencies]
+# Only outbound_ivr_supervised needs these; keeping them out of the library's
+# own feature list keeps them off every consumer's build.
+tokio = { version = "1.47", features = ["process", "io-std"] }
 tracing-subscriber = "0.3"
 nix = { version = "0.31", features = ["fs"] }
 serde = { version = "1.0", features = ["derive"] }
