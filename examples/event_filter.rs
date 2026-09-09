@@ -25,6 +25,7 @@ use freeswitch_esl_tokio::connection::{AuthMethod, EslConnectOptions};
 use freeswitch_esl_tokio::{
     EslClient, EslError, EslEventType, EventFormat, EventSubscription, HeaderLookup,
 };
+use std::time::Duration;
 
 fn print_usage() {
     eprintln!(
@@ -44,6 +45,13 @@ Filter Options:
   -f, --filter <HEADER>    Header name to filter on
   -v, --value <VALUE>      Value to match (use /regex/ for regex matching)
   -c, --max-count <N>      Exit after N matching events (default: run forever)
+  -U, --until <EVENT>      Exit once this arrives, however many came before it.
+      --until <HDR>=<VAL>  A bare word matches Event-Name; the Header=Value
+                           form reaches markers that are not event names.
+                           CHANNEL_DESTROY fires before the CHANNEL_STATE
+                           carrying CS_DESTROY and the final hangup cause, so
+                           the end of a call is Channel-State=CS_DESTROY.
+  -T, --timeout <SECS>     Exit if nothing matches for this long
 
 Output Options (default: every header, in a delimited block)
   -j, --json               One JSON object per event, body included
@@ -62,6 +70,9 @@ Examples:
 
   # Print the next 3 matching events then exit
   event_filter -e CHANNEL_CREATE -f Call-Direction -v inbound -c 3
+
+  # Follow one call to its end without knowing how many events that takes
+  event_filter -e ALL -f Unique-ID -v <uuid> -U Channel-State=CS_DESTROY -T 60
 
   # With userauth (user@domain format)
   event_filter -u admin@default -p secret -e ALL
@@ -89,6 +100,9 @@ struct Args {
     filter_header: Option<String>,
     filter_value: Option<String>,
     max_count: Option<usize>,
+    /// Header and value whose arrival ends the run.
+    until: Option<(String, String)>,
+    idle_timeout: Option<Duration>,
     json_output: bool,
     raw_output: bool,
     quiet: bool,
@@ -107,6 +121,8 @@ impl Args {
             filter_header: None,
             filter_value: None,
             max_count: None,
+            until: None,
+            idle_timeout: None,
             json_output: false,
             raw_output: false,
             quiet: false,
@@ -201,6 +217,31 @@ fn parse_args() -> Result<Args, String> {
                     return Err("--max-count must be at least 1".to_string());
                 }
                 result.max_count = Some(count);
+            }
+            "-U" | "--until" => {
+                i += 1;
+                let spec = args
+                    .get(i)
+                    .ok_or("Missing until value")?;
+                // A bare word is the common case and means an event name; the
+                // Header=Value form reaches the terminal markers that are not
+                // ones, such as Channel-State=CS_DESTROY.
+                result.until = Some(match spec.split_once('=') {
+                    Some((header, value)) => (header.to_string(), value.to_string()),
+                    None => ("Event-Name".to_string(), spec.to_uppercase()),
+                });
+            }
+            "-T" | "--timeout" => {
+                i += 1;
+                let secs: u64 = args
+                    .get(i)
+                    .ok_or("Missing timeout value")?
+                    .parse()
+                    .map_err(|_| "Invalid timeout: expected whole seconds")?;
+                if secs == 0 {
+                    return Err("--timeout must be at least 1 second".to_string());
+                }
+                result.idle_timeout = Some(Duration::from_secs(secs));
             }
             "-j" | "--json" => {
                 result.json_output = true;
@@ -383,18 +424,50 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .apply_subscription(&sub)
         .await?;
 
-    match args.max_count {
-        Some(n) => eprintln!("Listening for {} event(s)... (Ctrl+C to exit early)\n", n),
-        None => eprintln!("Listening for events... (Ctrl+C to exit)\n"),
+    // A terminal event that was never subscribed to can never arrive, so the
+    // run would sit until its timeout for a reason the flags already show.
+    if let Some((header, value)) = &args.until {
+        if header.eq_ignore_ascii_case("Event-Name")
+            && !args
+                .events
+                .iter()
+                .any(|e| e.eq_ignore_ascii_case(value) || e.eq_ignore_ascii_case("ALL"))
+        {
+            eprintln!("Warning: --until {value} is not among the subscribed events");
+        }
+    }
+
+    match (&args.max_count, &args.until) {
+        (_, Some((header, value))) => {
+            eprintln!("Listening until {header}={value}... (Ctrl+C to exit early)\n")
+        }
+        (Some(n), None) => eprintln!("Listening for {n} event(s)... (Ctrl+C to exit early)\n"),
+        (None, None) => eprintln!("Listening for events... (Ctrl+C to exit)\n"),
     }
 
     let mut matched = 0usize;
     let mut reached_max = false;
+    let mut saw_until = false;
+    let mut timed_out = false;
 
-    while let Some(result) = events
-        .recv()
-        .await
-    {
+    loop {
+        let next = match args.idle_timeout {
+            Some(limit) => match tokio::time::timeout(limit, events.recv()).await {
+                Ok(next) => next,
+                Err(_) => {
+                    timed_out = true;
+                    break;
+                }
+            },
+            None => {
+                events
+                    .recv()
+                    .await
+            }
+        };
+        let Some(result) = next else {
+            break;
+        };
         let event = match result {
             Ok(event) => event,
             Err(e) => {
@@ -416,6 +489,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("{output}");
 
         matched += 1;
+        if let Some((header, value)) = &args.until {
+            if event
+                .header_str(header)
+                .is_some_and(|found| found.eq_ignore_ascii_case(value))
+            {
+                saw_until = true;
+                break;
+            }
+        }
         if args
             .max_count
             .is_some_and(|max| matched >= max)
@@ -425,8 +507,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    if reached_max {
+    if saw_until {
+        eprintln!("Stopped on --until after {matched} event(s)");
+    } else if reached_max {
         eprintln!("Reached max count of {} event(s)", matched);
+    } else if timed_out {
+        eprintln!("Nothing matched for the timeout; saw {matched} event(s)");
     } else {
         eprintln!("Connection closed by server");
     }

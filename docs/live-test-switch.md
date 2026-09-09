@@ -166,10 +166,22 @@ last pair is what to reach for when the question is "what exactly did this
 event carry" — `-r` is the bytes, so nothing the library does can flatter or
 hide them.
 
-`-c N` exits after N matching events, and it exists so that waiting for a call
-to finish never means polling `show channels count` in a loop. Subscribe to the
-hangup as well as whatever you came for, count the events the call will emit,
-and let the process end on its own.
+To wait for a call to finish, use `-U` rather than `-c`, and never poll
+`show channels count` in a loop. A two-second `null/` call emits twenty-odd
+events, so the count a `-c` needs is not knowable in advance, and a guess that
+runs over hangs until something kills it.
+
+```sh
+cargo run --example event_filter -- -P 8022 -e ALL \
+  -f Unique-ID -v <uuid> -U Channel-State=CS_DESTROY -T 60
+```
+
+`-U` takes a bare event name or `Header=Value`, and the end of a call needs the
+second form: `CHANNEL_DESTROY` fires *before* the final `CHANNEL_STATE`, which
+is the one carrying CS_DESTROY and the settled hangup cause, so stopping on the
+event name truncates the run one event early. `-T` bounds a run whose marker
+never arrives. `-c N` remains the right tool when you want a fixed number of
+events and do not care what follows.
 
 For the switch's own log, `fs_cli --log-file -` streams it to stdout, and `-X`
 runs a command as a background job so the process stays alive to keep
