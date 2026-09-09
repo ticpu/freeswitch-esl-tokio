@@ -1804,6 +1804,86 @@ mod tests {
         );
     }
 
+    /// One quote survives an inline action list; a pair is read as quoting and
+    /// both are stripped, so the application receives a value the caller never
+    /// wrote. Measured on a live switch, both wrapped and bare.
+    #[test]
+    fn inline_refuses_an_argument_carrying_two_quotes() {
+        let err = Originate::inline(
+            null_endpoint(),
+            [Application::new(
+                "set",
+                Some("c=${cond('${v}' != '' ? red : black)}"),
+            )],
+        )
+        .unwrap_err();
+
+        assert!(matches!(
+            err,
+            OriginateError::UndeliverableArgument { ref application } if application == "set"
+        ));
+    }
+
+    #[test]
+    fn inline_allows_the_single_quote_that_does_arrive() {
+        Originate::inline(
+            null_endpoint(),
+            [Application::new("set", Some("greeting=it's_me"))],
+        )
+        .expect("one quote is deliverable");
+    }
+
+    #[test]
+    fn inline_with_delimiter_refuses_two_quotes_as_well() {
+        let err = Originate::inline_with_delimiter(
+            null_endpoint(),
+            [Application::new("playback", Some("a'b'c"))],
+            '|',
+        )
+        .unwrap_err();
+        assert!(matches!(err, OriginateError::UndeliverableArgument { .. }));
+    }
+
+    #[test]
+    fn undeliverable_argument_names_the_application_not_the_value() {
+        let msg = Originate::inline(
+            null_endpoint(),
+            [Application::new("set", Some("secret=a'b'c"))],
+        )
+        .unwrap_err()
+        .to_string();
+
+        assert!(
+            msg.contains("set"),
+            "message should name the application: {msg}"
+        );
+        assert!(!msg.contains("secret"), "message quoted its input: {msg}");
+        assert!(!msg.contains("a'b'c"), "message quoted its input: {msg}");
+    }
+
+    /// The constructors cannot see a value substituted afterwards, so the same
+    /// check has to be reachable at the point a caller is about to send.
+    #[test]
+    fn validate_inline_catches_a_value_introduced_after_construction() {
+        let mut cmd = Originate::inline(
+            null_endpoint(),
+            [Application::new("set", Some("c=${placeholder}"))],
+        )
+        .unwrap();
+        cmd.validate_inline()
+            .expect("clean at construction");
+
+        let OriginateTarget::InlineApplications(apps) = cmd.target_mut() else {
+            panic!("expected InlineApplications");
+        };
+        *apps[0].args_mut() = Some("c=${cond('x' != '' ? a : b)}".to_string());
+
+        assert!(matches!(
+            cmd.validate_inline(),
+            Err(OriginateError::UndeliverableArgument { .. })
+        ));
+    }
+
     #[test]
     fn parses_a_prefixed_inline_target() {
         let parsed: Originate = "originate loopback/9199 'm:|:answer|playback:a,b' inline"
