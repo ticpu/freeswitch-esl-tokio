@@ -190,6 +190,11 @@ correlate every event to its own channel UUID and reap the channels it created
 *before* asserting. See [docs/live-test-switch.md](docs/live-test-switch.md)
 for that and for what the switch must provide (dialplan, modules, users).
 
+To watch a switch by hand, use `event_listener` / `event_filter` and `fs_cli`,
+never a hand-rolled socket — `docs/live-test-switch.md` covers the flags. Both
+examples default to port 8021, so a live-switch run needs `-P 8022`; `fs_cli`
+needs nothing but that port, since host and password are already its defaults.
+
 ## Documentation Style
 
 All public items must have doc comments — the pre-commit hook enforces

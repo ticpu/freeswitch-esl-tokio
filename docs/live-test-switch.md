@@ -141,11 +141,47 @@ it cannot tell you that.
 ## Checking state by hand
 
 ```sh
-fs_cli -H 127.0.0.1 -P 8022 -p ClueCon -x "show channels count"
-fs_cli -H 127.0.0.1 -P 8022 -p ClueCon -x "fsctl sps"
-fs_cli -H 127.0.0.1 -P 8022 -p ClueCon -x "status"     # sessions per Sec out of max
-fs_cli -H 127.0.0.1 -P 8022 -p ClueCon -x "hupall NORMAL_CLEARING"
+fs_cli -P 8022 -x "show channels count"
+fs_cli -P 8022 -x "fsctl sps"
+fs_cli -P 8022 -x "status"     # sessions per Sec out of max
+fs_cli -P 8022 -x "hupall NORMAL_CLEARING"
 ```
 
 A clean switch reports `0 total.` before and after a suite run. Anything left
 behind is a test that failed to reap.
+
+## Watching events and logs by hand
+
+Use the crate's own examples rather than a hand-rolled socket. Both take
+`-P 8022`, since they default to the standard 8021:
+
+```sh
+cargo run --example event_listener -- -P 8022
+cargo run --example event_filter -- -P 8022 -e CHANNEL_EXECUTE_COMPLETE -f Unique-ID -v <uuid> -c 1
+```
+
+`event_filter` filters client-side on any header, takes `/regex/` values, and
+prints raw wire form with `-r` or one JSON object per event with `-j`. That
+last pair is what to reach for when the question is "what exactly did this
+event carry" — `-r` is the bytes, so nothing the library does can flatter or
+hide them.
+
+`-c N` exits after N matching events, and it exists so that waiting for a call
+to finish never means polling `show channels count` in a loop. Subscribe to the
+hangup as well as whatever you came for, count the events the call will emit,
+and let the process end on its own.
+
+For the switch's own log, `fs_cli --log-file -` streams it to stdout, and `-X`
+runs a command as a background job so the process stays alive to keep
+streaming; `--job-timeout <ms>` bounds that wait. A plain `-x` exits as soon as
+the command returns, which cuts the log off before anything interesting
+happens:
+
+```sh
+fs_cli -P 8022 -l debug --log-file - \
+  -X "originate null/probe &sleep(30000)" --job-timeout 35000
+```
+
+`-l` sets the level. Note that mod_logfile is not necessarily loaded, so
+`global_getvar log_dir` can name a directory that does not exist — the ESL log
+stream is the reliable source.

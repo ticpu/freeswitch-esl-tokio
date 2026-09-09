@@ -58,6 +58,26 @@ The `connect_session()` response confirms the mode via headers:
 - `Control: full` vs `Control: single-channel`
 - `Socket-Mode: async` vs `Socket-Mode: static`
 
+## In static mode a `sendmsg` reply is a completion, not an acknowledgement
+
+`socket_function` launches a listener thread only when `async` is present.
+Without it, `listener_run` is called inline, so `parse_command` runs
+`switch_ivr_parse_event` on the session thread and writes `+OK` only after the
+application has returned. A static-mode `sendmsg execute` therefore tells you
+the application *finished*, which an `async` one never does — there the private
+event is queued and `+OK` says only that.
+
+That is the mode's whole appeal for a sequential IVR, and it is also a trap for
+the client's command timeout. The default is five seconds, chosen for a
+protocol round trip; an application's duration is the caller's business and
+unbounded, and any real `play_and_get_digits` outlives it. Call
+`EslClient::set_command_timeout` with something that bounds the longest prompt
+before sending the first application.
+
+The library cannot pick that number itself: nothing on the wire says whether
+the socket application was started with `async`, so a default that suited one
+mode would be wrong for the other.
+
 ## Socket application arguments need quoting in originate
 
 FreeSWITCH's originate parser (`switch_separate_string`) splits on spaces.
