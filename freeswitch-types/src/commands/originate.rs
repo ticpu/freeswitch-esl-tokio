@@ -1536,4 +1536,132 @@ mod tests {
         assert_eq!(cmd.caller_id_number(), Some("5551234"));
         assert_eq!(cmd.timeout_seconds(), Some(30));
     }
+
+    fn null_endpoint() -> Endpoint {
+        Endpoint::Loopback(LoopbackEndpoint::new("9199"))
+    }
+
+    #[test]
+    fn inline_without_commas_keeps_the_default_separator() {
+        let cmd = Originate::inline(
+            null_endpoint(),
+            [
+                Application::simple("answer"),
+                Application::new("playback", Some("silence_stream://300")),
+            ],
+        )
+        .unwrap();
+
+        let rendered = cmd.to_string();
+        assert!(
+            !rendered.contains("m:"),
+            "no prefix belongs on a comma-free list: {rendered}"
+        );
+        assert!(rendered.contains("answer,playback:silence_stream://300"));
+        assert_eq!(cmd.inline_delimiter(), None);
+    }
+
+    /// A comma inside an argument would otherwise be read as an action
+    /// separator by `inline_dialplan_hunt`, producing applications the caller
+    /// never wrote and no error anywhere.
+    #[test]
+    fn inline_picks_another_separator_when_an_argument_holds_a_comma() {
+        let cmd = Originate::inline(
+            null_endpoint(),
+            [
+                Application::new("playback", Some("tone_stream://%(500,0,800)")),
+                Application::simple("park"),
+            ],
+        )
+        .unwrap();
+
+        let rendered = cmd.to_string();
+        assert!(
+            rendered.contains("m:|:"),
+            "expected an alternate separator: {rendered}"
+        );
+        assert!(rendered.contains("tone_stream://%(500,0,800)|park"));
+    }
+
+    #[test]
+    fn inline_alternate_separator_round_trips() {
+        let cmd = Originate::inline(
+            null_endpoint(),
+            [
+                Application::new("playback", Some("tone_stream://%(500,0,800)")),
+                Application::new("bridge", Some("{a=1,b=2}null/farend")),
+            ],
+        )
+        .unwrap();
+
+        let rendered = cmd.to_string();
+        let parsed: Originate = rendered
+            .parse()
+            .unwrap();
+        assert_eq!(parsed, cmd);
+        assert_eq!(parsed.to_string(), rendered);
+    }
+
+    #[test]
+    fn inline_with_delimiter_overrides_the_choice() {
+        let cmd = Originate::inline_with_delimiter(
+            null_endpoint(),
+            [Application::simple("answer"), Application::simple("park")],
+            ';',
+        )
+        .unwrap();
+
+        assert_eq!(cmd.inline_delimiter(), Some(';'));
+        assert!(cmd
+            .to_string()
+            .contains("m:;:answer;park"));
+    }
+
+    #[test]
+    fn inline_with_delimiter_rejects_colon() {
+        // `inline_dialplan_hunt` splits application from data on the first
+        // colon, so a colon separator cannot be recovered.
+        let err =
+            Originate::inline_with_delimiter(null_endpoint(), [Application::simple("park")], ':')
+                .unwrap_err();
+        assert!(matches!(err, OriginateError::InvalidInlineDelimiter(':')));
+    }
+
+    #[test]
+    fn inline_with_delimiter_rejects_one_that_appears_in_an_argument() {
+        let err = Originate::inline_with_delimiter(
+            null_endpoint(),
+            [Application::new("playback", Some("a|b"))],
+            '|',
+        )
+        .unwrap_err();
+        assert!(matches!(err, OriginateError::InvalidInlineDelimiter('|')));
+    }
+
+    #[test]
+    fn inline_reports_when_no_separator_is_available() {
+        let hostile: String = INLINE_DELIMITERS
+            .iter()
+            .collect();
+        let err = Originate::inline(
+            null_endpoint(),
+            [Application::new("playback", Some(&hostile))],
+        )
+        .unwrap_err();
+        assert!(matches!(err, OriginateError::NoInlineDelimiter));
+    }
+
+    #[test]
+    fn parses_a_prefixed_inline_target() {
+        let parsed: Originate = "originate null/probe 'm:|:answer|playback:a,b' inline"
+            .parse()
+            .unwrap();
+
+        assert_eq!(parsed.inline_delimiter(), Some('|'));
+        let OriginateTarget::InlineApplications(ref apps) = parsed.target() else {
+            panic!("expected InlineApplications");
+        };
+        assert_eq!(apps.len(), 2);
+        assert_eq!(apps[1].args(), Some("a,b"));
+    }
 }
