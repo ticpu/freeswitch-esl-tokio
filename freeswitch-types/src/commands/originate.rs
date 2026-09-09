@@ -26,6 +26,32 @@ pub(super) const DEFAULT_CONTEXT: &str = "default";
 /// The separator an inline action list uses unless one is named.
 pub(super) const DEFAULT_INLINE_DELIMITER: char = ',';
 
+/// Reject an application whose arguments an inline action list cannot carry.
+///
+/// One single quote arrives intact, escaped or not. A second is read as the
+/// close of a quoted region, so `cleanup_separated_string` strips both and the
+/// application receives a value with the quotes silently missing — which is how
+/// `${cond('${v}' != '' ? a : b)}` reaches `cond` with no operands and returns
+/// `-ERR` into a channel variable. No escape count avoids it: the characters
+/// are read as quoting rather than as an escape sequence.
+fn check_deliverable(apps: &[Application]) -> Result<(), OriginateError> {
+    for app in apps {
+        let quotes = app
+            .args()
+            .unwrap_or_default()
+            .matches('\'')
+            .count();
+        if quotes > 1 {
+            return Err(OriginateError::UndeliverableArgument {
+                application: app
+                    .name()
+                    .to_string(),
+            });
+        }
+    }
+    Ok(())
+}
+
 /// Render `apps` as one inline action list, escaping the separator wherever it
 /// occurs inside an application.
 ///
@@ -352,7 +378,10 @@ impl Originate {
     /// [`target_mut`](Self::target_mut), or by substituting into a template —
     /// cannot leave the command inconsistent.
     ///
-    /// Returns `Err` if the iterator yields no applications.
+    /// Returns `Err` if the iterator yields no applications, or if one carries
+    /// an argument an inline action list cannot deliver — see
+    /// [`validate_inline`](Self::validate_inline), which is the same check and
+    /// is what to call after substituting into an argument.
     pub fn inline(
         endpoint: Endpoint,
         apps: impl IntoIterator<Item = Application>,
@@ -363,6 +392,7 @@ impl Originate {
         if apps.is_empty() {
             return Err(OriginateError::EmptyInlineApplications);
         }
+        check_deliverable(&apps)?;
         Ok(Self {
             endpoint,
             target: OriginateTarget::InlineApplications(apps),
@@ -402,6 +432,7 @@ impl Originate {
         if delimiter == ':' || delimiter == '\\' || !delimiter.is_ascii() {
             return Err(OriginateError::InvalidInlineDelimiter(delimiter));
         }
+        check_deliverable(&apps)?;
         Ok(Self {
             endpoint,
             target: OriginateTarget::InlineApplications(apps),
@@ -419,6 +450,23 @@ impl Originate {
     /// `None` for the conventional comma.
     pub fn inline_delimiter(&self) -> Option<char> {
         self.inline_delimiter
+    }
+
+    /// Re-check that every inline argument is one the switch can deliver.
+    ///
+    /// The constructors run this, but they only see the arguments they were
+    /// given. Call it again after rewriting one — through
+    /// [`args_mut`](Application::args_mut), through [`target_mut`](Self::target_mut),
+    /// or by substituting a rendered value into a template — because the
+    /// substituted text is where an undeliverable value appears without anyone
+    /// having written it.
+    ///
+    /// A non-inline target is always deliverable, so this is `Ok` for one.
+    pub fn validate_inline(&self) -> Result<(), OriginateError> {
+        match &self.target {
+            OriginateTarget::InlineApplications(apps) => check_deliverable(apps),
+            _ => Ok(()),
+        }
     }
 
     /// Set the dialplan type.
@@ -756,6 +804,12 @@ pub enum OriginateError {
     UnknownEndpointType(String),
     /// The requested inline separator cannot separate a list at all. Carries it.
     InvalidInlineDelimiter(char),
+    /// An inline argument carries more than one single quote, which the switch
+    /// strips as quoting rather than delivering. Names the application.
+    UndeliverableArgument {
+        /// The application whose arguments cannot be delivered.
+        application: String,
+    },
 }
 
 impl std::fmt::Display for OriginateError {
@@ -790,6 +844,12 @@ impl std::fmt::Display for OriginateError {
             Self::InvalidInlineDelimiter(delimiter) => {
                 write!(f, "{delimiter:?} cannot separate this inline action list")
             }
+            Self::UndeliverableArgument { application } => write!(
+                f,
+                "the {application} argument carries more than one single quote, \
+                 which an inline action list strips as quoting rather than \
+                 delivering; no escaping avoids it"
+            ),
             Self::UnknownEndpointType(s) => {
                 write!(f, "unknown endpoint type ({} bytes)", s.len())
             }
@@ -809,7 +869,8 @@ impl std::error::Error for OriginateError {
             | Self::ExtensionWithInlineDialplan
             | Self::VariablesNotSupported(_)
             | Self::UnknownEndpointType(_)
-            | Self::InvalidInlineDelimiter(_) => None,
+            | Self::InvalidInlineDelimiter(_)
+            | Self::UndeliverableArgument { .. } => None,
         }
     }
 }

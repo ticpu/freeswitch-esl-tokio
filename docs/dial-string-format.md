@@ -225,6 +225,46 @@ carriers:
   block early and the remainder becomes dial-string text. A balanced pair such
   as `${var}` is fine and ordinary.
 
+### The inline action list is a third carrier
+
+Everything above concerns a `{k=v}` block. An inline action list —
+`app:args,app:args` with the `inline` dialplan — is parsed by
+`inline_dialplan_hunt` rather than by the block tokenizer, and its rules are its
+own. All of the following were measured on a live switch.
+
+**The separator is escaped, not chosen.** A bare comma inside an argument ends
+the action, so the switch builds and runs applications nobody wrote and logs
+nothing. One backslash is enough, because `cleanup_separated_string` unescapes a
+character only when it is the delimiter of the split being cleaned up after: the
+originate line is split on spaces first, where `\,` is left alone, then the
+action list is split on its own separator, where the same `\,` becomes a comma.
+`Originate::inline` emits this.
+
+An `m:<delim>:` prefix immediately before the first action changes the separator
+for the list, the way `^^` does for a block. It is consumed by the hunt, so
+nothing of it survives into the extension — a masquerade onto another channel
+carries the actions, never the prefix. `Originate::inline_with_delimiter` emits
+it, and escapes the named separator the same way.
+
+**One single quote arrives; a pair does not.** With the list wrapped in quotes —
+which happens whenever any argument contains a space — a bare quote loses the
+value entirely and `\'` delivers it. Unwrapped, both forms deliver it. A second
+quote in the same value is read as closing a quoted region, so both are stripped
+and the application receives the value with them missing:
+
+```
+set:v=a\'b with space     -> a'b with space
+set:v=x\'a\'y with space  -> xay with space
+```
+
+No escape count avoids the second case; the characters are read as quoting
+rather than as an escape sequence. This is what breaks a rendered
+`${cond('${x}' != '' ? a : b)}`: `cond` receives no operands and returns `-ERR`
+into the channel variable, which then rides out on the wire. `Originate::inline`
+refuses an argument carrying more than one quote for that reason, and
+`Originate::validate_inline` re-runs the check after a value has been
+substituted into an argument.
+
 ### `^^X` block separator
 
 Placed **immediately after the opening bracket**, `^^` and a replacement

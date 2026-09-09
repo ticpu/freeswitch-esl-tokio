@@ -154,6 +154,32 @@ async fn live_inline_argument_keeps_a_hostile_value() {
     );
 }
 
+/// The boundary the builder's refusal is drawn at: one quote arrives, so
+/// refusing it would be over-strict. A second is stripped, which is why two are
+/// refused — that half cannot be asserted here, because the builder will not
+/// produce the command that would demonstrate it.
+///
+/// The argument carries a space so the action list is wrapped in quotes, which
+/// is the case where the escaping is load-bearing rather than incidental.
+#[tokio::test]
+#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+async fn live_inline_argument_keeps_a_single_quote() {
+    let value = "it's one value";
+    let cmd = Originate::inline(
+        parked_loopback(),
+        [
+            Application::new("set", Some(format!("probe_quote={value}"))),
+            Application::park(),
+        ],
+    )
+    .expect("one quote is deliverable and must not be refused");
+
+    assert_eq!(
+        run_and_read_back(&cmd, "probe_quote").await,
+        Some(value.to_string())
+    );
+}
+
 /// An argument rewritten after construction still renders correctly, which is
 /// the property that separator selection could not offer.
 #[tokio::test]
