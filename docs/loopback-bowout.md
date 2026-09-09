@@ -91,26 +91,37 @@ and are not.
 ## The caller profile rides along too
 
 On the execute-time path the resigning leg's caller profile is cloned onto the
-survivor. Every `Caller-*` event header is generated from the caller profile, so after
-a bowout the surviving real channel reports the *loopback leg's* channel name, unique
-ID and source under those headers.
+survivor, and every `Caller-*` event header is generated from the caller profile. But
+the clone is not copied verbatim: `switch_channel_set_caller_profile` overwrites `uuid`
+and `chan_name` with the target channel's own whenever they differ, and
+`switch_channel_caller_extension_masquerade` then clones what is by that point the
+*new* channel's profile, carrying only `destination_number` across from the old one.
 
-Consequences worth stating plainly:
+So the profile's identity fields are corrected and its descriptive fields are not:
 
-- `Caller-Channel-Name` on a real channel can read `loopback/...`.
-- `Caller-Unique-ID` can name a leg that is gone, so correlating on it attributes a
-  live channel's events to a dead one.
-- `Caller-Source` names mod_loopback, which is why it does not answer "which module
-  owns this channel" either.
+- `Caller-Unique-ID` and `Caller-Channel-Name` describe the survivor, truthfully. They
+  are not a trap, but they are not evidence either — they only ever repeat `Unique-ID`
+  and `Channel-Name`.
+- `Caller-Source` names mod_loopback on a channel mod_sofia owns, so it does not answer
+  "which module owns this channel".
+- `Caller-Destination-Number` is whatever the loopback leg was dialled with, not the
+  survivor's own destination.
+- The caller ID fields are the loopback leg's throughout.
 
-The channel's own `Channel-Name` is not part of the caller profile and stays truthful.
+Channel *variables* are the opposite way round, because the masquerade copies them
+wholesale with no such fixup. On the survivor `uuid` still reads the resigned leg's
+identifier and `read_codec` reports what the loopback spoke rather than what the
+channel negotiated. Read identity from `Unique-ID`, codecs from
+`Channel-Read-Codec-Name`, and treat any `variable_*` on a survivor as describing the
+leg that left until proven otherwise.
 
 ## What is safe to key on
 
 - **Resignation happened:** the presence of the marker variable, never its value.
 - **This channel is a loopback:** the channel's own name. Not a variable, not any
   `Caller-*` field.
-- **Which channel continues the call:** `loopback_bowout_other_uuid`. Not `${uuid}`,
+- **Which channel continues the call:** `Acquired-UUID` on the `loopback::bowout`
+  event, or `loopback_bowout_other_uuid` if you are reading variables. Not `${uuid}`,
   which on the survivor still reads the resigned leg's identifier.
 
 The first two are only conclusive together. A marker on a channel whose name is not a
@@ -125,6 +136,20 @@ the session. On the frame-count path the bridge comes first.
 
 So any rule of the form "the bowout happens after X" is wrong on one of the two paths.
 Re-anchor when the marker arrives, and accept a late `+OK` afterwards.
+
+There is one ordering the switch does guarantee, and it is the useful one. On the
+execute-time path mod_loopback fires a CUSTOM `loopback::bowout` before it clones the
+caller profile, before the masquerade and before the resigning leg hangs up — same
+thread, in that order. It carries `Resigning-UUID`, `Resigning-Peer-UUID` and
+`Acquired-UUID`, so a consumer learns the surviving channel without waiting for a
+hangup or reading a variable off a channel it has not identified yet. `Resigning-UUID`
+is the value an `originate` returned, which is what ties the two together.
+
+The frame-count path has a counterpart, `loopback::direct`, carrying
+`Connecting-Leg-A-UUID` and `Connecting-Leg-B-UUID` — but only when
+`fire-bowout-on-bridge` is enabled in `loopback.conf.xml`, which is off by default.
+Neither event carries a `unique-id`, so a connection filtering on one will not receive
+them.
 
 ## Direction is positional
 
