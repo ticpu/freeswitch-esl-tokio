@@ -35,6 +35,8 @@ pub use originate::{
 };
 pub use variables::{DialStringCarrier, VariablesDisplay};
 
+use originate::DEFAULT_INLINE_DELIMITER;
+
 /// Find the index of the closing bracket matching the opener at position 0.
 ///
 /// Tracks nesting depth so that inner pairs of the same bracket type are
@@ -173,6 +175,36 @@ pub(crate) fn split_inline_prefix(s: &str) -> (Option<char>, &str) {
     }
 }
 
+/// Split an inline action list on unescaped separators, unescaping the escaped
+/// ones as `cleanup_separated_string` would.
+fn split_inline_actions(s: &str, delimiter: char) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    let mut chars = s.chars();
+
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            match chars.next() {
+                // Only the separator is unescaped here, matching a cleanup
+                // whose delim is this one; anything else keeps its backslash.
+                Some(next) if next == delimiter => current.push(next),
+                Some(next) => {
+                    current.push(ch);
+                    current.push(next);
+                }
+                None => current.push(ch),
+            }
+        } else if ch == delimiter {
+            parts.push(std::mem::take(&mut current));
+        } else {
+            current.push(ch);
+        }
+    }
+    parts.push(current);
+
+    parts
+}
+
 /// Parse the target argument of an originate command.
 ///
 /// Determines whether the target is a dialplan extension or application(s):
@@ -186,8 +218,9 @@ pub fn parse_originate_target(
 ) -> Result<OriginateTarget, OriginateError> {
     if matches!(dialplan, Some(DialplanType::Inline)) {
         let (delimiter, s) = split_inline_prefix(s);
+        let delimiter = delimiter.unwrap_or(DEFAULT_INLINE_DELIMITER);
         let mut apps = Vec::new();
-        for part in originate_split(s, delimiter.unwrap_or(','))? {
+        for part in split_inline_actions(s, delimiter) {
             let (name, args) = match part.split_once(':') {
                 Some((n, "")) => (n, None),
                 Some((n, a)) => (n, Some(a)),
