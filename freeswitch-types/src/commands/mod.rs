@@ -159,9 +159,24 @@ pub fn originate_split(line: &str, split_at: char) -> Result<Vec<String>, Origin
     Ok(tokens)
 }
 
+/// Split an `m:<delim>:` prefix off an inline action list.
+///
+/// `inline_dialplan_hunt` reads exactly four bytes for this, so anything longer
+/// or shorter is part of the first application rather than a prefix.
+pub(crate) fn split_inline_prefix(s: &str) -> (Option<char>, &str) {
+    let bytes = s.as_bytes();
+    match bytes {
+        [b'm', b':', delimiter, b':', ..] if delimiter.is_ascii() && *delimiter != b':' => {
+            (Some(*delimiter as char), &s[4..])
+        }
+        _ => (None, s),
+    }
+}
+
 /// Parse the target argument of an originate command.
 ///
 /// Determines whether the target is a dialplan extension or application(s):
+///
 /// - If dialplan is `Inline`: parse as inline apps → `InlineApplications`
 /// - If string starts with `&`: parse as XML app → `Application`
 /// - Otherwise: bare string → `Extension`
@@ -170,8 +185,9 @@ pub fn parse_originate_target(
     dialplan: Option<&DialplanType>,
 ) -> Result<OriginateTarget, OriginateError> {
     if matches!(dialplan, Some(DialplanType::Inline)) {
+        let (delimiter, s) = split_inline_prefix(s);
         let mut apps = Vec::new();
-        for part in originate_split(s, ',')? {
+        for part in originate_split(s, delimiter.unwrap_or(','))? {
             let (name, args) = match part.split_once(':') {
                 Some((n, "")) => (n, None),
                 Some((n, a)) => (n, Some(a)),

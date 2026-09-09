@@ -23,6 +23,40 @@ const UNDEF: &str = "undef";
 /// positional argument forces the slot to be present.
 pub(super) const DEFAULT_CONTEXT: &str = "default";
 
+/// Separators an inline action list may be built with, most conventional
+/// first. `:` is absent deliberately: `inline_dialplan_hunt` splits an
+/// application from its data on the first colon, so a colon separator cannot
+/// be recovered on the far side.
+pub(super) const INLINE_DELIMITERS: [char; 6] = [',', '|', ';', '~', '^', '!'];
+
+/// The first separator that appears in none of the rendered applications.
+fn choose_inline_delimiter(rendered: &[String]) -> Option<char> {
+    INLINE_DELIMITERS
+        .into_iter()
+        .find(|candidate| {
+            !rendered
+                .iter()
+                .any(|part| part.contains(*candidate))
+        })
+}
+
+/// Applications as the inline dialplan will see them, one string each.
+fn render_inline(apps: &[Application]) -> Vec<String> {
+    apps.iter()
+        .map(|app| app.to_string_with_dialplan(&DialplanType::Inline))
+        .collect()
+}
+
+/// Pick a separator for `apps`, `None` meaning the conventional comma needs no
+/// `m:<delim>:` prefix.
+fn inline_delimiter_for(apps: &[Application]) -> Result<Option<char>, OriginateError> {
+    match choose_inline_delimiter(&render_inline(apps)) {
+        Some(',') => Ok(None),
+        Some(other) => Ok(Some(other)),
+        None => Err(OriginateError::NoInlineDelimiter),
+    }
+}
+
 /// FreeSWITCH dialplan type for originate commands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -200,6 +234,9 @@ pub struct Originate {
     cid_name: Option<String>,
     cid_num: Option<String>,
     timeout: Option<Duration>,
+    /// `None` renders the conventional comma-separated list; `Some` prefixes
+    /// the target with `m:<delim>:` so the hunt splits on that instead.
+    inline_delimiter: Option<char>,
 }
 
 #[cfg(feature = "serde")]
@@ -238,6 +275,13 @@ mod serde_support {
                     return Err(OriginateError::EmptyInlineApplications);
                 }
             }
+            // A deserialized action list gets the same separator protection as
+            // one built through the constructor, since the arguments in a
+            // config file are exactly where a stray comma hides.
+            let inline_delimiter = match raw.target {
+                OriginateTarget::InlineApplications(ref apps) => inline_delimiter_for(apps)?,
+                _ => None,
+            };
             Ok(Self {
                 endpoint: raw.endpoint,
                 target: raw.target,
@@ -248,6 +292,7 @@ mod serde_support {
                 timeout: raw
                     .timeout_secs
                     .map(Duration::from_secs),
+                inline_delimiter,
             })
         }
     }
@@ -293,6 +338,7 @@ impl Originate {
             cid_name: None,
             cid_num: None,
             timeout: None,
+            inline_delimiter: None,
         }
     }
 
@@ -306,12 +352,22 @@ impl Originate {
             cid_name: None,
             cid_num: None,
             timeout: None,
+            inline_delimiter: None,
         }
     }
 
     /// Execute inline applications on the answered channel.
     ///
-    /// Returns `Err` if the iterator yields no applications.
+    /// The separator is chosen for you. FreeSWITCH's inline dialplan splits the
+    /// action list on `,` by default, so an argument carrying one — a
+    /// `tone_stream://%(500,0,800)` spec, a `{a=1,b=2}` block on a bridge
+    /// target — would be read as an action boundary and silently become
+    /// applications nobody wrote. Where that would happen this picks a
+    /// separator none of the arguments contain and emits the `m:<delim>:`
+    /// prefix that selects it.
+    ///
+    /// Returns `Err` if the iterator yields no applications, or if every
+    /// candidate separator appears in the arguments.
     pub fn inline(
         endpoint: Endpoint,
         apps: impl IntoIterator<Item = Application>,
@@ -322,6 +378,7 @@ impl Originate {
         if apps.is_empty() {
             return Err(OriginateError::EmptyInlineApplications);
         }
+        let inline_delimiter = inline_delimiter_for(&apps)?;
         Ok(Self {
             endpoint,
             target: OriginateTarget::InlineApplications(apps),
@@ -330,7 +387,56 @@ impl Originate {
             cid_name: None,
             cid_num: None,
             timeout: None,
+            inline_delimiter,
         })
+    }
+
+    /// Execute inline applications, naming the separator yourself.
+    ///
+    /// Prefer [`Originate::inline`], which chooses one. Reach for this when the
+    /// exact wire form matters — matching a command a switch already logged, or
+    /// keeping a separator stable across a config that gets diffed.
+    ///
+    /// Returns `Err` if the iterator yields no applications, or if `delimiter`
+    /// cannot separate this list: `:` never can, because the hunt splits an
+    /// application from its data on the first colon, and neither can a
+    /// character one of the arguments already contains.
+    pub fn inline_with_delimiter(
+        endpoint: Endpoint,
+        apps: impl IntoIterator<Item = Application>,
+        delimiter: char,
+    ) -> Result<Self, OriginateError> {
+        let apps: Vec<Application> = apps
+            .into_iter()
+            .collect();
+        if apps.is_empty() {
+            return Err(OriginateError::EmptyInlineApplications);
+        }
+        if delimiter == ':'
+            || !delimiter.is_ascii()
+            || render_inline(&apps)
+                .iter()
+                .any(|part| part.contains(delimiter))
+        {
+            return Err(OriginateError::InvalidInlineDelimiter(delimiter));
+        }
+        Ok(Self {
+            endpoint,
+            target: OriginateTarget::InlineApplications(apps),
+            dialplan: None,
+            context: None,
+            cid_name: None,
+            cid_num: None,
+            timeout: None,
+            // The comma needs no prefix, so asking for it is asking for the default.
+            inline_delimiter: (delimiter != ',').then_some(delimiter),
+        })
+    }
+
+    /// The separator this command renders its inline action list with, or
+    /// `None` for the conventional comma.
+    pub fn inline_delimiter(&self) -> Option<char> {
+        self.inline_delimiter
     }
 
     /// Set the dialplan type.
@@ -516,11 +622,13 @@ impl fmt::Display for Originate {
             OriginateTarget::Application(app) => app.to_string_with_dialplan(&DialplanType::Xml),
             OriginateTarget::InlineApplications(apps) => {
                 // Constructor guarantees non-empty
-                let parts: Vec<String> = apps
-                    .iter()
-                    .map(|a| a.to_string_with_dialplan(&DialplanType::Inline))
-                    .collect();
-                parts.join(",")
+                let parts = render_inline(apps);
+                match self.inline_delimiter {
+                    Some(delimiter) => {
+                        format!("m:{delimiter}:{}", parts.join(&delimiter.to_string()))
+                    }
+                    None => parts.join(","),
+                }
             }
         };
 
@@ -602,6 +710,11 @@ impl FromStr for Originate {
             OriginateTarget::Application(ref app) => Self::application(endpoint, app.clone()),
             OriginateTarget::InlineApplications(ref apps) => Self::inline(endpoint, apps.clone())?,
         };
+        // Keep what was on the wire rather than what the constructor would have
+        // chosen, so a parsed command renders back byte for byte.
+        if matches!(orig.target, OriginateTarget::InlineApplications(_)) {
+            orig.inline_delimiter = super::split_inline_prefix(&target_str).0;
+        }
         orig.dialplan = dialplan;
         orig.context = context;
         orig.cid_name = cid_name;
@@ -660,6 +773,11 @@ pub enum OriginateError {
     },
     /// A dial string whose leading path segment names no endpoint type.
     UnknownEndpointType(String),
+    /// Every candidate separator appears in the inline arguments, so no action
+    /// list can be written that the hunt would split correctly.
+    NoInlineDelimiter,
+    /// The requested inline separator cannot separate this list. Carries it.
+    InvalidInlineDelimiter(char),
 }
 
 impl std::fmt::Display for OriginateError {
@@ -691,6 +809,12 @@ impl std::fmt::Display for OriginateError {
             Self::UnknownGroupCallOrder { value, .. } => {
                 write!(f, "unknown group_call order suffix ({} bytes)", value.len())
             }
+            Self::NoInlineDelimiter => {
+                f.write_str("every candidate inline separator appears in the application arguments")
+            }
+            Self::InvalidInlineDelimiter(delimiter) => {
+                write!(f, "{delimiter:?} cannot separate this inline action list")
+            }
             Self::UnknownEndpointType(s) => {
                 write!(f, "unknown endpoint type ({} bytes)", s.len())
             }
@@ -709,7 +833,9 @@ impl std::error::Error for OriginateError {
             | Self::EmptyInlineApplications
             | Self::ExtensionWithInlineDialplan
             | Self::VariablesNotSupported(_)
-            | Self::UnknownEndpointType(_) => None,
+            | Self::UnknownEndpointType(_)
+            | Self::NoInlineDelimiter
+            | Self::InvalidInlineDelimiter(_) => None,
         }
     }
 }
@@ -1174,6 +1300,32 @@ mod tests {
             .contains("inline"));
     }
 
+    /// A config file states applications as structured data, so it carries no
+    /// separator to get wrong — and must not have to grow one.
+    #[test]
+    fn serde_inline_gets_a_separator_without_naming_one() {
+        let json = r#"{
+            "endpoint": {"sofia": {"profile": "internal", "destination": "123@example.com"}},
+            "inline_applications": [
+                {"name": "playback", "args": "tone_stream://%(500,0,800)"},
+                {"name": "park"}
+            ]
+        }"#;
+        let orig: Originate = serde_json::from_str(json).unwrap();
+
+        assert_eq!(orig.inline_delimiter(), Some('|'));
+        assert!(orig
+            .to_string()
+            .contains("m:|:playback:tone_stream://%(500,0,800)|park"));
+
+        // Serializing back must not introduce a separator field the source
+        // never had.
+        let round_tripped = serde_json::to_string(&orig).unwrap();
+        assert!(!round_tripped.contains("delimiter"));
+        let reparsed: Originate = serde_json::from_str(&round_tripped).unwrap();
+        assert_eq!(reparsed.to_string(), orig.to_string());
+    }
+
     #[test]
     fn serde_originate_skips_none_fields() {
         let ep = Endpoint::Sofia(SofiaEndpoint {
@@ -1552,12 +1704,10 @@ mod tests {
         )
         .unwrap();
 
-        let rendered = cmd.to_string();
-        assert!(
-            !rendered.contains("m:"),
-            "no prefix belongs on a comma-free list: {rendered}"
+        assert_eq!(
+            cmd.to_string(),
+            "originate loopback/9199 answer,playback:silence_stream://300 inline"
         );
-        assert!(rendered.contains("answer,playback:silence_stream://300"));
         assert_eq!(cmd.inline_delimiter(), None);
     }
 
@@ -1598,8 +1748,9 @@ mod tests {
         let parsed: Originate = rendered
             .parse()
             .unwrap();
-        assert_eq!(parsed, cmd);
         assert_eq!(parsed.to_string(), rendered);
+        assert_eq!(parsed.target(), cmd.target());
+        assert_eq!(parsed.inline_delimiter(), Some('|'));
     }
 
     #[test]
@@ -1653,7 +1804,7 @@ mod tests {
 
     #[test]
     fn parses_a_prefixed_inline_target() {
-        let parsed: Originate = "originate null/probe 'm:|:answer|playback:a,b' inline"
+        let parsed: Originate = "originate loopback/9199 'm:|:answer|playback:a,b' inline"
             .parse()
             .unwrap();
 
