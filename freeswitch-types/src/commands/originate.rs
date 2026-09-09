@@ -1711,11 +1711,12 @@ mod tests {
         assert_eq!(cmd.inline_delimiter(), None);
     }
 
-    /// A comma inside an argument would otherwise be read as an action
-    /// separator by `inline_dialplan_hunt`, producing applications the caller
-    /// never wrote and no error anywhere.
+    /// A bare comma inside an argument is read as an action separator by
+    /// `inline_dialplan_hunt`, producing applications the caller never wrote
+    /// and no error anywhere. Escaping it is what the switch's own
+    /// `cleanup_separated_string` undoes on the far side.
     #[test]
-    fn inline_picks_another_separator_when_an_argument_holds_a_comma() {
+    fn inline_escapes_a_separator_inside_an_argument() {
         let cmd = Originate::inline(
             null_endpoint(),
             [
@@ -1725,16 +1726,35 @@ mod tests {
         )
         .unwrap();
 
-        let rendered = cmd.to_string();
-        assert!(
-            rendered.contains("m:|:"),
-            "expected an alternate separator: {rendered}"
+        assert_eq!(
+            cmd.to_string(),
+            "originate loopback/9199 'playback:tone_stream://%(500\\,0\\,800),park' inline"
         );
-        assert!(rendered.contains("tone_stream://%(500,0,800)|park"));
+    }
+
+    /// The whole point of escaping over separator juggling: an argument
+    /// rewritten after construction cannot invalidate anything, because
+    /// nothing was decided at construction.
+    #[test]
+    fn escaping_survives_arguments_rewritten_after_construction() {
+        let mut cmd = Originate::inline(
+            null_endpoint(),
+            [Application::new("bridge", Some("${codecs}sofia/gw/1"))],
+        )
+        .unwrap();
+
+        let OriginateTarget::InlineApplications(apps) = cmd.target_mut() else {
+            panic!("expected InlineApplications");
+        };
+        *apps[0].args_mut() = Some("{absolute_codec_string=G722,PCMU}sofia/gw/1".to_string());
+
+        assert!(cmd
+            .to_string()
+            .contains("G722\\,PCMU"));
     }
 
     #[test]
-    fn inline_alternate_separator_round_trips() {
+    fn inline_escaped_separator_round_trips() {
         let cmd = Originate::inline(
             null_endpoint(),
             [
@@ -1750,7 +1770,6 @@ mod tests {
             .unwrap();
         assert_eq!(parsed.to_string(), rendered);
         assert_eq!(parsed.target(), cmd.target());
-        assert_eq!(parsed.inline_delimiter(), Some('|'));
     }
 
     #[test]
@@ -1778,28 +1797,37 @@ mod tests {
         assert!(matches!(err, OriginateError::InvalidInlineDelimiter(':')));
     }
 
+    /// An explicit separator that appears in an argument is escaped like any
+    /// other, so naming one never has to be conditional on the data.
     #[test]
-    fn inline_with_delimiter_rejects_one_that_appears_in_an_argument() {
-        let err = Originate::inline_with_delimiter(
+    fn inline_with_delimiter_escapes_its_own_separator() {
+        let cmd = Originate::inline_with_delimiter(
             null_endpoint(),
             [Application::new("playback", Some("a|b"))],
             '|',
         )
-        .unwrap_err();
-        assert!(matches!(err, OriginateError::InvalidInlineDelimiter('|')));
+        .unwrap();
+
+        assert_eq!(
+            cmd.to_string(),
+            "originate loopback/9199 'm:|:playback:a\\|b' inline"
+        );
     }
 
     #[test]
-    fn inline_reports_when_no_separator_is_available() {
-        let hostile: String = INLINE_DELIMITERS
-            .iter()
-            .collect();
-        let err = Originate::inline(
+    /// No argument can make a list unrenderable, so there is no separator
+    /// exhaustion to report.
+    fn inline_renders_an_argument_made_only_of_separators() {
+        let cmd = Originate::inline(
             null_endpoint(),
-            [Application::new("playback", Some(&hostile))],
+            [Application::new("playback", Some(",|;~^!"))],
         )
-        .unwrap_err();
-        assert!(matches!(err, OriginateError::NoInlineDelimiter));
+        .unwrap();
+
+        assert_eq!(
+            cmd.to_string(),
+            "originate loopback/9199 'playback:\\,|;~^!' inline"
+        );
     }
 
     #[test]
