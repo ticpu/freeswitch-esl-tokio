@@ -21,6 +21,7 @@ alongside it — including the message when nothing is listening — in
 | `originate_examples` | Every endpoint type and targeting mode as a wire string (part 1 needs nothing), then a live call | part 2 needs a switch |
 | `originate_loopback_yaml` | An originate deserialized from YAML; variables reach both loopback legs | `mod_loopback`, ext 9199 in context `test` |
 | `originate_loopback_bowout` | mod_loopback removing itself from a live call, and how to detect that rather than a teardown | `mod_loopback`, ext 9199 in context `test` |
+| `originate_multipart_file` | A document on the INVITE via an `execute_on_originate` Lua loader, so it never crosses the dial string; `load_multipart.lua` is the loader | `mod_lua`, a SIP destination, paths the switch can read |
 | `outbound_server` | Outbound call control: `myevents` scoping, `linger`, an IVR | a dialplan `socket` action |
 | `outbound_test` | The outbound verbs in order, driving itself through a loopback call | `mod_loopback`, ext 9199 in context `test` |
 | `sdp_codec_string` | SDP offer to codec string, and the two escaping paths to the wire | `--features sdp`, a switch |
