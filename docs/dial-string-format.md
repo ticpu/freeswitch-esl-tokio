@@ -193,17 +193,22 @@ reads the sequence as an escape and substitutes the character it names, so
 {path=C:\\\\\\\\Users}endpoint
 ```
 
-A single quote is the one rule that differs by carrier — two backslashes
-through a dialplan application, three through the `originate` API:
+A single quote is the one rule that differs by carrier — six backslashes
+through a dialplan application, seven through the `originate` API:
 
 ```
-{greeting=it\\'s_me}endpoint      <- dialplan: bridge, sendmsg execute
-{greeting=it\\\'s_me}endpoint     <- api originate, bgapi originate
+{greeting=it\\\\\\'s_me}endpoint      <- dialplan: bridge, sendmsg execute
+{greeting=it\\\\\\\'s_me}endpoint     <- api originate, bgapi originate
 ```
 
-No count satisfies both: sweeping one to nine backslashes, each carrier succeeds
-only at counts the other fails. A block carrying a single quoted value is more
-forgiving than one carrying two, so test with two.
+Each count leaves `\'` entering the carrier's last pass, which is what makes it
+right: the parity differs because the dialplan carrier's first pass deletes a
+`\'` outright while the API carrier's first pass keeps it. No count satisfies
+both. Two and three also measure correctly on a block whose values carry one
+quote each, and that is the trap — they deliver the quote bare to the last pass,
+whose cleanup keeps a lone quote only while no other quote follows it in the
+same field, so a value carrying two loses both. Test with two quoted values in
+the block and two quotes in one value.
 
 Values containing spaces are wrapped in single quotes. Those wrapping quotes are
 balanced, so unlike a quote *inside* a value they behave identically on both
@@ -219,7 +224,8 @@ carriers:
   pair on `=`, requires exactly two fields, and `k=` yields one. The only
   `switch_log_printf` in that loop is inside the successful branch, so nothing
   is logged at any level. Quoting does not help — `k=''`, `k=\'\'` and
-  `k=\\'\\'` were all measured discarded on both carriers.
+  `k=\\'\\'`, written raw into the block, were all measured discarded on both
+  carriers.
 - **A value closing a bracket it never opened.** `switch_find_end_paren` counts
   depth and honours no escape while doing so, so a lone `}`, `]` or `>` ends the
   block early and the remainder becomes dial-string text. A balanced pair such
@@ -299,15 +305,20 @@ verbatim.
 
 `switch_event_create_brackets` tokenizes a block **twice on its own** — once
 splitting the pairs on the separator, once splitting each pair on `=` — and both
-calls run the full quote-stripping, backslash-consuming cleanup over their
-results. Reached through the `originate` API a third pass applies, because
-`mod_commands` splits its argument list first with a tokenizer that treats a
-quote as opening a quoted region regardless of any delimiter.
+calls run the full quote-stripping, backslash-consuming cleanup
+(`cleanup_separated_string`) over their results. Each carrier adds one pass of
+its own before those. Through the `originate` API it is `mod_commands` splitting
+its argument list with `separate_string_blank_delim`, whose quote handling has
+no lookahead: a quote opens a quoted region regardless of any delimiter. Through
+a dialplan application it is variable expansion of the application's argument
+(`switch_channel_expand_variables_check`), which consumes `\\` and deletes a `\'`
+outright — both characters — and is skipped when `app_disable_expand_variables`
+is true on the channel, which then leaves that carrier at the API's depth.
 
 | Carrier | Passes |
 |---|---|
-| `bridge` and other dialplan applications, incl. `sendmsg execute` | 2 |
-| `api originate`, `bgapi originate` | 3 |
+| `bridge` and other dialplan applications, incl. `sendmsg execute` | expansion + 2 |
+| `api originate`, `bgapi originate` | argv split + 2 |
 
 Consequences worth knowing before hand-writing a block:
 
@@ -318,6 +329,9 @@ Consequences worth knowing before hand-writing a block:
   separator, so the pair between them is not split: the *first* value absorbs
   the second and the second is never set. The variable that goes missing is not
   the one that contained the quote.
+- Two quotes that reach the last pass bare pair with each other inside the
+  value, and both are stripped. The value stays otherwise intact, so a document
+  that loses every apostrophe is still well-formed and nothing fails.
 - A log line is not evidence either way. `mod_logfile` splits its own output
   with the same tokenizer, so a value is mangled in the log whether or not it
   was mangled on the wire. Read values back with `uuid_getvar` or `uuid_dump`.

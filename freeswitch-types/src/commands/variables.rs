@@ -36,11 +36,11 @@ impl VariablesType {
 
 /// Ordered set of channel variables with FreeSWITCH escaping.
 ///
-/// Backslashes are doubled, commas are escaped with `\,`, single quotes with
-/// `\'`, and values with spaces are wrapped in single quotes. This form
-/// round-trips through [`FromStr`]; what the switch itself decodes depends on
-/// which command carries the block, and is documented in
-/// `docs/dial-string-format.md`.
+/// A comma is escaped with `\,`, a backslash and a single quote with as many
+/// backslashes as the carrier's passes consume, and a value with spaces is
+/// wrapped in single quotes. This form round-trips through [`FromStr`]; what the
+/// switch itself decodes depends on which command carries the block, and is
+/// documented in `docs/dial-string-format.md`.
 ///
 /// # Serde format
 ///
@@ -82,9 +82,9 @@ pub enum DialStringCarrier {
 
 /// A literal backslash, whatever follows it.
 const BACKSLASH: &str = r"\\\\\\\\";
-/// A literal single quote, per carrier.
-const QUOTE_DIALPLAN: &str = r"\\'";
-const QUOTE_ESL_API: &str = r"\\\'";
+/// A literal single quote, per carrier: still `\'` entering the last pass.
+const QUOTE_DIALPLAN: &str = r"\\\\\\'";
+const QUOTE_ESL_API: &str = r"\\\\\\\'";
 
 impl DialStringCarrier {
     fn quote_escape(self) -> &'static str {

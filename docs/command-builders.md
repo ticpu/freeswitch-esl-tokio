@@ -90,8 +90,10 @@ Ported from a Python originate builder implementation.
 - `<k=v>` — enterprise scope (set on all endpoints in an enterprise originate)
 - `[k=v]` — channel scope (set on the immediately following endpoint only)
 
-Escaping rules (from FreeSWITCH source): commas → `\,`, single quotes → `\'`,
-values containing spaces → wrapped in single quotes.
+Escaping rules (measured on a live switch): commas → `\,`, single quotes and
+backslashes → one backslash level per tokenizer pass of the carrier, values
+containing spaces → wrapped in single quotes. Counts are in
+[dial-string-format.md](dial-string-format.md#variable-value-escaping).
 
 Uses `indexmap::IndexMap` to preserve insertion order — variable order matters for
 readability and debugging, and round-trip parsing should produce identical output.

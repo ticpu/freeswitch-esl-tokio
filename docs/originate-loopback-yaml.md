@@ -224,12 +224,14 @@ way in, so a value round-trips verbatim:
 | In the value | On the wire |
 | --- | --- |
 | `,` | `\,` |
-| `'` | `\'` |
+| `'` | `\\\\\\\'` through `originate`, `\\\\\\'` through a dialplan application |
+| `\` | eight backslashes |
 | any space | whole value wrapped in `'...'` |
 
-`sip_h_X-Ticket: "T-1001, urgent"` is both at once. It becomes
+`sip_h_X-Ticket: "T-1001, urgent"` is a comma and a space at once. It becomes
 `sip_h_X-Ticket='T-1001\, urgent'` on the wire, and the channel variable on
-both legs reads back as `T-1001, urgent`.
+both legs reads back as `T-1001, urgent`. The quote and backslash counts are
+explained in [dial-string-format.md](dial-string-format.md#parse-depth).
 
 ### Scopes
 
