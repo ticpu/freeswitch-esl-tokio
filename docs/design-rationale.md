@@ -283,6 +283,12 @@ level of escaping, so a render that cannot name its destination is right for one
 carrier and quietly wrong for the rest. Such a value names its target, and its
 bare `Display` is the shorthand for one carrier rather than the only form.
 
+A special character is rendered so that it is still escaped entering the last
+pass. That the last pass happens to keep a bare one is no contract: the final
+cleanup keeps a lone quote only while no partner follows it in the same field,
+so a block carrying one such value measures fine and a value carrying two loses
+both.
+
 ### Serde on command builders for config-driven deployments
 
 The serde derives on `Originate`, `Endpoint`, `Variables`, and
