@@ -9,13 +9,13 @@ mod live_common;
 
 use freeswitch_esl_tokio::commands::originate::{Variables, VariablesType};
 use freeswitch_esl_tokio::commands::{
-    DialStringCarrier, LoopbackEndpoint, UuidGetVar, UuidKill, UuidSetVar,
+    DialStringCarrier, ExecuteOn, LoopbackEndpoint, UuidGetVar, UuidKill, UuidSetVar,
 };
 use freeswitch_esl_tokio::ExecuteOptions;
 use freeswitch_esl_tokio::{
-    parse_channel_dump, Application, ChannelTimetable, CommandFailure, DialplanType, Endpoint,
-    EslEventType, EventFormat, EventHeader, HeaderLookup, Originate, TimetableField,
-    TimetablePrefix,
+    parse_channel_dump, Application, ChannelTimetable, ChannelVariable, CommandFailure,
+    DialplanType, Endpoint, EslEventType, EventFormat, EventHeader, HeaderLookup, Originate,
+    TimetableField, TimetablePrefix,
 };
 use live_common::{
     bgapi_originate_ok, channel_exists, connect, getvar, kill_channel, wait_for_own_event,
@@ -566,6 +566,46 @@ async fn live_channel_scope_pairs_quotes_across_values() {
         p3.as_deref(),
         Some("SENTINEL"),
         "the block itself must be well-formed, or the assertions above prove nothing"
+    );
+
+    drop(permit);
+}
+
+/// `execute_on_originate` runs its application on the new channel before that
+/// channel's session thread starts, so a variable set there is on the channel
+/// before anything the leg does — the INVITE, for a SIP leg. The value carries
+/// a space, so this also proves the hook survives the block's quoting.
+#[tokio::test]
+#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+async fn live_execute_on_originate_runs_before_the_leg_does() {
+    let (client, _events, permit) = connect().await;
+
+    let hook = ExecuteOn::new("set", Some("probe=hooked")).expect("a plain set is representable");
+    let mut vars = Variables::new(VariablesType::Default);
+    vars.insert(
+        ChannelVariable::ExecuteOnOriginate.as_str(),
+        hook.to_string(),
+    );
+
+    let uuid = client
+        .api(&format!("originate {vars}null/hook &park()"))
+        .await
+        .expect("originate transport error")
+        .api_result()
+        .expect("originate rejected")
+        .to_string();
+
+    let mut reaper = ChannelReaper::new(&client);
+    reaper.track(&uuid);
+    let probe = getvar(&client, &uuid, "probe").await;
+    reaper
+        .reap()
+        .await;
+
+    assert_eq!(
+        probe.as_deref(),
+        Some("hooked"),
+        "the hook did not run from {vars}"
     );
 
     drop(permit);
