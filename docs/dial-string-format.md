@@ -409,6 +409,12 @@ Things that bit while measuring it, each of which leaves the INVITE going out
   so it cannot report a failure. That needs `lua` in the ESL user's
   `esl-allowed-api`.
 - mod_lua's `io` read takes `"*a"`; `read("a")` is an invalid option there.
+- Not on a loopback leg. Measured with both `set` and `lua`: the originate
+  never returns and `loopback/…-a` sits in `CS_INIT` with the hook as its
+  running application until something hangs it up. The hook runs before the
+  channel has a session thread, and mod_loopback's B leg, which does have one,
+  waits on the A leg reaching a state it cannot reach from inside the hook. A
+  `sofia/` leg, whose thread nothing waits on, is fine.
 
 Carriers that looked like alternatives and are not:
 

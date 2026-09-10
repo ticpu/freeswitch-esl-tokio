@@ -15,6 +15,7 @@ use super::originate::OriginateError;
 /// channel before a SIP leg builds its INVITE. That is how a large or free-text
 /// value reaches a leg without crossing the dial string's tokenizer: the block
 /// carries paths, and the application reads the value from where they point.
+/// Not on a loopback leg, which the hook wedges in `CS_INIT`.
 /// `docs/dial-string-format.md` has the measurements and the traps.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExecuteOn {
