@@ -32,6 +32,13 @@ impl VariablesType {
             Self::Channel => ('[', ']'),
         }
     }
+
+    fn backslash_escape(self) -> &'static str {
+        match self {
+            Self::Enterprise | Self::Default => BACKSLASH,
+            Self::Channel => BACKSLASH_CHANNEL,
+        }
+    }
 }
 
 /// Ordered set of channel variables with FreeSWITCH escaping.
@@ -80,8 +87,12 @@ pub enum DialStringCarrier {
     Dialplan,
 }
 
-/// A literal backslash, whatever follows it.
+/// A literal backslash, whatever follows it, in a block parsed before the dial
+/// string is split into legs.
 const BACKSLASH: &str = r"\\\\\\\\";
+/// The same in a `[]` block, which rides through the `|` and `,` leg splits
+/// first and so meets two more passes.
+const BACKSLASH_CHANNEL: &str = r"\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\";
 /// A literal single quote, per carrier: still `\'` entering the last pass.
 const QUOTE_DIALPLAN: &str = r"\\\\\\'";
 const QUOTE_ESL_API: &str = r"\\\\\\\'";
@@ -97,16 +108,26 @@ impl DialStringCarrier {
 
 /// Reject a value the wire cannot carry, whatever escaping is applied to it.
 ///
-/// Two shapes qualify. An empty value is discarded by the switch under every
+/// Three shapes qualify. An empty value is discarded by the switch under every
 /// encoding, and the block's own parse reports nothing when it happens. A value
 /// carrying an unbalanced bracket ends the block early, because the switch finds
 /// the block's end by counting depth and does not honour escapes while doing so;
-/// a balanced pair such as `${var}` is fine and common.
+/// a balanced pair such as `${var}` is fine and common. A single quote in a
+/// channel-scope value pairs with the next quote anywhere before the peer split,
+/// escaped or not, and the pair between them is swallowed into the first value.
 fn check_representable(
     key: &str,
     value: &str,
     vars_type: VariablesType,
 ) -> Result<(), OriginateError> {
+    if vars_type == VariablesType::Channel && value.contains('\'') {
+        return Err(OriginateError::ParseError(format!(
+            "variable {key} carries a single quote in channel scope: the switch \
+             pairs it with the next quote in the dial string before it parses \
+             the block, whatever escaping precedes either. Use default scope, \
+             or keep the quote out of the value"
+        )));
+    }
     if value.is_empty() {
         return Err(OriginateError::ParseError(format!(
             "variable {key} has an empty value: the switch discards such a pair \
@@ -141,10 +162,16 @@ fn check_representable(
 /// Reject a separator that cannot delimit the block it was chosen for.
 ///
 /// Either bracket moves the end the switch counts its way to, `=` splits the
-/// pair instead, and `^` leaves the `^^` prefix reading as its own separator.
+/// pair instead, `^` leaves the `^^` prefix reading as its own separator, and
+/// `|` in a `[]` block is read by the leg split before the block is parsed.
 fn check_separator(sep: char, vars_type: VariablesType) -> Result<(), OriginateError> {
     let (open, close) = vars_type.delimiters();
-    if sep == open || sep == close || sep == '=' || sep == '^' {
+    if sep == open
+        || sep == close
+        || sep == '='
+        || sep == '^'
+        || (sep == '|' && vars_type == VariablesType::Channel)
+    {
         return Err(OriginateError::ParseError(format!(
             "invalid ^^ separator: '{sep}'"
         )));
@@ -154,15 +181,26 @@ fn check_separator(sep: char, vars_type: VariablesType) -> Result<(), OriginateE
 
 /// Escape a value for the wire, escaping the comma only when `commas_separate`
 /// says it is this block's separator; a `^^` block separates on something else
-/// and refuses a value carrying it, so a comma there is ordinary text.
-fn escape_value(value: &str, carrier: DialStringCarrier, commas_separate: bool) -> String {
+/// and refuses a value carrying it, so a comma there is ordinary text. A `[]`
+/// block also escapes the pipe, which the leg split would otherwise read.
+fn escape_value(
+    value: &str,
+    carrier: DialStringCarrier,
+    commas_separate: bool,
+    vars_type: VariablesType,
+) -> String {
     // The backslash goes first, or the ones the other rules introduce get
     // escaped in turn.
     let escaped = value
-        .replace('\\', BACKSLASH)
+        .replace('\\', vars_type.backslash_escape())
         .replace('\'', carrier.quote_escape());
     let escaped = if commas_separate {
         escaped.replace(',', "\\,")
+    } else {
+        escaped
+    };
+    let escaped = if vars_type == VariablesType::Channel {
+        escaped.replace('|', "\\|")
     } else {
         escaped
     };
@@ -176,19 +214,29 @@ fn escape_value(value: &str, carrier: DialStringCarrier, commas_separate: bool) 
 /// Inverts [`escape_value`], undoing each substitution in the reverse order it
 /// was applied so an escape introduced by a later rule is not read as input to
 /// an earlier one.
-fn unescape_value(value: &str, carrier: DialStringCarrier, commas_separate: bool) -> String {
+fn unescape_value(
+    value: &str,
+    carrier: DialStringCarrier,
+    commas_separate: bool,
+    vars_type: VariablesType,
+) -> String {
     let s = value
         .strip_prefix('\'')
         .and_then(|s| s.strip_suffix('\''))
         .unwrap_or(value);
 
-    let s = if commas_separate {
-        s.replace("\\,", ",")
+    let s = if vars_type == VariablesType::Channel {
+        s.replace("\\|", "|")
     } else {
         s.to_string()
     };
+    let s = if commas_separate {
+        s.replace("\\,", ",")
+    } else {
+        s
+    };
     s.replace(carrier.quote_escape(), "'")
-        .replace(BACKSLASH, "\\")
+        .replace(vars_type.backslash_escape(), "\\")
 }
 
 impl Variables {
@@ -433,7 +481,7 @@ impl Variables {
             if i > 0 {
                 write!(f, "{sep}")?;
             }
-            let value = escape_value(value, carrier, commas_separate);
+            let value = escape_value(value, carrier, commas_separate, self.vars_type);
             write!(f, "{}={}", key, value)?;
         }
         f.write_fmt(format_args!("{}", close))
@@ -505,7 +553,7 @@ impl Variables {
                     .ok_or_else(|| {
                         OriginateError::ParseError(format!("missing = in variable {i}"))
                     })?;
-                let value = unescape_value(value, carrier, commas_separate);
+                let value = unescape_value(value, carrier, commas_separate, vars_type);
                 check_representable(key, &value, vars_type)?;
                 inner.insert(key.to_string(), value);
             }
@@ -662,10 +710,40 @@ mod tests {
             (DialStringCarrier::EslApi, r"a\nb", r"a\\\\\\\\nb"),
             (DialStringCarrier::Dialplan, "a,b", r"a\,b"),
             (DialStringCarrier::EslApi, "a,b", r"a\,b"),
+            (DialStringCarrier::Dialplan, "a|b", "a|b"),
+            (DialStringCarrier::EslApi, "a|b", "a|b"),
         ];
         for (carrier, value, want) in cases {
             assert_eq!(
-                escape_value(value, carrier, true),
+                escape_value(value, carrier, true, VariablesType::Default),
+                want,
+                "{value:?} for {carrier:?}"
+            );
+        }
+    }
+
+    /// A `[]` block rides through the leg splits before it is parsed: two more
+    /// backslash-consuming passes, and a pipe the first of them would read.
+    #[test]
+    fn channel_scope_escapes_for_the_leg_splits() {
+        let cases = [
+            (
+                DialStringCarrier::Dialplan,
+                r"a\nb",
+                r"a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\nb",
+            ),
+            (
+                DialStringCarrier::EslApi,
+                r"a\nb",
+                r"a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\nb",
+            ),
+            (DialStringCarrier::Dialplan, "a|b", r"a\|b"),
+            (DialStringCarrier::EslApi, "a|b", r"a\|b"),
+            (DialStringCarrier::EslApi, "a,b", r"a\,b"),
+        ];
+        for (carrier, value, want) in cases {
+            assert_eq!(
+                escape_value(value, carrier, true, VariablesType::Channel),
                 want,
                 "{value:?} for {carrier:?}"
             );
@@ -689,7 +767,7 @@ mod tests {
         ];
         for (carrier, value, want) in cases {
             assert_eq!(
-                escape_value(value, carrier, false),
+                escape_value(value, carrier, false, VariablesType::Default),
                 want,
                 "{value:?} for {carrier:?}"
             );
@@ -966,7 +1044,7 @@ mod tests {
 
     #[test]
     fn variables_caret_caret_values_with_commas() {
-        let vars: Variables = "[^^|sip_h_X-Call-Info=<urn:foo>;purpose=bar,<urn:baz>|other=val]"
+        let vars: Variables = "{^^|sip_h_X-Call-Info=<urn:foo>;purpose=bar,<urn:baz>|other=val}"
             .parse()
             .unwrap();
         assert_eq!(
@@ -1121,11 +1199,28 @@ mod tests {
 
     #[test]
     fn serde_variables_separator_deserializes_from_config() {
-        let json = r#"{"scope":"channel","vars":{"codecs":"PCMA,PCMU"},"separator":"|"}"#;
+        let json = r#"{"scope":"channel","vars":{"codecs":"PCMA,PCMU"},"separator":":"}"#;
         let vars: Variables = serde_json::from_str(json).unwrap();
         assert_eq!(vars.scope(), VariablesType::Channel);
-        assert_eq!(vars.separator(), Some('|'));
-        assert_eq!(vars.to_string(), "[^^|codecs=PCMA,PCMU]");
+        assert_eq!(vars.separator(), Some(':'));
+        assert_eq!(vars.to_string(), "[^^:codecs=PCMA,PCMU]");
+    }
+
+    /// The leg split reads a `|` before a `[]` block is parsed, so it can
+    /// separate nothing there; in `{}` it is ordinary.
+    #[test]
+    fn pipe_separator_is_refused_in_channel_scope_only() {
+        let mut vars = Variables::new(VariablesType::Channel);
+        vars.insert("k", "v");
+        assert!(vars
+            .clone()
+            .with_separator('|')
+            .is_err());
+        let mut vars = Variables::new(VariablesType::Default);
+        vars.insert("k", "v");
+        assert!(vars
+            .with_separator('|')
+            .is_ok());
     }
 
     /// The builder's two refusals have to hold at the config boundary too, or a
@@ -1143,6 +1238,38 @@ mod tests {
         assert!(
             err.contains("uri"),
             "error does not name the variable: {err}"
+        );
+    }
+
+    /// Measured: `[p1=it's,p2=don't,p3=x]` reaches the channel as
+    /// `p1=its,p2=dont` with no `p2`, at every escaping depth, because the scan
+    /// ahead of the peer split pairs quotes across values. The same value in
+    /// default scope is ordinary.
+    #[test]
+    fn a_quote_in_channel_scope_is_refused_at_every_boundary() {
+        let err = r"[cid=it\\\\\\\'s]"
+            .parse::<Variables>()
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("cid") && err.contains("channel scope"),
+            "error does not name the variable and scope: {err}"
+        );
+
+        let err = serde_json::from_str::<Variables>(r#"{"scope":"channel","vars":{"cid":"it's"}}"#)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("cid") && err.contains("channel scope"),
+            "error does not name the variable and scope: {err}"
+        );
+
+        assert!(r"{cid=it\\\\\\\'s}"
+            .parse::<Variables>()
+            .is_ok());
+        assert!(
+            serde_json::from_str::<Variables>(r#"{"scope":"default","vars":{"cid":"it's"}}"#)
+                .is_ok()
         );
     }
 }

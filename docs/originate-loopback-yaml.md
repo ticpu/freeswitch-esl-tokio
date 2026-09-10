@@ -225,8 +225,11 @@ way in, so a value round-trips verbatim:
 | --- | --- |
 | `,` | `\,` |
 | `'` | `\\\\\\\'` through `originate`, `\\\\\\'` through a dialplan application |
-| `\` | eight backslashes |
+| `\` | eight backslashes; thirty-two in `[]` scope |
+| `\|` | `\\|` in `[]` scope, plain elsewhere |
 | any space | whole value wrapped in `'...'` |
+
+A `'` cannot be carried in `[]` scope at all and is refused at load.
 
 `sip_h_X-Ticket: "T-1001, urgent"` is a comma and a space at once. It becomes
 `sip_h_X-Ticket='T-1001\, urgent'` on the wire, and the channel variable on

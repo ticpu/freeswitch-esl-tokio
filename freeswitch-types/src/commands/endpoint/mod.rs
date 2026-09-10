@@ -801,14 +801,13 @@ mod tests {
         );
     }
 
-    /// A quoted value is escaped one level shallower for a dialplan carrier, so
-    /// a renderer and a parser that disagree on the carrier hand back a
+    /// A renderer and a parser that disagree on the carrier hand back a
     /// different value than was put in — silently, for every endpoint type.
     #[test]
     fn every_endpoint_type_round_trips_at_the_dialplan_carrier() {
         let mut vars = Variables::new(VariablesType::Channel);
-        vars.insert("cid", "it's");
-        vars.insert("other", "don't");
+        vars.insert("path", r"C:\path");
+        vars.insert("other", "a,b");
 
         let with_vars = |mut ep: Endpoint| {
             ep.set_variables(Some(vars.clone()));

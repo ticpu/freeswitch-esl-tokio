@@ -141,6 +141,23 @@ Multiple blocks accumulate:
 [var1=a][var2=b]sofia/internal/1000@domain
 ```
 
+Unlike `{}` and `<>`, a `[]` block is parsed after the dial string is split
+into legs on `|` and then on `,`, and both splits run the same backslash-consuming
+cleanup as the block parse. Three consequences, all measured:
+
+- A literal backslash needs **thirty-two** backslashes here, not eight. At
+  eight, `a\nb` arrives carrying a newline.
+- A `|` in a value is read by the leg split, whatever bracket it sits in, and
+  the block becomes a leg with no endpoint (`CHAN_NOT_IMPLEMENTED`). `\|`
+  carries it. The same goes for `|` as a `^^` separator, which `Variables`
+  refuses in this scope.
+- A value cannot carry a single quote. The scan that protects commas inside
+  quotes during the leg split toggles on every `'` it meets, escaped or not, so
+  two values each carrying one quote pair with each other and the first
+  swallows the second: `[p1=it's,p2=don't,p3=x]` arrives as `p1=its,p2=dont`
+  with no `p2` at all, at every escaping depth. `Variables` refuses such a
+  value in channel scope.
+
 ### `{k=v}` -- default (global) scope
 
 Applies to **all endpoints** in the current originate/bridge set. Multiple

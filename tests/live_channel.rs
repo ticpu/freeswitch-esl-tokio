@@ -283,6 +283,7 @@ const ESCAPING_CASES: &[(&str, &[(&str, &str)])] = &[
         "backslash before one the switch reads as an escape",
         &[("p1", r"a\nb"), ("p2", "SENTINEL")],
     ),
+    ("pipe", &[("p1", "a|b"), ("p2", "SENTINEL")]),
 ];
 
 /// `lead` goes in first, so a value that eats its separator damages a variable
@@ -291,8 +292,9 @@ fn escaping_block(
     lead: &[(&str, &str)],
     pairs: &[(&str, &str)],
     separator: Option<char>,
+    scope: VariablesType,
 ) -> Variables {
-    let mut vars = Variables::new(VariablesType::Default);
+    let mut vars = Variables::new(scope);
     for (k, v) in lead
         .iter()
         .chain(pairs.iter())
@@ -311,13 +313,26 @@ fn escaping_block(
 /// demands and what keeps a comma ordinary text inside the block.
 const ESCAPING_SEPARATOR: char = '~';
 
+/// `Variables` refuses a quote in channel scope, so those rows have no wire
+/// form to measure there; `live_channel_scope_pairs_quotes_across_values` pins
+/// why.
+fn carried_in(scope: VariablesType, pairs: &[(&str, &str)]) -> bool {
+    scope != VariablesType::Channel
+        || pairs
+            .iter()
+            .all(|(_, v)| !v.contains('\''))
+}
+
 /// Every case through `originate`, whose argument list the switch splits before
 /// the block is parsed.
-async fn escaping_over_the_api_carrier(separator: Option<char>) {
+async fn escaping_over_the_api_carrier(separator: Option<char>, scope: VariablesType) {
     let (client, _events, permit) = connect().await;
 
     for (label, pairs) in ESCAPING_CASES {
-        let vars = escaping_block(&[], pairs, separator);
+        if !carried_in(scope, pairs) {
+            continue;
+        }
+        let vars = escaping_block(&[], pairs, separator, scope);
         let resp = client
             .api(&format!("originate {vars}null/escaping &park()"))
             .await
@@ -351,10 +366,13 @@ async fn escaping_over_the_api_carrier(separator: Option<char>) {
 
 /// Every case through a dialplan application, which receives its argument
 /// whole and so needs one escaping level less.
-async fn escaping_over_the_dialplan_carrier(separator: Option<char>) {
+async fn escaping_over_the_dialplan_carrier(separator: Option<char>, scope: VariablesType) {
     let (client, _events, permit) = connect().await;
 
     for (label, pairs) in ESCAPING_CASES {
+        if !carried_in(scope, pairs) {
+            continue;
+        }
         let b_uuid = client
             .api("create_uuid")
             .await
@@ -371,7 +389,7 @@ async fn escaping_over_the_dialplan_carrier(separator: Option<char>) {
             .to_string();
 
         // Pre-assigning the B leg's uuid is what makes the far side findable.
-        let vars = escaping_block(&[("origination_uuid", &b_uuid)], pairs, separator);
+        let vars = escaping_block(&[("origination_uuid", &b_uuid)], pairs, separator, scope);
 
         let mut reaper = ChannelReaper::new(&client);
         reaper.track(&a_uuid);
@@ -424,7 +442,7 @@ async fn escaping_over_the_dialplan_carrier(separator: Option<char>) {
 #[tokio::test]
 #[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
 async fn live_escaping_survives_the_api_carrier() {
-    escaping_over_the_api_carrier(None).await;
+    escaping_over_the_api_carrier(None, VariablesType::Default).await;
 }
 
 /// A dialplan application receives its argument whole, so the same values need
@@ -433,7 +451,7 @@ async fn live_escaping_survives_the_api_carrier() {
 #[tokio::test]
 #[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
 async fn live_escaping_survives_the_dialplan_carrier() {
-    escaping_over_the_dialplan_carrier(None).await;
+    escaping_over_the_dialplan_carrier(None, VariablesType::Default).await;
 }
 
 /// A separator the values do not contain is the only way a `${...}`-expanded
@@ -478,7 +496,7 @@ async fn live_chosen_separator_carries_commas_unescaped() {
 #[tokio::test]
 #[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
 async fn live_separated_escaping_survives_the_api_carrier() {
-    escaping_over_the_api_carrier(Some(ESCAPING_SEPARATOR)).await;
+    escaping_over_the_api_carrier(Some(ESCAPING_SEPARATOR), VariablesType::Default).await;
 }
 
 /// The dialplan half of the pair above: one escaping level less, same block
@@ -487,7 +505,70 @@ async fn live_separated_escaping_survives_the_api_carrier() {
 #[tokio::test]
 #[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
 async fn live_separated_escaping_survives_the_dialplan_carrier() {
-    escaping_over_the_dialplan_carrier(Some(ESCAPING_SEPARATOR)).await;
+    escaping_over_the_dialplan_carrier(Some(ESCAPING_SEPARATOR), VariablesType::Default).await;
+}
+
+/// A `[]` block is not parsed where `{}` is: it rides through the peer split,
+/// preceded by a scan that toggles its quote state on every `'` whatever
+/// precedes it, so the same values at the same depth measure differently.
+#[tokio::test]
+#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+async fn live_escaping_survives_the_api_carrier_in_channel_scope() {
+    escaping_over_the_api_carrier(None, VariablesType::Channel).await;
+}
+
+/// The dialplan half of the channel-scope pair.
+#[tokio::test]
+#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+async fn live_escaping_survives_the_dialplan_carrier_in_channel_scope() {
+    escaping_over_the_dialplan_carrier(None, VariablesType::Channel).await;
+}
+
+/// The refusal of a quote in channel scope rests on this: the scan ahead of the
+/// peer split pairs the quote in `p1` with the one in `p2`, escaped or not, and
+/// the separator between them stops being one. The block is written by hand
+/// because the typed API will not build it.
+///
+/// Failing here is good news — it would mean the switch started honouring the
+/// escape in that scan, and the refusal should then be revisited rather than
+/// kept.
+#[tokio::test]
+#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+async fn live_channel_scope_pairs_quotes_across_values() {
+    let (client, _events, permit) = connect().await;
+
+    let uuid = client
+        .api(r"originate [p1=it\\\'s,p2=don\\\'t,p3=SENTINEL]null/escaping &park()")
+        .await
+        .expect("originate transport error")
+        .api_result()
+        .expect("originate rejected")
+        .to_string();
+
+    let mut reaper = ChannelReaper::new(&client);
+    reaper.track(&uuid);
+    let p1 = getvar(&client, &uuid, "p1").await;
+    let p2 = getvar(&client, &uuid, "p2").await;
+    let p3 = getvar(&client, &uuid, "p3").await;
+    reaper
+        .reap()
+        .await;
+
+    assert_eq!(
+        p1.as_deref(),
+        Some("its,p2=dont"),
+        "the switch now splits a channel-scope block on a separator between \
+         two quoted values; Variables refuses such a value, so that refusal is \
+         no longer justified"
+    );
+    assert_eq!(p2, None, "p2 was set on its own, so p1 did not absorb it");
+    assert_eq!(
+        p3.as_deref(),
+        Some("SENTINEL"),
+        "the block itself must be well-formed, or the assertions above prove nothing"
+    );
+
+    drop(permit);
 }
 
 /// The refusal in `Variables` rests on this: an empty value never reaches the

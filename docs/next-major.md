@@ -31,7 +31,9 @@ Some values cannot be represented in a bracket block at all: an empty value is
 discarded by the switch under every encoding, and a value carrying an unbalanced
 closing bracket truncates the block. A value carrying the block's own `^^`
 separator is the third: `with_separator` checks the values present when it is
-called, and an `insert` after it splits into a pair nobody wrote.
+called, and an `insert` after it splits into a pair nobody wrote. A single quote
+in a channel-scope value is the fourth: the switch pairs it with the next quote
+before it parses the block, at any escaping depth.
 Refusing them is the only correct handling,
 and it cannot live at render time — `Display` is infallible and `ToString`
 panics on a `fmt::Error`, which would put a panic in a library. Until these

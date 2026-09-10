@@ -209,10 +209,10 @@ mod tests {
     /// and parsing back at the default would unescape one level too deep and
     /// silently return a different value than was put in.
     #[test]
-    fn per_endpoint_quoted_values_round_trip() {
+    fn per_endpoint_escaped_values_round_trip() {
         let mut ep_vars = Variables::new(VariablesType::Channel);
-        ep_vars.insert("cid", "it's");
-        ep_vars.insert("other", "don't");
+        ep_vars.insert("path", r"C:\path");
+        ep_vars.insert("other", "a,b");
         let bridge = BridgeDialString::new(vec![vec![SofiaGateway::new("gw", "1234")
             .with_variables(ep_vars)
             .into()]]);
@@ -222,6 +222,21 @@ mod tests {
             .parse()
             .unwrap_or_else(|e| panic!("{rendered} failed to parse: {e}"));
         assert_eq!(back, bridge, "rendered {rendered}");
+    }
+
+    /// A quote in a `[]` block pairs across values before the switch parses the
+    /// block, at any escaping depth, so the parser refuses one rather than hand
+    /// back a value the wire would not deliver.
+    #[test]
+    fn per_endpoint_quoted_value_is_refused() {
+        let err = r"[cid=it\\\\\\'s]sofia/gateway/gw/1234"
+            .parse::<BridgeDialString>()
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("cid") && err.contains("channel scope"),
+            "error does not name the variable and scope: {err}"
+        );
     }
 
     #[test]
