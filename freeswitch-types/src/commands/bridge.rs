@@ -200,9 +200,9 @@ mod tests {
 
         assert_eq!(
             bridge.to_string(),
-            r"{cid=it\\'s}sofia/gateway/gw/18005551234"
+            r"{cid=it\\\\\\'s}sofia/gateway/gw/18005551234"
         );
-        assert_eq!(vars.to_string(), r"{cid=it\\\'s}");
+        assert_eq!(vars.to_string(), r"{cid=it\\\\\\\'s}");
     }
 
     /// Both halves have to agree on the carrier. Rendering at dialplan depth

@@ -920,7 +920,7 @@ mod tests {
         // the two escapings.
         assert_eq!(
             ep.to_string(),
-            r"{one_variable=one\\\'quote}sofia/internal/123@example.com"
+            r"{one_variable=one\\\\\\\'quote}sofia/internal/123@example.com"
         );
     }
 

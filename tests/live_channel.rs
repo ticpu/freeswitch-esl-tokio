@@ -253,8 +253,10 @@ async fn live_uuid_kill_with_cause() {
 ///
 /// Two quoted values, never one: a block carrying a single quote has no partner
 /// for it to pair with and passes under encodings that corrupt a realistic
-/// block. The empty value is absent because no dial string can express it —
-/// `Variables` refuses it at the boundaries that can.
+/// block. Two quotes in one value are the other pairing: the last pass keeps a
+/// bare quote only while none follows it in the same field. The empty value is
+/// absent because no dial string can express it — `Variables` refuses it at the
+/// boundaries that can.
 const ESCAPING_CASES: &[(&str, &[(&str, &str)])] = &[
     ("plain comma", &[("p1", "a,b"), ("p2", "SENTINEL")]),
     (
@@ -264,6 +266,14 @@ const ESCAPING_CASES: &[(&str, &[(&str, &str)])] = &[
     (
         "two quoted values",
         &[("p1", "it's"), ("p2", "don't"), ("p3", "SENTINEL")],
+    ),
+    (
+        "two quotes in one value",
+        &[("p1", "l'a'b"), ("p2", "SENTINEL")],
+    ),
+    (
+        "space and two quotes",
+        &[("p1", "Rue de l'Île d'Or"), ("p2", "SENTINEL")],
     ),
     (
         "backslash before an inert character",

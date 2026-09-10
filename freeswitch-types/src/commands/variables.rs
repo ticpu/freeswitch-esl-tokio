@@ -654,8 +654,10 @@ mod tests {
     #[test]
     fn escaping_pins_the_measured_wire_forms() {
         let cases = [
-            (DialStringCarrier::Dialplan, "it's", r"it\\'s"),
-            (DialStringCarrier::EslApi, "it's", r"it\\\'s"),
+            (DialStringCarrier::Dialplan, "it's", r"it\\\\\\'s"),
+            (DialStringCarrier::EslApi, "it's", r"it\\\\\\\'s"),
+            (DialStringCarrier::Dialplan, "l'a'b", r"l\\\\\\'a\\\\\\'b"),
+            (DialStringCarrier::EslApi, "l'a'b", r"l\\\\\\\'a\\\\\\\'b"),
             (DialStringCarrier::Dialplan, r"a\nb", r"a\\\\\\\\nb"),
             (DialStringCarrier::EslApi, r"a\nb", r"a\\\\\\\\nb"),
             (DialStringCarrier::Dialplan, "a,b", r"a\,b"),
@@ -676,8 +678,10 @@ mod tests {
     #[test]
     fn a_chosen_separator_changes_only_the_comma() {
         let cases = [
-            (DialStringCarrier::Dialplan, "it's", r"it\\'s"),
-            (DialStringCarrier::EslApi, "it's", r"it\\\'s"),
+            (DialStringCarrier::Dialplan, "it's", r"it\\\\\\'s"),
+            (DialStringCarrier::EslApi, "it's", r"it\\\\\\\'s"),
+            (DialStringCarrier::Dialplan, "l'a'b", r"l\\\\\\'a\\\\\\'b"),
+            (DialStringCarrier::EslApi, "l'a'b", r"l\\\\\\\'a\\\\\\\'b"),
             (DialStringCarrier::Dialplan, r"a\nb", r"a\\\\\\\\nb"),
             (DialStringCarrier::EslApi, r"a\nb", r"a\\\\\\\\nb"),
             (DialStringCarrier::Dialplan, "a,b", "a,b"),
@@ -698,11 +702,11 @@ mod tests {
     fn display_defaults_to_the_api_carrier() {
         let mut vars = Variables::new(VariablesType::Default);
         vars.insert("k", "it's");
-        assert_eq!(vars.to_string(), r"{k=it\\\'s}");
+        assert_eq!(vars.to_string(), r"{k=it\\\\\\\'s}");
         assert_eq!(
             vars.display_for(DialStringCarrier::Dialplan)
                 .to_string(),
-            r"{k=it\\'s}"
+            r"{k=it\\\\\\'s}"
         );
     }
 
