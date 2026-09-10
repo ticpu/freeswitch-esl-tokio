@@ -65,7 +65,7 @@ pub use channel::{
 #[cfg(feature = "esl")]
 pub use commands::{
     Application, BridgeDialString, DialString, DialStringCarrier, DialplanType, Endpoint,
-    EndpointDisplay, GroupCallOrder, Originate, OriginateError, OriginateTarget,
+    EndpointDisplay, ExecuteOn, GroupCallOrder, Originate, OriginateError, OriginateTarget,
     ParseDialplanTypeError, ParseGroupCallOrderError, ParseHoldActionError, ParseMuteActionError,
     UuidAnswer, UuidBridge, UuidDeflect, UuidGetVar, UuidHold, UuidKill, UuidSendDtmf, UuidSetVar,
     UuidTransfer, Variables, VariablesDisplay, VariablesType,

@@ -12,6 +12,7 @@ pub mod bridge;
 pub mod channel;
 pub mod conference;
 pub mod endpoint;
+pub mod execute_on;
 pub mod originate;
 pub mod variables;
 
@@ -29,6 +30,7 @@ pub use endpoint::{
     LoopbackEndpoint, ParseGroupCallOrderError, SofiaContact, SofiaEndpoint, SofiaGateway,
     UserEndpoint,
 };
+pub use execute_on::ExecuteOn;
 pub use originate::{
     Application, DialplanType, Endpoint, Originate, OriginateError, OriginateTarget,
     ParseDialplanTypeError, Variables, VariablesType,

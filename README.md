@@ -433,6 +433,31 @@ See [docs/dial-string-format.md](https://github.com/ticpu/freeswitch-esl-tokio/b
 dial string reference (variable scoping, `^^:` custom delimiters, enterprise
 `:_:` originate).
 
+### A value that must not cross the dial string
+
+A large or free-text value — a PIDF-LO for `sip_multipart`, say — is set on
+the new channel by an `execute_on_originate` hook instead, which runs before
+the channel's session thread starts and so before a SIP leg builds its INVITE.
+`ExecuteOn` builds the hook's value and refuses the shapes the switch would
+misread; the block then carries paths and nothing the tokenizer can damage:
+
+```rust
+use freeswitch_esl_tokio::commands::*;
+use freeswitch_esl_tokio::ChannelVariable;
+
+let hook = ExecuteOn::lua("/run/app/load_multipart.lua", ["/run/app/call-42.xml"]).unwrap();
+let mut vars = Variables::new(VariablesType::Default);
+vars.insert(ChannelVariable::ExecuteOnOriginate.as_str(), hook.to_string());
+assert_eq!(
+    vars.to_string(),
+    "{execute_on_originate='lua /run/app/load_multipart.lua /run/app/call-42.xml'}"
+);
+```
+
+`cargo run --example originate_multipart_file` drives it end to end; the
+"Keeping a value out of the tokenizer entirely" section of the dial string
+reference has the measurements and the traps.
+
 ### UUID and conference commands
 
 ```rust,no_run

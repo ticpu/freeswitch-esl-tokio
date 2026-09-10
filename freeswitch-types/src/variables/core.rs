@@ -195,6 +195,11 @@ sip_header::define_header_enum! {
         AppSessionUuid => "app_session_uuid",
         /// Generic parameters carried alongside the `Session-ID` UUIDs.
         GenericParamSessionUuid => "generic_param_session_uuid",
+
+        // --- Hooks ---
+        /// Application `switch_ivr_originate` runs on a new channel before its
+        /// session thread starts; value shape is [`ExecuteOn`](crate::commands::ExecuteOn).
+        ExecuteOnOriginate => "execute_on_originate",
     }
 }
 
