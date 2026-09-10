@@ -147,10 +147,10 @@ cleanup as the block parse. Three consequences, all measured:
 
 - A literal backslash needs **thirty-two** backslashes here, not eight. At
   eight, `a\nb` arrives carrying a newline.
-- A `|` in a value is read by the leg split, whatever bracket it sits in, and
-  the block becomes a leg with no endpoint (`CHAN_NOT_IMPLEMENTED`). `\|`
-  carries it. The same goes for `|` as a `^^` separator, which `Variables`
-  refuses in this scope.
+- A `|` in a value is read by the leg split, and the block becomes a leg with
+  no endpoint (`CHAN_NOT_IMPLEMENTED`). `\|` carries it. The same goes for `|`
+  as a `^^` separator, which `Variables` refuses in this scope. In `{}` and
+  `<>`, parsed and removed before that split, a `|` is ordinary text.
 - A value cannot carry a single quote. The scan that protects commas inside
   quotes during the leg split toggles on every `'` it meets, escaped or not, so
   two values each carrying one quote pair with each other and the first
@@ -352,6 +352,80 @@ Consequences worth knowing before hand-writing a block:
 - A log line is not evidence either way. `mod_logfile` splits its own output
   with the same tokenizer, so a value is mangled in the log whether or not it
   was mangled on the wire. Read values back with `uuid_getvar` or `uuid_dump`.
+
+## Keeping a value out of the tokenizer entirely
+
+A large or free-text value — a PIDF-LO document for `sip_multipart`, say — has
+no business crossing the block tokenizer at all: every apostrophe, comma,
+backslash and space in it is a trap, and the block is line-delimited on the ESL
+wire besides (`read_packet` in `mod_event_socket.c` takes the first line of the
+packet as the command, so a newline never rides any `api` or `bgapi` command).
+The switch offers one place where a value can be set on the new channel before
+its INVITE is built, and it takes no value on the dial string.
+
+`execute_on_originate` is a channel variable `switch_ivr_originate` reads off
+the *new* channel after the bracket blocks have been installed on it and before
+it launches that channel's session thread. `switch_channel_execute_on_value`
+runs the named application synchronously on the originating thread (a `::`
+between application and argument queues it instead — not what is wanted here).
+mod_sofia sends the INVITE from `sofia_on_init`, on the session thread, so a
+variable the hook sets is present when `sofia_glue_do_invite` reads
+`sip_multipart`. Measured on a `sofia/` leg: the INVITE went out as
+`multipart/mixed` carrying the document byte for byte, apostrophes and commas
+intact, and the hook's `set` was logged before *sending invite*.
+
+The dial string then carries paths and nothing else:
+
+```
+{execute_on_originate=lua /run/app/load_pidf.lua /run/app/<uuid>.xml}sofia/<profile>/<destination>
+```
+
+with the script reading the file and calling
+`session:setVariable("sip_multipart", "application/pidf+xml:" .. body)`.
+`CoreSession::setVariable` sets without the `${` check, so a document
+containing that sequence is not refused. `process_mp` in `sofia_media.c` splits
+the value at its first colon into content type and body, and
+`sofia_media_get_multipart` wraps every `sip_multipart` value (the variable may
+be stacked) and the SDP into one `multipart/mixed` body. The same is what an
+inbound INVITE's parts look like on the far side, which
+[`MultipartBody`](../freeswitch-types/src/variables/sip_multipart.rs) reads.
+
+Things that bit while measuring it, each of which leaves the INVITE going out
+*without* the part and one `ERR` line from mod_lua as the only trace:
+
+- The application name is split from its argument at the first space or single
+  colon. Keep the name bare and pass paths, never content: the argument is
+  variable-expanded by `switch_core_session_exec` before the application sees
+  it.
+- The application must be flagged `SAF_SUPPORT_NOMEDIA`, or the media gate in
+  `switch_core_session_execute_application_get_flags` refuses it on an outbound
+  channel that has no media yet. `lua`, `set` and `export` are.
+- The file is opened by FreeSWITCH, in FreeSWITCH's mount namespace, under
+  FreeSWITCH's uid. A path that exists on the host and not in the service's
+  namespace fails with *No such file or directory*, so a check that only
+  inspects the host side proves nothing. Run the loader through the switch:
+  the `lua` API runs a script on the calling thread and returns what it
+  writes, whereas `luarun` spawns a thread and answers `+OK` unconditionally,
+  so it cannot report a failure. That needs `lua` in the ESL user's
+  `esl-allowed-api`.
+- mod_lua's `io` read takes `"*a"`; `read("a")` is an invalid option there.
+
+Carriers that looked like alternatives and are not:
+
+- `sendmsg` with a `text/plain` body is genuinely length-delimited — the body
+  becomes the application argument untouched (`switch_ivr_parse_event`) — but it
+  addresses an existing session, and the value has to be on the channel before
+  its INVITE exists.
+- `global_setvar` splits its argument on `=` into three fields
+  (`switch_separate_string`), so any value with an `=` in it is misread.
+- A `user/` endpoint applies the directory user's `<variables>` to the new
+  channel only after `switch_ivr_originate` has returned, which is after the
+  INVITE; only `dial-var-*` params reach the variable event first. A directory
+  served per call by mod_xml_curl is therefore a carrier, but a heavy one next
+  to the hook.
+- `\s` is a real escape (`unescape_char` maps `n`, `r`, `t` and `s`), and would
+  spare a value the wrapping quotes, but the quote strip happens at the `=` pass
+  regardless of spaces, so it fixes nothing on its own.
 
 ## Bridge separators
 
