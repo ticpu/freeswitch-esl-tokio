@@ -405,32 +405,33 @@ implementation using `HeaderLookup` for channel lifecycle monitoring.
 
 ## Migrating to 2.0
 
-Deprecated in v1.x — switch before upgrading:
+The full guide, with the 1.x to 2.x mapping for every changed item, is
+[migrating-from-1.x.md](https://github.com/ticpu/freeswitch-esl-tokio/blob/master/docs/migrating-from-1.x.md).
 
-| v1 (deprecated) | v2 replacement |
-|---|---|
-| `linger(Option<u32>)` | `linger_timeout(Option<Duration>)` |
-| `body_string()` | `body().unwrap_or_default()` |
-| `EventFormat::from_content_type()` | `try_from_content_type()` |
+Available in 1.x already, so these can move before the upgrade:
 
-Breaking changes in 2.0 with no deprecation path:
+- `getvar_opt()` instead of `getvar()`.
+- `BgJobTracker` instead of a map of pending Job-UUIDs.
+- `is_terminal_channel_state()` instead of matching `CS_DESTROY` by hand. It
+  has the 2.x signature, so the call site survives the upgrade.
+- `body().unwrap_or_default()` instead of the deprecated `body_string()`.
+- `EventFormat::try_from_content_type()` instead of the deprecated
+  `from_content_type()`.
 
-- `EslConnectOptions::event_queue_size` field becomes private (accessor remains).
-- `DisconnectReason::ServerNotice` becomes a struct variant; new
-  `DisconnectReason::ProtocolError(String)` for hard wire-desync.
-- `HeaderLookup` typed accessors return `Result<Option<T>, _>`; gains
-  `SipHeaderLookup` supertrait and `EslHeaders` companion trait.
-- `Originate` switches to a builder.
-- `HashMap` → `IndexMap` for header storage.
-- `MessageType::Unknown` removed; parser hard-errors on unrecognized
-  `Content-Type`.
-- `impl From<quick_xml::Error> for EslError` removed.
-- `EslError::is_recoverable` / `is_connection_error` lose wildcard arms
-  — every variant is classified explicitly.
-- `EslEvent::event_type` is derived lazily from `Event-Name` on access.
-- `EslArray::parse` bounded by `MAX_ARRAY_ITEMS`, returns `Result`;
-  sip-header bumped to 0.3.
-- MSRV raised to 1.75.
+`linger(Option<u32>)` is deprecated here in favour of
+`linger_timeout(Option<Duration>)`, but 2.x removes `linger_timeout`: there
+the call is `linger(Option<Duration>)`.
+
+Upgrade steps:
+
+1. Replace `Originate` and `Endpoint` struct literals with constructors and
+   chained setters.
+2. Parse `Endpoint::Generic` strings into `Endpoint`, and move the dial strings
+   that fail to raw `bgapi`.
+3. Add `?` to typed header accessors and adjust for their new types.
+4. Implement `SipHeaderLookup` beside each custom `HeaderLookup`.
+5. Replace `linger_timeout`, `connect_with_user`, `recv` loops and `getvar` as
+   listed in the guide.
 
 ## Development
 
