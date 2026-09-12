@@ -464,7 +464,7 @@ cargo test --test live_freeswitch -- --ignored
 
 ## Requirements
 
-- Rust 1.70+
+- Rust 1.71+
 - Tokio async runtime
 
 ## Other Rust ESL crates

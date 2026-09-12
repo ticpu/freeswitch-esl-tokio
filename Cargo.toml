@@ -10,8 +10,8 @@ documentation = "https://docs.rs/freeswitch-esl-tokio"
 keywords = ["freeswitch", "esl", "voip", "telephony"]
 categories = ["network-programming", "api-bindings"]
 readme = "README.md"
-rust-version = "1.70"
-exclude = ["CLAUDE.md", "hooks/", "tests/", "docs/"]
+rust-version = "1.71"
+exclude = ["CLAUDE.md", "hooks/", "scripts/", "tests/", "docs/"]
 
 [dependencies]
 tokio = { version = "1.0", features = ["net", "io-util", "rt", "rt-multi-thread", "sync", "time", "macros"] }

@@ -6,108 +6,51 @@ on:
   pull_request:
     branches: [master, v1]
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
 
+      # target/ is deliberately not cached: compressing it costs more than the
+      # rebuild it saves.
       - name: Cache cargo
-        uses: actions/cache@v5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.toml') }}
+          restore-keys: ${{ runner.os }}-cargo-
 
-      - name: Check
-        run: cargo check --all-targets
-
-      - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
+      - name: Check and lint
+        run: scripts/ci-check.sh
 
       - name: Check EslEventType vs C ESL
-        run: |
-          hooks/check-event-types.sh
-          count=$(sed -n '/impl fmt::Display for EslEventType/,/=> "ALL"/p' src/event.rs | grep -c '=> "')
-          echo "EVENT_TYPE_COUNT=$count" >> "$GITHUB_ENV"
-
-      - name: Count typed enum variants
-        run: |
-          echo "EVENT_HEADER_COUNT=$(grep -c '=> "' src/headers.rs)" >> "$GITHUB_ENV"
-          echo "CHANNEL_VAR_COUNT=$(grep -c '=> "' src/variables/channel_variable.rs)" >> "$GITHUB_ENV"
-          echo "HEADER_LOOKUP_COUNT=$(sed -n '/^pub trait HeaderLookup/,/^}/p' src/lookup.rs | grep -c '^ *fn ')" >> "$GITHUB_ENV"
+        run: hooks/check-event-types.sh
 
       - name: Test
-        run: |
-          set -o pipefail
-          CARGO_TERM_COLOR=never cargo test 2>&1 | tee test-output.txt
-          passed=$(grep '^test result:' test-output.txt | sed 's/.*ok\. \([0-9]*\) passed.*/\1/' | paste -sd+ | bc)
-          echo "TEST_PASSED=$passed" >> "$GITHUB_ENV"
-
-      - name: Update test count badge
-        if: github.ref == 'refs/heads/master' && github.event_name == 'push'
-        uses: schneegans/dynamic-badges-action@v1.7.0
-        with:
-          auth: ${{ secrets.GIST_SECRET }}
-          gistID: def178758b6a88effff310aca87b6b50
-          filename: test-count.json
-          label: tests
-          message: "${{ env.TEST_PASSED }} passed"
-          color: brightgreen
-
-      - name: Update event type count badge
-        if: github.ref == 'refs/heads/master' && github.event_name == 'push'
-        uses: schneegans/dynamic-badges-action@v1.7.0
-        with:
-          auth: ${{ secrets.GIST_SECRET }}
-          gistID: def178758b6a88effff310aca87b6b50
-          filename: event-type-count.json
-          label: event types
-          message: "${{ env.EVENT_TYPE_COUNT }} (verified vs C)"
-          color: blue
-
-      - name: Update EventHeader count badge
-        if: github.ref == 'refs/heads/master' && github.event_name == 'push'
-        uses: schneegans/dynamic-badges-action@v1.7.0
-        with:
-          auth: ${{ secrets.GIST_SECRET }}
-          gistID: def178758b6a88effff310aca87b6b50
-          filename: event-header-count.json
-          label: EventHeader
-          message: "${{ env.EVENT_HEADER_COUNT }}"
-          color: blue
-
-      - name: Update ChannelVariable count badge
-        if: github.ref == 'refs/heads/master' && github.event_name == 'push'
-        uses: schneegans/dynamic-badges-action@v1.7.0
-        with:
-          auth: ${{ secrets.GIST_SECRET }}
-          gistID: def178758b6a88effff310aca87b6b50
-          filename: channel-var-count.json
-          label: ChannelVariable
-          message: "${{ env.CHANNEL_VAR_COUNT }}"
-          color: blue
-
-      - name: Update HeaderLookup count badge
-        if: github.ref == 'refs/heads/master' && github.event_name == 'push'
-        uses: schneegans/dynamic-badges-action@v1.7.0
-        with:
-          auth: ${{ secrets.GIST_SECRET }}
-          gistID: def178758b6a88effff310aca87b6b50
-          filename: header-lookup-count.json
-          label: HeaderLookup
-          message: "${{ env.HEADER_LOOKUP_COUNT }} accessors"
-          color: blue
+        run: scripts/ci-test.sh
 
       - name: Build
-        run: cargo build --release
+        run: scripts/ci-build.sh
+
+      # Last: it re-resolves Cargo.lock for the declared rust-version, and the
+      # steps above should run against the newest dependencies.
+      - name: Check declared MSRV
+        run: scripts/check-msrv.sh
