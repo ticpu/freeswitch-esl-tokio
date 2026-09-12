@@ -6,7 +6,8 @@
 //! everything else for free.
 
 use crate::channel::{
-    AnswerState, CallDirection, CallState, ChannelState, ChannelTimetable, ParseTimetableError,
+    AnswerState, CallDirection, CallState, ChannelState, ChannelTimetable, ParseChannelStateError,
+    ParseTimetableError,
 };
 use crate::event::EslEventPriority;
 use crate::headers::EventHeader;
@@ -131,6 +132,24 @@ pub trait HeaderLookup {
             .parse()
             .ok()?;
         ChannelState::from_number(n)
+    }
+
+    /// Whether this event is the one that ends the channel: a `CHANNEL_STATE`
+    /// carrying `Channel-State: CS_DESTROY`.
+    ///
+    /// `CHANNEL_DESTROY` is not that event -- its `Channel-State` still reads
+    /// `CS_REPORTING`. Never derive end-of-life from
+    /// [`channel_state_number()`](Self::channel_state_number), which already
+    /// reads `CS_DESTROY` on `CHANNEL_DESTROY` and so fires twice.
+    ///
+    /// `Err` when `Channel-State` is present but unparseable; `Ok(false)` when
+    /// it is absent.
+    fn is_terminal_channel_state(&self) -> Result<bool, ParseChannelStateError> {
+        Ok(self
+            .header(EventHeader::ChannelState)
+            .map(str::parse::<ChannelState>)
+            .transpose()?
+            .is_some_and(|state| state.is_terminal()))
     }
 
     /// Parse the `Channel-Call-State` header into a [`CallState`].

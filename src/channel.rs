@@ -53,6 +53,17 @@ impl ChannelState {
     pub fn as_number(&self) -> u8 {
         *self as u8
     }
+
+    /// Whether this is `CS_DESTROY`, the state that ends a channel.
+    ///
+    /// `CHANNEL_STATE` events carry no `variable_*` headers, so end-of-life
+    /// detected here cannot be paired with any channel variable from the same
+    /// event. The variable-bearing terminal event is `CHANNEL_HANGUP_COMPLETE`,
+    /// which is also where `variable_hangup_cause` first appears --
+    /// `CHANNEL_HANGUP` carries only the `Hangup-Cause` header.
+    pub fn is_terminal(&self) -> bool {
+        matches!(self, Self::CsDestroy)
+    }
 }
 
 impl fmt::Display for ChannelState {
