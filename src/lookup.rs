@@ -315,6 +315,41 @@ mod tests {
     }
 
     #[test]
+    fn terminal_state_is_the_final_channel_state_event() {
+        let s = store_with(&[("Channel-State", "CS_DESTROY")]);
+        assert_eq!(s.is_terminal_channel_state(), Ok(true));
+    }
+
+    #[test]
+    fn channel_destroy_shape_is_not_terminal() {
+        let s = store_with(&[
+            ("Channel-State", "CS_REPORTING"),
+            ("Channel-State-Number", "12"),
+        ]);
+        assert_eq!(s.is_terminal_channel_state(), Ok(false));
+    }
+
+    #[test]
+    fn hangup_state_is_not_terminal() {
+        let s = store_with(&[("Channel-State", "CS_HANGUP")]);
+        assert_eq!(s.is_terminal_channel_state(), Ok(false));
+    }
+
+    #[test]
+    fn unparseable_channel_state_is_an_error() {
+        let s = store_with(&[("Channel-State", "CS_BOGUS")]);
+        assert!(s
+            .is_terminal_channel_state()
+            .is_err());
+    }
+
+    #[test]
+    fn missing_channel_state_is_not_terminal() {
+        let s = store_with(&[("Event-Name", "HEARTBEAT")]);
+        assert_eq!(s.is_terminal_channel_state(), Ok(false));
+    }
+
+    #[test]
     fn call_state_typed() {
         let s = store_with(&[("Channel-Call-State", "ACTIVE")]);
         assert_eq!(s.call_state(), Some(CallState::Active));
