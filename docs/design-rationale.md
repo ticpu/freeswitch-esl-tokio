@@ -862,8 +862,8 @@ FreeSWITCH fires `CHANNEL_STATE(CS_INIT)` *before* `CHANNEL_CREATE` and
 `CREATE → DESTROY` window misses state at both ends. A state event bounds the
 life: the first one sighted establishes the key, `CS_DESTROY` retires it. What
 the key holds arrives only with a `CHANNEL_CREATE`, off the wire or rebuilt from
-a dump. Full ordering notes live in the README — they belong with usage docs,
-not here.
+a dump. Full ordering notes live in `docs/guide/events.md` — they belong with
+usage docs, not here.
 
 ## Which driver a channel belongs to is answered from its name
 

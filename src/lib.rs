@@ -182,6 +182,25 @@ mod readme {
     #![doc = include_str!("../README.md")]
 }
 
+#[cfg(doctest)]
+mod guide {
+    mod commands {
+        #![doc = include_str!("../docs/guide/commands.md")]
+    }
+    mod config {
+        #![doc = include_str!("../docs/guide/config.md")]
+    }
+    mod connecting {
+        #![doc = include_str!("../docs/guide/connecting.md")]
+    }
+    mod events {
+        #![doc = include_str!("../docs/guide/events.md")]
+    }
+    mod sdp {
+        #![doc = include_str!("../docs/guide/sdp.md")]
+    }
+}
+
 pub use app::dptools::AppCommand;
 pub use bgjob::{BgJobResult, BgJobTracker};
 pub use command::{

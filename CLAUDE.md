@@ -145,7 +145,9 @@ these locations (not just the Rust source):
 - `freeswitch-types/src/lib.rs` — crate root re-exports
 - `src/lib.rs` (freeswitch-esl-tokio) — ESL crate re-exports
 - `freeswitch-types/README.md` — module table and code examples
-- `README.md` — badges, code examples, file path references, hooks list
+- `README.md` — badges, quick start, feature list
+- `docs/guide/*.md` — code examples, file path references
+- `CONTRIBUTING.md` — hooks list
 - `CLAUDE.md` — any references to the old type name
 - `docs/design-rationale.md` — update or add section explaining the change
 - `examples/*.rs` — update imports and usage to the new typed API

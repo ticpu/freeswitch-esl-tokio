@@ -3,6 +3,17 @@
 Measures bgapi throughput on a single ESL connection — sends N `bgapi status`
 commands and collects all BACKGROUND_JOB results.
 
+## Results
+
+Localhost, N=10000, single connection:
+
+| Metric | Rust | C ESL |
+|---|---|---|
+| send_rate_per_sec | 914 | 918 |
+| rtt_median_us | 1104 | 5,472,455 |
+
+Send rate is identical, both bottlenecked by serial ESL. The RTT difference reflects architecture: Rust's reader task receives events concurrently, while C ESL queues them internally during `esl_send_recv` and only drains them afterward.
+
 ## Prerequisites
 
 - FreeSWITCH running with ESL accessible (default: `localhost:8021`)
