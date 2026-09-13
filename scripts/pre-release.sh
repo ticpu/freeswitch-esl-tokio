@@ -17,11 +17,44 @@ cd "$CRATE_DIR"
 cargo fmt --all
 "$SCRIPT_DIR/check-feature-matrix.sh"
 "$SCRIPT_DIR/check-msrv.sh"
-"$SCRIPT_DIR/check-codeql.sh"
-"$SCRIPT_DIR/check-actions.sh"
 cargo clippy --workspace --release --all-features -- -D warnings
-cargo test --workspace --release --all-features
-cargo test --test 'live_*' -- --ignored
+
+# The slowest gates spend their time running tests or waiting on GitHub, not
+# compiling, so they overlap; each log prints whole once all have finished.
+run_concurrently() {
+	local logs names=() pids=() failed=() i
+	logs="$(mktemp -d "$CRATE_DIR/target/pre-release.XXXXXX")"
+	while [ "$#" -gt 0 ]; do
+		names+=("$1")
+		bash -c "$2" >"$logs/${#names[@]}.log" 2>&1 &
+		pids+=("$!")
+		shift 2
+	done
+
+	set +x
+	for i in "${!names[@]}"; do
+		wait "${pids[$i]}" || failed+=("${names[$i]}")
+	done
+	for i in "${!names[@]}"; do
+		printf '\n=== %s ===\n' "${names[$i]}"
+		# Expected once cargo runs overlap.
+		grep -v '^ *Blocking waiting for file lock on ' "$logs/$((i + 1)).log" || [ "$?" -eq 1 ]
+	done
+	rm -rf "$logs"
+	set -x
+
+	if [ "${#failed[@]}" -gt 0 ]; then
+		echo "failed: ${failed[*]}" >&2
+		return 1
+	fi
+}
+
+run_concurrently \
+	tests "cargo test --workspace --release --all-features" \
+	live "cargo test --test 'live_*' -- --ignored" \
+	codeql "$SCRIPT_DIR/check-codeql.sh" \
+	actions "$SCRIPT_DIR/check-actions.sh"
+
 cargo build --workspace --release --all-features
 cargo build --examples --all-features
 cargo check --workspace --all-features --target x86_64-pc-windows-msvc
