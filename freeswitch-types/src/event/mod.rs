@@ -16,7 +16,6 @@ use crate::lossy_values::LossyValues;
 use crate::variables::{EslArray, EslArrayError, EslHeaders};
 use indexmap::IndexMap;
 use percent_encoding::{percent_encode, NON_ALPHANUMERIC};
-use std::fmt;
 
 wire_enum! {
     /// Event priority levels matching FreeSWITCH `esl_priority_t`
@@ -277,26 +276,25 @@ impl EslEvent {
     /// event was parsed from the network). `Content-Length` from stored headers
     /// is skipped and recomputed from the body if present.
     pub fn to_plain_format(&self) -> String {
-        use fmt::Write;
         let mut result = String::new();
 
         for (key, value) in self.headers() {
             if key == "Content-Length" {
                 continue;
             }
-            writeln!(
-                result,
-                "{}: {}",
-                key,
-                percent_encode(value.as_bytes(), NON_ALPHANUMERIC)
-            )
-            .expect("writing to String is infallible");
+            result.extend([key.as_str(), ": "]);
+            result.extend(percent_encode(value.as_bytes(), NON_ALPHANUMERIC));
+            result.push('\n');
         }
 
         if let Some(body) = &self.body {
-            writeln!(result, "Content-Length: {}", body.len())
-                .expect("writing to String is infallible");
-            result.push('\n');
+            result.extend([
+                "Content-Length: ",
+                &body
+                    .len()
+                    .to_string(),
+                "\n\n",
+            ]);
             result.push_str(body);
         } else {
             result.push('\n');
