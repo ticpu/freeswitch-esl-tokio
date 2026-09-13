@@ -97,6 +97,8 @@ use super::find_matching_bracket;
 use super::originate::OriginateError;
 use super::variables::{DialStringCarrier, Variables, VariablesType};
 
+type PrefixParser = fn(&str) -> Result<Endpoint, OriginateError>;
+
 /// Common interface for anything that formats as a FreeSWITCH dial string.
 ///
 /// Implemented on each concrete endpoint struct and on the [`Endpoint`] enum.
@@ -342,38 +344,41 @@ impl Endpoint {
         }
     }
 
+    /// Module prefix to parser, first match wins.
+    const PREFIX_PARSERS: &[(&str, PrefixParser)] = &[
+        ("${sofia_contact(", |u| Ok(Self::SofiaContact(u.parse()?))),
+        ("${group_call(", |u| Ok(Self::GroupCall(u.parse()?))),
+        ("error/", |u| Ok(Self::Error(u.parse()?))),
+        ("loopback/", |u| Ok(Self::Loopback(u.parse()?))),
+        // Must precede "sofia/", which also matches a gateway string.
+        ("sofia/gateway/", |u| Ok(Self::SofiaGateway(u.parse()?))),
+        ("sofia/", |u| Ok(Self::Sofia(u.parse()?))),
+        ("user/", |u| Ok(Self::User(u.parse()?))),
+        ("portaudio", |u| {
+            Ok(Self::PortAudio(AudioEndpoint::parse_with_prefix(
+                u,
+                "portaudio",
+            )?))
+        }),
+        ("pulseaudio", |u| {
+            Ok(Self::PulseAudio(AudioEndpoint::parse_with_prefix(
+                u,
+                "pulseaudio",
+            )?))
+        }),
+        ("alsa", |u| {
+            Ok(Self::Alsa(AudioEndpoint::parse_with_prefix(u, "alsa")?))
+        }),
+    ];
+
     /// Dispatch on the module prefix of a dial string whose variable block has
     /// already been taken off.
     fn parse_bare(uri: &str) -> Result<Self, OriginateError> {
-        if uri.starts_with("${sofia_contact(") {
-            Ok(Self::SofiaContact(uri.parse()?))
-        } else if uri.starts_with("${group_call(") {
-            Ok(Self::GroupCall(uri.parse()?))
-        } else if uri.starts_with("error/") {
-            Ok(Self::Error(uri.parse()?))
-        } else if uri.starts_with("loopback/") {
-            Ok(Self::Loopback(uri.parse()?))
-        } else if uri.starts_with("sofia/gateway/") {
-            Ok(Self::SofiaGateway(uri.parse()?))
-        } else if uri.starts_with("sofia/") {
-            Ok(Self::Sofia(uri.parse()?))
-        } else if uri.starts_with("user/") {
-            Ok(Self::User(uri.parse()?))
-        } else if uri.starts_with("portaudio") {
-            Ok(Self::PortAudio(AudioEndpoint::parse_with_prefix(
-                uri,
-                "portaudio",
-            )?))
-        } else if uri.starts_with("pulseaudio") {
-            Ok(Self::PulseAudio(AudioEndpoint::parse_with_prefix(
-                uri,
-                "pulseaudio",
-            )?))
-        } else if uri.starts_with("alsa") {
-            Ok(Self::Alsa(AudioEndpoint::parse_with_prefix(uri, "alsa")?))
-        } else {
-            Err(OriginateError::UnknownEndpointType(uri.to_string()))
-        }
+        let (_, parse) = Self::PREFIX_PARSERS
+            .iter()
+            .find(|(prefix, _)| uri.starts_with(prefix))
+            .ok_or_else(|| OriginateError::UnknownEndpointType(uri.to_string()))?;
+        parse(uri)
     }
 }
 
