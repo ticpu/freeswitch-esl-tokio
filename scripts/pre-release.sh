@@ -18,6 +18,7 @@ cargo fmt --all
 "$SCRIPT_DIR/check-feature-matrix.sh"
 "$SCRIPT_DIR/check-msrv.sh"
 "$SCRIPT_DIR/check-codeql.sh"
+"$SCRIPT_DIR/check-actions.sh"
 cargo clippy --workspace --release --all-features -- -D warnings
 cargo test --workspace --release --all-features
 cargo test --test 'live_*' -- --ignored
