@@ -5,7 +5,7 @@
 #
 # Requires a live FreeSWITCH ESL listener for the live_freeswitch suite, the
 # x86_64-pc-windows-msvc target for the cross-check, rustup for the MSRV
-# toolchain, and cargo-semver-checks.
+# toolchain, cargo-semver-checks, and gh with HEAD pushed and scanned by CodeQL.
 # Traced (set -x) so a failure names the gate that stopped it.
 
 set -euxo pipefail
@@ -17,6 +17,7 @@ cd "$CRATE_DIR"
 cargo fmt --all
 "$SCRIPT_DIR/check-feature-matrix.sh"
 "$SCRIPT_DIR/check-msrv.sh"
+"$SCRIPT_DIR/check-codeql.sh"
 cargo clippy --workspace --release --all-features -- -D warnings
 cargo test --workspace --release --all-features
 cargo test --test 'live_*' -- --ignored
