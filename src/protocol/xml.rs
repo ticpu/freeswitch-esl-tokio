@@ -23,6 +23,8 @@ impl EslParser {
     ///   <body>...</body>
     /// </event>
     /// ```
+    // qual:allow(complexity, max_cyclomatic=20) reason: "one pull-parser state machine over shared flags"
+    // qual:allow(srp, slm) reason: "one pull-parser state machine over shared flags"
     pub(super) fn parse_xml_event(&self, message: EslMessage) -> EslResult<EslEvent> {
         use quick_xml::events::Event as XmlEvent;
         use quick_xml::Reader;

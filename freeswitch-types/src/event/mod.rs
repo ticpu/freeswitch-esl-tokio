@@ -33,6 +33,7 @@ wire_enum! {
 }
 
 /// ESL Event structure containing headers and optional body
+// qual:allow(srp, god_struct) reason: "public data carrier; accessors read disjoint fields"
 #[derive(Debug, Clone, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct EslEvent {

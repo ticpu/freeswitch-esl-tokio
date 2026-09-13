@@ -58,6 +58,7 @@ impl VariablesType {
 /// chose one. Deserialization accepts both formats; a flat map implies
 /// `Default` scope and the comma. A `separator` that cannot delimit the block,
 /// or that a value already contains, is refused at load.
+// qual:allow(srp, god_struct) reason: "public builder; accessors read disjoint fields"
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Variables {
     vars_type: VariablesType,

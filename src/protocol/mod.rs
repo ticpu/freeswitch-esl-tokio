@@ -1,5 +1,6 @@
 //! ESL protocol parsing and message handling
 
+// qual:allow(coupling, sdp) reason: "the parser owns its read buffer"
 use crate::{
     buffer::EslBuffer,
     constants::{

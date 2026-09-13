@@ -41,6 +41,7 @@ pub enum SdpCodecEntry {
 /// a port-0 section is the offer's held or declined stream and is exactly what a
 /// reader needs when a call has no audio. [`is_negotiable`](Self::is_negotiable)
 /// separates the two.
+// qual:allow(srp, god_struct) reason: "public data carrier; accessors read disjoint fields"
 #[derive(Debug, Clone)]
 pub struct SdpMediaSection {
     media_type: SdpMediaType,

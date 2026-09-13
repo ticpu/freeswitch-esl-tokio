@@ -314,6 +314,7 @@ impl EslError {
     /// Recoverable: `Timeout`, `CommandFailed`, `UnexpectedReply`, `QueueFull`.
     /// Non-recoverable errors (I/O, auth, disconnect) mean the connection is dead
     /// and the caller should reconnect.
+    // qual:allow(dry, duplicate) reason: "exhaustive per-variant classification, no catch-all by design"
     pub fn is_recoverable(&self) -> bool {
         match self {
             EslError::Io(_) => false,
@@ -361,6 +362,7 @@ impl EslError {
     /// `AuthenticationFailed` to break the loop.
     ///
     /// [`EslClient::connect`]: crate::EslClient::connect
+    // qual:allow(dry, duplicate) reason: "exhaustive per-variant classification, no catch-all by design"
     pub fn is_connection_error(&self) -> bool {
         match self {
             EslError::Io(_) => true,

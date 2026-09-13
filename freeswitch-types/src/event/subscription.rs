@@ -80,6 +80,7 @@ impl std::error::Error for EventSubscriptionError {}
 /// assert!(!sub.is_empty());
 /// assert!(!sub.is_all());
 /// ```
+// qual:allow(srp, god_struct) reason: "public builder; accessors read disjoint fields"
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EventSubscription {
     format: EventFormat,

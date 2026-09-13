@@ -231,6 +231,7 @@ async fn adopt_stream_with_options() {
 }
 
 #[tokio::test]
+// qual:allow(complexity, unsafe) reason: "fd dup/close is what the re-exec handoff test exercises"
 async fn sequential_teardown_adopt_teardown() {
     use std::os::unix::io::FromRawFd;
 

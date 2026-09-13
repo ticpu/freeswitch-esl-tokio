@@ -1,5 +1,6 @@
 //! Command execution and response handling
 
+// qual:allow(coupling, sdp) reason: "channel dumps reuse the protocol decoder"
 use crate::{
     constants::{HEADER_TERMINATOR, LINE_TERMINATOR},
     error::{EslError, EslResult},
