@@ -133,6 +133,7 @@ impl CodecImplementation {
 
 /// `true` if `entry` matches `imp` under the same rules as the second matching pass
 /// in `switch_loadable_module_get_codecs_sorted` (`switch_loadable_module.c:2885-2909`).
+// qual:allow(complexity, max_cyclomatic=16) reason: "mirrors the C matching pass branch for branch"
 fn matches_implementation(entry: &CodecStringEntry, imp: &CodecImplementation) -> bool {
     if !entry
         .name()

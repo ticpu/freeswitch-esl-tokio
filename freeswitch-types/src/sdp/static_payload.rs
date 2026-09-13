@@ -18,6 +18,7 @@ pub(crate) struct StaticPayloadType {
 /// Returns the RFC 3551 static payload descriptor for the given payload type number.
 ///
 /// Returns `None` for reserved, unassigned, and dynamic payload type numbers (>= 35).
+// qual:allow(complexity, max_cyclomatic=24) reason: "one arm per RFC 3551 table row"
 pub(crate) fn rfc3551_payload_type(pt: u8) -> Option<StaticPayloadType> {
     macro_rules! pt {
         ($name:expr, $rate:expr, $ch:expr) => {
