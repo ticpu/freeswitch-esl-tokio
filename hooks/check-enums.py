@@ -18,7 +18,7 @@ Usage:
 Options:
   --fs-source PATH   FreeSWITCH source tree (default: $FREESWITCH_SOURCE)
   --json             Output JSON (for CI badge consumption)
-  --quiet            Only print failures and summary line
+  --quiet            Print only failing checks
 
 Exit: 0 = all checks pass, 1 = any mismatch.
 """
@@ -723,14 +723,14 @@ def main() -> int:
         if not result.ok:
             rc = 1
 
-        if args.json:
+        if args.json or (args.quiet and result.ok):
             continue
 
-        if result.missing and not args.quiet:
+        if result.missing:
             print(f"{result.name} missing from Rust:")
             for h in result.missing:
                 print(f"  + {h}")
-        if result.extra and not args.quiet:
+        if result.extra:
             print(f"{result.name} extra in Rust (not traced to C source):")
             for h in result.extra:
                 print(f"  - {h}")
