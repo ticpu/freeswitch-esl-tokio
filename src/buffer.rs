@@ -1,7 +1,7 @@
 //! Buffer management for ESL protocol parsing
 
 use crate::{
-    constants::*,
+    constants::{BUF_CHUNK, MAX_BUFFER_SIZE},
     error::{EslError, EslResult},
 };
 use bytes::{Buf, BytesMut};

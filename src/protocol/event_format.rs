@@ -150,20 +150,16 @@ impl EslParser {
 
         let mut event = EslEvent::new();
         for (key, value) in map {
-            // FreeSWITCH puts the event body under a "_body" key in JSON events
-            if key == "_body" {
-                let body_str = match value {
-                    serde_json::Value::String(s) => s,
-                    _ => value.to_string(),
-                };
-                event.set_body(body_str);
-                continue;
-            }
             let value_str = match value {
                 serde_json::Value::String(s) => s,
                 _ => value.to_string(),
             };
-            event.set_header(key, value_str);
+            // FreeSWITCH puts the event body under a "_body" key in JSON events
+            if key == "_body" {
+                event.set_body(value_str);
+            } else {
+                event.set_header(key, value_str);
+            }
         }
 
         Self::carry_lossy_signal(&mut event, message.lossy_values, message.raw_body);
