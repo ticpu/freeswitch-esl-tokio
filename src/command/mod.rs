@@ -106,20 +106,24 @@ impl CommandBuilder {
 
     /// Build the command string
     pub fn build(self) -> String {
-        use std::fmt::Write;
         let mut result = self.command;
         result.push_str(LINE_TERMINATOR);
 
         for (key, value) in &self.headers {
-            write!(result, "{}: {}{}", key, value, LINE_TERMINATOR)
-                .expect("writing to String is infallible");
+            result.extend([key.as_str(), ": ", value.as_str(), LINE_TERMINATOR]);
         }
 
         if let Some(body) = &self.body {
-            write!(result, "Content-Length: {}{}", body.len(), LINE_TERMINATOR)
-                .expect("writing to String is infallible");
-            result.push_str(LINE_TERMINATOR);
-            result.push_str(body);
+            let length = body
+                .len()
+                .to_string();
+            result.extend([
+                "Content-Length: ",
+                &length,
+                LINE_TERMINATOR,
+                LINE_TERMINATOR,
+                body,
+            ]);
         } else {
             result.push_str(LINE_TERMINATOR);
         }

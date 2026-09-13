@@ -22,12 +22,6 @@ impl EslBuffer {
         }
     }
 
-    /// Get current length of unconsumed data in buffer
-    pub fn len(&self) -> usize {
-        self.buffer
-            .len()
-    }
-
     /// Room left before the next write reallocates.
     ///
     /// `BufMut::remaining_mut` answers `usize::MAX - len` for a `BytesMut`,
@@ -68,25 +62,6 @@ impl EslBuffer {
     /// Get reference to unconsumed data
     pub fn data(&self) -> &[u8] {
         &self.buffer
-    }
-
-    /// Consume bytes from the front of the buffer.
-    ///
-    /// Returns `Err` if `count` exceeds the available data.
-    pub fn advance(&mut self, count: usize) -> EslResult<()> {
-        let available = self.len();
-        if count > available {
-            return Err(EslError::protocol_error(format!(
-                "cannot advance {} bytes, only {} available",
-                count, available
-            )));
-        }
-        self.buffer
-            .advance(count);
-        self.scan_offset = self
-            .scan_offset
-            .saturating_sub(count);
-        Ok(())
     }
 
     /// Find `pattern`, resuming from the scan watermark and backing up
@@ -149,6 +124,13 @@ impl EslBuffer {
         Some(result)
     }
 
+    /// Discard all unconsumed data.
+    pub fn clear(&mut self) {
+        self.buffer
+            .clear();
+        self.scan_offset = 0;
+    }
+
     /// Ensure minimum write capacity; BytesMut handles internal compaction.
     pub fn compact(&mut self) {
         if self.write_capacity() < BUF_CHUNK {
@@ -194,32 +176,34 @@ mod tests {
     #[test]
     fn test_basic_operations() {
         let mut buffer = EslBuffer::new();
-        assert_eq!(buffer.len(), 0);
+        assert!(buffer
+            .data()
+            .is_empty());
 
         buffer.extend_from_slice(b"Hello World");
-        assert_eq!(buffer.len(), 11);
         assert_eq!(buffer.data(), b"Hello World");
     }
 
     #[test]
-    fn test_advance() {
+    fn test_extract_bytes_short_leaves_buffer_intact() {
         let mut buffer = EslBuffer::new();
-        buffer.extend_from_slice(b"Hello World");
-
-        buffer
-            .advance(6)
-            .unwrap();
-        assert_eq!(buffer.data(), b"World");
-        assert_eq!(buffer.len(), 5);
+        buffer.extend_from_slice(b"Hello");
+        assert_eq!(buffer.extract_bytes(10), None);
+        assert_eq!(buffer.data(), b"Hello");
     }
 
     #[test]
-    fn test_advance_overflow() {
+    fn test_clear() {
         let mut buffer = EslBuffer::new();
-        buffer.extend_from_slice(b"Hello");
+        buffer.extend_from_slice(b"hello\r\n\r");
+        assert_eq!(buffer.find_pattern(b"\r\n\r\n"), None);
+
+        buffer.clear();
         assert!(buffer
-            .advance(10)
-            .is_err());
+            .data()
+            .is_empty());
+        buffer.extend_from_slice(b"\r\n\r\n");
+        assert_eq!(buffer.find_pattern(b"\r\n\r\n"), Some(0));
     }
 
     #[test]
@@ -269,7 +253,7 @@ mod tests {
             .buffer
             .extend_from_slice(&vec![b'x'; filled]);
         buffer
-            .advance(filled - 5)
+            .extract_bytes(filled - 5)
             .unwrap();
         assert!(buffer.write_capacity() < BUF_CHUNK);
 
@@ -286,7 +270,12 @@ mod tests {
         for _ in 0..17 {
             buffer.extend_from_slice(&chunk);
         }
-        assert!(buffer.len() > MAX_BUFFER_SIZE);
+        assert!(
+            buffer
+                .data()
+                .len()
+                > MAX_BUFFER_SIZE
+        );
         let err = buffer
             .check_size_limits()
             .unwrap_err();

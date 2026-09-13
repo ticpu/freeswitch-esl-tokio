@@ -193,18 +193,10 @@ impl EslParser {
             self.is_waiting_for_headers(),
             "drain_buffer called outside WaitingForHeaders state"
         );
-        let remaining = self
-            .buffer
-            .len();
-        if remaining > 0 {
-            self.buffer
-                .advance(remaining)
-                .expect(
-                    "advance(remaining) is in bounds: remaining was just measured by buffer.len()",
-                );
-            self.buffer
-                .compact();
-        }
+        self.buffer
+            .clear();
+        self.buffer
+            .compact();
     }
 
     /// Add data to the parser buffer
@@ -286,19 +278,13 @@ impl EslParser {
     /// Complete a message whose headers are already consumed, or park it back
     /// in the parser state until the framed byte count has arrived.
     fn parse_body_frame(&mut self, pending: PendingBody) -> EslResult<Option<EslMessage>> {
-        if self
-            .buffer
-            .len()
-            < pending.body_length
-        {
-            self.state = ParseState::WaitingForBody(pending);
-            return Ok(None);
-        }
-
-        let body_data = self
+        let Some(body_data) = self
             .buffer
             .extract_bytes(pending.body_length)
-            .expect("body_length <= buffer.len(): verified above");
+        else {
+            self.state = ParseState::WaitingForBody(pending);
+            return Ok(None);
+        };
         self.buffer
             .compact();
 
