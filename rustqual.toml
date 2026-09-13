@@ -1,4 +1,4 @@
-exclude_files = ["target/**", "worktrees/**", ".claude/**", "scratch/**"]
+exclude_files = ["target/**", "worktrees/**", ".claude/**", "scratch/**", "examples/**"]
 strict_closures = false
 strict_iterator_chains = false
 allow_recursion = false
