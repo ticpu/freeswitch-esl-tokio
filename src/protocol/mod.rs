@@ -2,7 +2,6 @@
 
 use crate::{
     buffer::EslBuffer,
-    command::EslResponse,
     constants::{
         CONTENT_TYPE_API_RESPONSE, CONTENT_TYPE_AUTH_REQUEST, CONTENT_TYPE_COMMAND_REPLY,
         CONTENT_TYPE_LOG_DATA, CONTENT_TYPE_TEXT_EVENT_JSON, CONTENT_TYPE_TEXT_EVENT_PLAIN,
@@ -94,7 +93,7 @@ impl MessageType {
 }
 
 /// Parsed ESL message: the parser's intermediate, consumed by the connection
-/// module. What callers see is [`EslResponse`] or [`crate::event::EslEvent`].
+/// module. What callers see is a command reply or an [`EslEvent`].
 #[derive(Debug, Clone)]
 pub(crate) struct EslMessage {
     /// Message type
@@ -132,13 +131,6 @@ impl EslMessage {
     pub fn with_lossy_values(mut self, lossy_values: LossyValues) -> Self {
         self.lossy_values = lossy_values;
         self
-    }
-
-    /// Convert to EslResponse
-    pub fn into_response(self) -> EslResponse {
-        EslResponse::new(self.headers, self.body)
-            .with_lossy_values(self.lossy_values)
-            .with_raw_body(self.raw_body)
     }
 }
 
@@ -734,108 +726,6 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_connect_response() {
-        let mut parser = EslParser::new();
-
-        // FreeSWITCH serializes the outbound `connect` response with
-        // switch_event_serialize(SWITCH_TRUE): every value is percent-encoded,
-        // including the channel data. The parser must percent-decode them.
-        let data = "Content-Type: command/reply\n\
-             Reply-Text: +OK\n\
-             Socket-Mode: async\n\
-             Control: full\n\
-             Event-Name: CHANNEL_DATA\n\
-             Channel-Name: sofia/internal/1000%40example.com\n\
-             Unique-ID: abcd-1234\n\
-             Caller-Caller-ID-Name: Test%20User\n\
-             \n";
-
-        parser
-            .add_data(data.as_bytes())
-            .unwrap();
-        let message = parser
-            .parse_message()
-            .unwrap()
-            .unwrap();
-
-        assert_eq!(message.message_type, MessageType::CommandReply);
-        assert_eq!(
-            message
-                .headers
-                .get("Channel-Name")
-                .map(|s| s.as_str()),
-            Some("sofia/internal/1000@example.com")
-        );
-        assert_eq!(
-            message
-                .headers
-                .get("Caller-Caller-ID-Name")
-                .map(|s| s.as_str()),
-            Some("Test User")
-        );
-        assert_eq!(
-            message
-                .headers
-                .get("Socket-Mode")
-                .map(|s| s.as_str()),
-            Some("async")
-        );
-        assert_eq!(
-            message
-                .headers
-                .get("Control")
-                .map(|s| s.as_str()),
-            Some("full")
-        );
-
-        let response = message.into_response();
-        assert!(response.is_success());
-        assert_eq!(response.reply_text(), Some("+OK"));
-        assert!(response
-            .lossy_values()
-            .is_empty());
-    }
-
-    #[test]
-    fn test_connect_response_non_utf8_value_lossy() {
-        // A channel-data value that is not valid UTF-8 after percent-decoding
-        // (a Latin-1 caller name) is decoded lossily by default and surfaced
-        // on the response, not a hard error.
-        let mut parser = EslParser::new();
-        let data = "Content-Type: command/reply\n\
-             Reply-Text: +OK\n\
-             Caller-Caller-ID-Name: Andr%E9\n\
-             \n";
-        parser
-            .add_data(data.as_bytes())
-            .unwrap();
-        let response = parser
-            .parse_message()
-            .unwrap()
-            .unwrap()
-            .into_response();
-
-        assert!(response.is_success());
-        assert_eq!(
-            response.header("Caller-Caller-ID-Name"),
-            Some("Andr\u{FFFD}")
-        );
-        let lossy = response.lossy_values();
-        assert_eq!(
-            lossy
-                .iter()
-                .count(),
-            1
-        );
-        let entry = lossy
-            .iter()
-            .next()
-            .unwrap();
-        assert_eq!(entry.key(), "Caller-Caller-ID-Name");
-        assert_eq!(entry.raw_value(), "Andr%E9");
-    }
-
-    #[test]
     fn test_connect_response_non_utf8_value_strict_error() {
         let mut parser = EslParser::new().with_strict_header_utf8(true);
         let data = "Content-Type: command/reply\nCaller-Caller-ID-Name: Andr%E9\n\n";
@@ -888,24 +778,6 @@ mod tests {
             parser.parse_message(),
             Err(EslError::ProtocolError { .. })
         ));
-    }
-
-    #[test]
-    fn test_api_response_non_utf8_body_raw_body() {
-        let mut parser = EslParser::new();
-        let mut data = b"Content-Type: api/response\nContent-Length: 4\n\n".to_vec();
-        data.extend_from_slice(b"caf\xE9");
-        parser
-            .add_data(&data)
-            .unwrap();
-        let response = parser
-            .parse_message()
-            .unwrap()
-            .unwrap()
-            .into_response();
-
-        assert_eq!(response.body(), Some("caf\u{FFFD}"));
-        assert_eq!(response.raw_body(), Some(&b"caf\xE9"[..]));
     }
 
     #[test]

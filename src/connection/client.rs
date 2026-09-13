@@ -107,7 +107,7 @@ impl EslClient {
 
         drop(writer);
 
-        let response = message.into_response();
+        let response = EslResponse::from_message(message);
         debug!("Received response: success={}", response.is_success());
         Ok(response)
     }

@@ -144,7 +144,7 @@ pub(super) async fn authenticate(
         }
         Err(e) => return Err(e),
     };
-    let response = response_msg.into_response();
+    let response = EslResponse::from_message(response_msg);
 
     if !response.is_success() {
         return Err(match response.reply_text() {
