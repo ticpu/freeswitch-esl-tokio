@@ -1,0 +1,3 @@
+-examples/**:rust/cleartext-logging
+-tests/**:rust/cleartext-logging
+-tests/**:rust/hard-coded-cryptographic-value

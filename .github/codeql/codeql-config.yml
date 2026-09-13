@@ -1,0 +1,4 @@
+name: freeswitch-esl-tokio
+
+threat-models:
+- local

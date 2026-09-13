@@ -5,10 +5,9 @@
 #
 # Two things this exists to get right:
 #
-#   - The run is selected by workflow AND commit SHA. This repository also runs
-#     GitHub's default-setup CodeQL scan, which is a separate run on the same
-#     commit with no workflow file behind it, and it usually finishes first --
-#     so "the most recent run on the branch" is regularly the scan, not CI.
+#   - The run is selected by workflow AND commit SHA. The CodeQL workflow is a
+#     separate run on the same commit and usually finishes first -- so "the
+#     most recent run on the branch" is regularly the scan, not CI.
 #   - `gh run watch` exits 0 on a run that failed unless it is given
 #     --exit-status.
 #
