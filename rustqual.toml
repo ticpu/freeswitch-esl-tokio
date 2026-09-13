@@ -32,8 +32,9 @@ min_tokens = 30
 min_lines = 5
 min_statements = 3
 ignore_trait_impls = true
-detect_dead_code = true
-detect_dead_types = true
+# Library: rustc already reports unused private items; the rest is public API.
+detect_dead_code = false
+detect_dead_types = false
 detect_wildcard_imports = true
 detect_repeated_matches = true
 
