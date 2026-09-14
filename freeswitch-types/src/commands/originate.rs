@@ -7,6 +7,7 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use super::endpoint::ParseGroupCallOrderError;
+use super::variables::{BlockParse, DialStringCarrier, DialStringTarget};
 use super::{originate_quote, originate_split, originate_unquote};
 use crate::channel::ParseHangupCauseError;
 
@@ -645,8 +646,46 @@ impl Originate {
     }
 }
 
+/// Renders an [`Originate`] for one parser revision. Returned by
+/// [`Originate::display_with`].
+#[derive(Debug, Clone, Copy)]
+pub struct OriginateDisplay<'a> {
+    originate: &'a Originate,
+    block_parse: BlockParse,
+}
+
+impl fmt::Display for OriginateDisplay<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.originate
+            .write_with(f, self.block_parse)
+    }
+}
+
 impl fmt::Display for Originate {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.write_with(f, BlockParse::default())
+    }
+}
+
+impl FromStr for Originate {
+    type Err = OriginateError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::parse_with(s, BlockParse::default())
+    }
+}
+
+impl Originate {
+    /// Render for a switch running `block_parse`, rather than the default
+    /// revision [`Display`](fmt::Display) uses.
+    pub fn display_with(&self, block_parse: BlockParse) -> OriginateDisplay<'_> {
+        OriginateDisplay {
+            originate: self,
+            block_parse,
+        }
+    }
+
+    fn write_with(&self, f: &mut fmt::Formatter<'_>, block_parse: BlockParse) -> fmt::Result {
         let target_str = match &self.target {
             OriginateTarget::Extension(ext) => ext.clone(),
             OriginateTarget::Application(app) => app.to_string_with_dialplan(&DialplanType::Xml),
@@ -664,18 +703,21 @@ impl fmt::Display for Originate {
         write!(
             f,
             "originate {} {}",
-            self.endpoint,
+            self.endpoint
+                .display_for(Self::dial_target(block_parse)),
             originate_quote(&target_str)
         )?;
 
         self.write_positional_tail(f)
     }
-}
 
-impl FromStr for Originate {
-    type Err = OriginateError;
+    fn dial_target(block_parse: BlockParse) -> DialStringTarget {
+        DialStringTarget::new(DialStringCarrier::EslApi).with_block_parse(block_parse)
+    }
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    /// Parse an originate written for a switch running `block_parse`, mirroring
+    /// [`display_with`](Self::display_with).
+    pub fn parse_with(s: &str, block_parse: BlockParse) -> Result<Self, OriginateError> {
         let s = s
             .strip_prefix("originate")
             .unwrap_or(s)
@@ -687,7 +729,7 @@ impl FromStr for Originate {
         }
 
         let endpoint_str = args.remove(0);
-        let endpoint: Endpoint = endpoint_str.parse()?;
+        let endpoint = Endpoint::parse_for(&endpoint_str, Self::dial_target(block_parse))?;
 
         if args.is_empty() {
             return Err(OriginateError::ParseError(

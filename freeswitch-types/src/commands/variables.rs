@@ -33,10 +33,12 @@ impl VariablesType {
         }
     }
 
-    fn backslash_escape(self) -> &'static str {
+    /// A `[]` block rides through the `|` and `,` leg splits before the block
+    /// parse, and both consume escapes.
+    fn leg_split_passes(self) -> u32 {
         match self {
-            Self::Enterprise | Self::Default => BACKSLASH,
-            Self::Channel => BACKSLASH_CHANNEL,
+            Self::Enterprise | Self::Default => 0,
+            Self::Channel => 2,
         }
     }
 }
@@ -44,10 +46,10 @@ impl VariablesType {
 /// Ordered set of channel variables with FreeSWITCH escaping.
 ///
 /// A comma is escaped with `\,`, a backslash and a single quote with as many
-/// backslashes as the carrier's passes consume, and a value with spaces is
-/// wrapped in single quotes. This form round-trips through [`FromStr`]; what the
-/// switch itself decodes depends on which command carries the block, and is
-/// documented in `docs/dial-string-format.md`.
+/// backslashes as the [`DialStringTarget`]'s passes consume, and a value with
+/// spaces is wrapped in single quotes. This form round-trips through [`FromStr`];
+/// what the switch itself decodes depends on which command carries the block
+/// and which parser revision reads it, documented in `docs/dial-string-format.md`.
 ///
 /// # Serde format
 ///
@@ -88,22 +90,151 @@ pub enum DialStringCarrier {
     Dialplan,
 }
 
-/// A literal backslash, whatever follows it, in a block parsed before the dial
-/// string is split into legs.
-const BACKSLASH: &str = r"\\\\\\\\";
-/// The same in a `[]` block, which rides through the `|` and `,` leg splits
-/// first and so meets two more passes.
-const BACKSLASH_CHANNEL: &str = r"\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\";
-/// A literal single quote, per carrier: still `\'` entering the last pass.
-const QUOTE_DIALPLAN: &str = r"\\\\\\'";
-const QUOTE_ESL_API: &str = r"\\\\\\\'";
-
 impl DialStringCarrier {
-    fn quote_escape(self) -> &'static str {
+    /// Dialplan variable expansion deletes an escaped quote outright, where every
+    /// other pass unescapes it.
+    fn deletes_escaped_quote(self) -> bool {
+        matches!(self, Self::Dialplan)
+    }
+}
+
+/// Which revision of the switch's bracket-block parser a dial string is rendered
+/// for.
+///
+/// How many escape-consuming passes a block meets is the switch's to change, and
+/// every escaped quote and backslash depends on it. It covers `{}`, `<>` and `[]`
+/// escaping only: the inline action list and the quote pre-scan ahead of a `[]`
+/// block are other parsers. Which revisions a FreeSWITCH version is known to run
+/// is documented in `docs/dial-string-format.md`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "snake_case"))]
+#[non_exhaustive]
+pub enum BlockParse {
+    /// Both of the block's own splits, on the separator and on `=`, run the
+    /// escape-consuming cleanup.
+    #[default]
+    PairSplitCleans,
+}
+
+impl BlockParse {
+    const ALL: &'static [Self] = &[Self::PairSplitCleans];
+
+    fn as_str(self) -> &'static str {
         match self {
-            Self::EslApi => QUOTE_ESL_API,
-            Self::Dialplan => QUOTE_DIALPLAN,
+            Self::PairSplitCleans => "pair_split_cleans",
         }
+    }
+
+    fn cleanup_passes(self) -> u32 {
+        match self {
+            Self::PairSplitCleans => 2,
+        }
+    }
+}
+
+impl fmt::Display for BlockParse {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl FromStr for BlockParse {
+    type Err = ParseBlockParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::ALL
+            .iter()
+            .copied()
+            .find(|revision| {
+                revision
+                    .as_str()
+                    .eq_ignore_ascii_case(s)
+            })
+            .ok_or_else(|| ParseBlockParseError(s.to_string()))
+    }
+}
+
+/// A [`BlockParse`] name this crate does not know. The rejected name is the field.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParseBlockParseError(pub String);
+
+impl fmt::Display for ParseBlockParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("unknown block-parse revision, expected one of:")?;
+        for revision in BlockParse::ALL {
+            write!(f, " {revision}")?;
+        }
+        Ok(())
+    }
+}
+
+impl std::error::Error for ParseBlockParseError {}
+
+/// Where a dial string is headed: the command carrying it and the block-parser
+/// revision of the switch reading it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DialStringTarget {
+    carrier: DialStringCarrier,
+    block_parse: BlockParse,
+}
+
+impl DialStringTarget {
+    /// Target `carrier` at the default [`BlockParse`].
+    pub fn new(carrier: DialStringCarrier) -> Self {
+        Self {
+            carrier,
+            block_parse: BlockParse::default(),
+        }
+    }
+
+    /// Target a switch running `block_parse`.
+    pub fn with_block_parse(mut self, block_parse: BlockParse) -> Self {
+        self.block_parse = block_parse;
+        self
+    }
+
+    /// The command carrying the dial string.
+    pub fn carrier(&self) -> DialStringCarrier {
+        self.carrier
+    }
+
+    /// The block-parser revision rendered for.
+    pub fn block_parse(&self) -> BlockParse {
+        self.block_parse
+    }
+
+    fn passes(self, scope: VariablesType) -> u32 {
+        1 + self
+            .block_parse
+            .cleanup_passes()
+            + scope.leg_split_passes()
+    }
+
+    /// Every pass halves a run of backslashes, so a literal one needs 2^passes.
+    fn backslash_escape(self, scope: VariablesType) -> String {
+        "\\".repeat(1 << self.passes(scope))
+    }
+
+    /// A quote must still read `\'` entering the last pass, or bare after a
+    /// carrier pass that deletes `\'`.
+    fn quote_escape(self, scope: VariablesType) -> String {
+        let consumed_by_carrier = if self
+            .carrier
+            .deletes_escaped_quote()
+        {
+            2
+        } else {
+            1
+        };
+        let run = (1usize << self.passes(scope)) - consumed_by_carrier;
+        format!("{}'", "\\".repeat(run))
+    }
+}
+
+impl From<DialStringCarrier> for DialStringTarget {
+    fn from(carrier: DialStringCarrier) -> Self {
+        Self::new(carrier)
     }
 }
 
@@ -186,15 +317,18 @@ fn check_separator(sep: char, vars_type: VariablesType) -> Result<(), OriginateE
 /// block also escapes the pipe, which the leg split would otherwise read.
 fn escape_value(
     value: &str,
-    carrier: DialStringCarrier,
+    target: impl Into<DialStringTarget>,
     commas_separate: bool,
     vars_type: VariablesType,
 ) -> String {
+    let target = target.into();
     // The backslash goes first, or the ones the other rules introduce get
     // escaped in turn.
     let escaped = value
-        .replace('\\', vars_type.backslash_escape())
-        .replace('\'', carrier.quote_escape());
+        .replace('\\', &target.backslash_escape(vars_type))
+        .replace('\'', &target.quote_escape(vars_type));
+    // `\,` and `\|` keep one backslash: a pass consumes `\x` only before a
+    // quote, a backslash, a named escape or that pass's own delimiter.
     let escaped = if commas_separate {
         escaped.replace(',', "\\,")
     } else {
@@ -217,7 +351,7 @@ fn escape_value(
 /// an earlier one.
 fn unescape_value(
     value: &str,
-    carrier: DialStringCarrier,
+    target: DialStringTarget,
     commas_separate: bool,
     vars_type: VariablesType,
 ) -> String {
@@ -236,8 +370,8 @@ fn unescape_value(
     } else {
         s
     };
-    s.replace(carrier.quote_escape(), "'")
-        .replace(vars_type.backslash_escape(), "\\")
+    s.replace(&target.quote_escape(vars_type), "'")
+        .replace(&target.backslash_escape(vars_type), "\\")
 }
 
 impl Variables {
@@ -429,35 +563,35 @@ impl<'de> serde::Deserialize<'de> for Variables {
     }
 }
 
-/// Renders a [`Variables`] for one carrier. Returned by
+/// Renders a [`Variables`] for one target. Returned by
 /// [`Variables::display_for`].
 #[derive(Debug, Clone, Copy)]
 pub struct VariablesDisplay<'a> {
     vars: &'a Variables,
-    carrier: DialStringCarrier,
+    target: DialStringTarget,
 }
 
 impl fmt::Display for VariablesDisplay<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.vars
-            .write_for(f, self.carrier)
+            .write_for(f, self.target)
     }
 }
 
 impl Variables {
-    /// Render for a named carrier, rather than the [`DialStringCarrier::EslApi`]
-    /// default that [`Display`](fmt::Display) uses.
-    pub fn display_for(&self, carrier: DialStringCarrier) -> VariablesDisplay<'_> {
+    /// Render for a named carrier or [`DialStringTarget`], rather than the
+    /// [`DialStringCarrier::EslApi`] default that [`Display`](fmt::Display) uses.
+    pub fn display_for(&self, target: impl Into<DialStringTarget>) -> VariablesDisplay<'_> {
         VariablesDisplay {
             vars: self,
-            carrier,
+            target: target.into(),
         }
     }
 
     pub(super) fn write_for(
         &self,
         f: &mut fmt::Formatter<'_>,
-        carrier: DialStringCarrier,
+        target: DialStringTarget,
     ) -> fmt::Result {
         let (open, close) = self
             .vars_type
@@ -482,7 +616,7 @@ impl Variables {
             if i > 0 {
                 write!(f, "{sep}")?;
             }
-            let value = escape_value(value, carrier, commas_separate, self.vars_type);
+            let value = escape_value(value, target, commas_separate, self.vars_type);
             write!(f, "{}={}", key, value)?;
         }
         f.write_fmt(format_args!("{}", close))
@@ -491,7 +625,7 @@ impl Variables {
 
 impl fmt::Display for Variables {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.write_for(f, DialStringCarrier::EslApi)
+        self.write_for(f, DialStringCarrier::EslApi.into())
     }
 }
 
@@ -504,11 +638,12 @@ impl FromStr for Variables {
 }
 
 impl Variables {
-    /// Parse a block written for a named carrier, mirroring
-    /// [`display_for`](Self::display_for). [`FromStr`] uses the same
+    /// Parse a block written for a named carrier or [`DialStringTarget`],
+    /// mirroring [`display_for`](Self::display_for). [`FromStr`] uses the same
     /// [`DialStringCarrier::EslApi`] default as [`Display`](fmt::Display), so
     /// the two round-trip.
-    pub fn parse_for(s: &str, carrier: DialStringCarrier) -> Result<Self, OriginateError> {
+    pub fn parse_for(s: &str, target: impl Into<DialStringTarget>) -> Result<Self, OriginateError> {
+        let target = target.into();
         let s = s.trim();
         if s.len() < 2 {
             return Err(OriginateError::ParseError(
@@ -554,7 +689,7 @@ impl Variables {
                     .ok_or_else(|| {
                         OriginateError::ParseError(format!("missing = in variable {i}"))
                     })?;
-                let value = unescape_value(value, carrier, commas_separate, vars_type);
+                let value = unescape_value(value, target, commas_separate, vars_type);
                 check_representable(key, &value, vars_type)?;
                 inner.insert(key.to_string(), value);
             }

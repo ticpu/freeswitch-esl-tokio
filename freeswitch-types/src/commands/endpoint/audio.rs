@@ -2,8 +2,7 @@ use std::fmt;
 
 use super::{strip_endpoint_prefix, write_variables};
 use crate::commands::originate::OriginateError;
-use crate::commands::variables::DialStringCarrier;
-use crate::commands::variables::Variables;
+use crate::commands::variables::{DialStringCarrier, DialStringTarget, Variables};
 
 /// Audio device endpoint for portaudio, pulseaudio, or ALSA modules.
 ///
@@ -46,16 +45,16 @@ impl AudioEndpoint {
     /// Renders for [`DialStringCarrier::EslApi`]; the [`Endpoint`](super::Endpoint)
     /// variants render for whichever carrier they were asked for.
     pub fn fmt_with_prefix(&self, f: &mut fmt::Formatter<'_>, prefix: &str) -> fmt::Result {
-        self.write_with_prefix(f, prefix, DialStringCarrier::EslApi)
+        self.write_with_prefix(f, prefix, DialStringCarrier::EslApi.into())
     }
 
     pub(super) fn write_with_prefix(
         &self,
         f: &mut fmt::Formatter<'_>,
         prefix: &str,
-        carrier: DialStringCarrier,
+        target: DialStringTarget,
     ) -> fmt::Result {
-        write_variables(f, &self.variables, carrier)?;
+        write_variables(f, &self.variables, target)?;
         match &self.destination {
             Some(dest) => write!(f, "{}/{}", prefix, dest),
             None => f.write_str(prefix),

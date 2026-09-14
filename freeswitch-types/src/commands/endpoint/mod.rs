@@ -7,8 +7,8 @@
 
 /// Emit the [`DialString`] impl and the `with_variables` builder for an endpoint
 /// struct holding `variables: Option<Variables>`. Given a body, also emit the
-/// carrier-aware `write_for` — variable-block prologue included — and the
-/// [`Display`](std::fmt::Display) that renders it for the default carrier.
+/// target-aware `write_for` — variable-block prologue included — and the
+/// [`Display`](std::fmt::Display) that renders it for the default target.
 macro_rules! impl_dial_string_with_variables {
     ($ty:ty) => {
         impl $crate::commands::endpoint::DialString for $ty {
@@ -43,9 +43,9 @@ macro_rules! impl_dial_string_with_variables {
             pub(super) fn write_for(
                 &self,
                 $f: &mut ::std::fmt::Formatter<'_>,
-                carrier: $crate::commands::variables::DialStringCarrier,
+                target: $crate::commands::variables::DialStringTarget,
             ) -> ::std::fmt::Result {
-                $crate::commands::endpoint::write_variables($f, &self.variables, carrier)?;
+                $crate::commands::endpoint::write_variables($f, &self.variables, target)?;
                 let $this = self;
                 $body
             }
@@ -53,7 +53,10 @@ macro_rules! impl_dial_string_with_variables {
 
         impl ::std::fmt::Display for $ty {
             fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-                self.write_for(f, $crate::commands::variables::DialStringCarrier::EslApi)
+                self.write_for(
+                    f,
+                    $crate::commands::variables::DialStringCarrier::EslApi.into(),
+                )
             }
         }
     };
@@ -95,7 +98,7 @@ use std::str::FromStr;
 
 use super::find_matching_bracket;
 use super::originate::OriginateError;
-use super::variables::{DialStringCarrier, Variables, VariablesType};
+use super::variables::{DialStringCarrier, DialStringTarget, Variables, VariablesType};
 
 type PrefixParser = fn(&str) -> Result<Endpoint, OriginateError>;
 
@@ -119,11 +122,11 @@ pub trait DialString: fmt::Display {
 fn write_variables(
     f: &mut fmt::Formatter<'_>,
     vars: &Option<Variables>,
-    carrier: DialStringCarrier,
+    target: DialStringTarget,
 ) -> fmt::Result {
     if let Some(vars) = vars {
         if !vars.is_empty() {
-            write!(f, "{}", vars.display_for(carrier))?;
+            write!(f, "{}", vars.display_for(target))?;
         }
     }
     Ok(())
@@ -138,7 +141,7 @@ pub(super) fn strip_endpoint_prefix<'a>(
     kind: &str,
     carrier: DialStringCarrier,
 ) -> Result<(Option<Variables>, &'a str), OriginateError> {
-    let (variables, uri) = extract_variables(s, carrier)?;
+    let (variables, uri) = extract_variables(s, carrier.into())?;
     let rest = uri
         .strip_prefix(prefix)
         .filter(|rest| prefix.ends_with('/') || rest.is_empty() || rest.starts_with('/'))
@@ -157,9 +160,9 @@ const ANY_SCOPE: &[VariablesType] = &[
 /// dial string, returning the parsed variables and the remaining URI portion.
 fn extract_variables(
     s: &str,
-    carrier: DialStringCarrier,
+    target: DialStringTarget,
 ) -> Result<(Option<Variables>, &str), OriginateError> {
-    extract_scoped_variables(s, carrier, ANY_SCOPE)
+    extract_scoped_variables(s, target, ANY_SCOPE)
 }
 
 /// Extract a leading variable block whose brackets name one of `scopes`, so a
@@ -169,7 +172,7 @@ fn extract_variables(
 /// `<sip_h_Call-Info=<url>>`) don't cause premature closure.
 pub(super) fn extract_scoped_variables<'a>(
     s: &'a str,
-    carrier: DialStringCarrier,
+    target: DialStringTarget,
     scopes: &[VariablesType],
 ) -> Result<(Option<Variables>, &'a str), OriginateError> {
     let first = s
@@ -186,7 +189,7 @@ pub(super) fn extract_scoped_variables<'a>(
     let close = find_matching_bracket(s, open, close_ch)
         .ok_or_else(|| OriginateError::ParseError(format!("unclosed {} in dial string", open)))?;
     let var_str = &s[..=close];
-    let vars = Variables::parse_for(var_str, carrier)?;
+    let vars = Variables::parse_for(var_str, target)?;
     let vars = if vars.is_empty() { None } else { Some(vars) };
     Ok((vars, s[close + 1..].trim()))
 }
@@ -282,39 +285,39 @@ impl Endpoint {
     pub(crate) fn write_for(
         &self,
         f: &mut fmt::Formatter<'_>,
-        carrier: DialStringCarrier,
+        target: DialStringTarget,
     ) -> fmt::Result {
         match self {
-            Self::Sofia(ep) => ep.write_for(f, carrier),
-            Self::SofiaGateway(ep) => ep.write_for(f, carrier),
-            Self::Loopback(ep) => ep.write_for(f, carrier),
-            Self::User(ep) => ep.write_for(f, carrier),
-            Self::SofiaContact(ep) => ep.write_for(f, carrier),
-            Self::GroupCall(ep) => ep.write_for(f, carrier),
+            Self::Sofia(ep) => ep.write_for(f, target),
+            Self::SofiaGateway(ep) => ep.write_for(f, target),
+            Self::Loopback(ep) => ep.write_for(f, target),
+            Self::User(ep) => ep.write_for(f, target),
+            Self::SofiaContact(ep) => ep.write_for(f, target),
+            Self::GroupCall(ep) => ep.write_for(f, target),
             Self::Error(ep) => fmt::Display::fmt(ep, f),
-            Self::PortAudio(ep) => ep.write_with_prefix(f, "portaudio", carrier),
-            Self::PulseAudio(ep) => ep.write_with_prefix(f, "pulseaudio", carrier),
-            Self::Alsa(ep) => ep.write_with_prefix(f, "alsa", carrier),
+            Self::PortAudio(ep) => ep.write_with_prefix(f, "portaudio", target),
+            Self::PulseAudio(ep) => ep.write_with_prefix(f, "pulseaudio", target),
+            Self::Alsa(ep) => ep.write_with_prefix(f, "alsa", target),
         }
     }
 
-    /// Render for a named carrier rather than the
+    /// Render for a named carrier or [`DialStringTarget`] rather than the
     /// [`DialStringCarrier::EslApi`] default of [`Display`](fmt::Display).
-    pub fn display_for(&self, carrier: DialStringCarrier) -> EndpointDisplay<'_> {
+    pub fn display_for(&self, target: impl Into<DialStringTarget>) -> EndpointDisplay<'_> {
         EndpointDisplay {
             endpoint: self,
-            carrier,
+            target: target.into(),
         }
     }
 
-    /// Parse a dial string written for a named carrier, mirroring
-    /// [`display_for`](Self::display_for). [`FromStr`] uses the
+    /// Parse a dial string written for a named carrier or [`DialStringTarget`],
+    /// mirroring [`display_for`](Self::display_for). [`FromStr`] uses the
     /// [`DialStringCarrier::EslApi`] default.
-    pub fn parse_for(s: &str, carrier: DialStringCarrier) -> Result<Self, OriginateError> {
-        // Take the leading block at the caller's carrier, then let the endpoint
+    pub fn parse_for(s: &str, target: impl Into<DialStringTarget>) -> Result<Self, OriginateError> {
+        // Take the leading block at the caller's target, then let the endpoint
         // parse what is left; re-attaching avoids every endpoint's FromStr
-        // having to thread a carrier it would only forward.
-        let (variables, rest) = extract_variables(s, carrier)?;
+        // having to thread a target it would only forward.
+        let (variables, rest) = extract_variables(s, target.into())?;
         let mut endpoint = Self::parse_bare(rest)?;
         if variables.is_some() {
             endpoint.set_variables(variables);
@@ -382,24 +385,24 @@ impl Endpoint {
     }
 }
 
-/// Renders an [`Endpoint`] for one carrier. Returned by
+/// Renders an [`Endpoint`] for one target. Returned by
 /// [`Endpoint::display_for`].
 #[derive(Debug, Clone, Copy)]
 pub struct EndpointDisplay<'a> {
     endpoint: &'a Endpoint,
-    carrier: DialStringCarrier,
+    target: DialStringTarget,
 }
 
 impl fmt::Display for EndpointDisplay<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.endpoint
-            .write_for(f, self.carrier)
+            .write_for(f, self.target)
     }
 }
 
 impl fmt::Display for Endpoint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.write_for(f, DialStringCarrier::EslApi)
+        self.write_for(f, DialStringCarrier::EslApi.into())
     }
 }
 
@@ -456,7 +459,7 @@ mod tests {
     fn extract_variables_nested_angle_brackets() {
         let (vars, rest) = extract_variables(
             "<sip_h_Call-Info=<url>>sofia/gw/x",
-            DialStringCarrier::EslApi,
+            DialStringCarrier::EslApi.into(),
         )
         .unwrap();
         assert_eq!(rest, "sofia/gw/x");
@@ -465,15 +468,18 @@ mod tests {
 
     #[test]
     fn extract_variables_nested_curly_brackets() {
-        let (vars, rest) =
-            extract_variables("{a={b}}sofia/internal/1000", DialStringCarrier::EslApi).unwrap();
+        let (vars, rest) = extract_variables(
+            "{a={b}}sofia/internal/1000",
+            DialStringCarrier::EslApi.into(),
+        )
+        .unwrap();
         assert_eq!(rest, "sofia/internal/1000");
         assert!(vars.is_some());
     }
 
     #[test]
     fn extract_variables_unclosed_returns_error() {
-        let result = extract_variables("{a=b", DialStringCarrier::EslApi);
+        let result = extract_variables("{a=b", DialStringCarrier::EslApi.into());
         assert!(result.is_err());
     }
 

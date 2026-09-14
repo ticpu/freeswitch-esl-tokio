@@ -16,7 +16,7 @@ pub mod execute_on;
 pub mod originate;
 pub mod variables;
 
-pub use bridge::BridgeDialString;
+pub use bridge::{BridgeDialString, BridgeDialStringDisplay};
 pub use channel::{
     UuidAnswer, UuidBridge, UuidDeflect, UuidGetVar, UuidHold, UuidKill, UuidSendDtmf, UuidSetVar,
     UuidTransfer,
@@ -32,10 +32,12 @@ pub use endpoint::{
 };
 pub use execute_on::ExecuteOn;
 pub use originate::{
-    Application, DialplanType, Endpoint, Originate, OriginateError, OriginateTarget,
-    ParseDialplanTypeError, Variables, VariablesType,
+    Application, DialplanType, Endpoint, Originate, OriginateDisplay, OriginateError,
+    OriginateTarget, ParseDialplanTypeError, Variables, VariablesType,
 };
-pub use variables::{DialStringCarrier, VariablesDisplay};
+pub use variables::{
+    BlockParse, DialStringCarrier, DialStringTarget, ParseBlockParseError, VariablesDisplay,
+};
 
 use originate::DEFAULT_INLINE_DELIMITER;
 

@@ -8,7 +8,7 @@ use std::str::FromStr;
 
 use super::endpoint::{extract_scoped_variables, Endpoint};
 use super::originate::OriginateError;
-use super::variables::{DialStringCarrier, Variables, VariablesType};
+use super::variables::{BlockParse, DialStringCarrier, DialStringTarget, Variables, VariablesType};
 
 /// A bridge dial string is the argument of a dialplan application, which
 /// receives it whole, so it renders and parses one escaping level shallower
@@ -77,11 +77,50 @@ impl BridgeDialString {
     }
 }
 
+/// Renders a [`BridgeDialString`] for one parser revision. Returned by
+/// [`BridgeDialString::display_with`].
+#[derive(Debug, Clone, Copy)]
+pub struct BridgeDialStringDisplay<'a> {
+    bridge: &'a BridgeDialString,
+    block_parse: BlockParse,
+}
+
+impl fmt::Display for BridgeDialStringDisplay<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.bridge
+            .write_with(f, self.block_parse)
+    }
+}
+
 impl fmt::Display for BridgeDialString {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.write_with(f, BlockParse::default())
+    }
+}
+
+impl FromStr for BridgeDialString {
+    type Err = OriginateError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::parse_with(s, BlockParse::default())
+    }
+}
+
+impl BridgeDialString {
+    /// Render for a switch running `block_parse`, rather than the default
+    /// revision [`Display`](fmt::Display) uses.
+    pub fn display_with(&self, block_parse: BlockParse) -> BridgeDialStringDisplay<'_> {
+        BridgeDialStringDisplay {
+            bridge: self,
+            block_parse,
+        }
+    }
+
+    fn write_with(&self, f: &mut fmt::Formatter<'_>, block_parse: BlockParse) -> fmt::Result {
+        let target = DialStringTarget::new(CARRIER).with_block_parse(block_parse);
         if let Some(vars) = &self.variables {
             if !vars.is_empty() {
-                write!(f, "{}", vars.display_for(CARRIER))?;
+                write!(f, "{}", vars.display_for(target))?;
             }
         }
         for (gi, group) in self
@@ -99,17 +138,16 @@ impl fmt::Display for BridgeDialString {
                 if ei > 0 {
                     f.write_str(",")?;
                 }
-                write!(f, "{}", ep.display_for(CARRIER))?;
+                write!(f, "{}", ep.display_for(target))?;
             }
         }
         Ok(())
     }
-}
 
-impl FromStr for BridgeDialString {
-    type Err = OriginateError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    /// Parse a dial string written for a switch running `block_parse`, mirroring
+    /// [`display_with`](Self::display_with).
+    pub fn parse_with(s: &str, block_parse: BlockParse) -> Result<Self, OriginateError> {
+        let target = DialStringTarget::new(CARRIER).with_block_parse(block_parse);
         let s = s.trim();
         if s.is_empty() {
             return Err(OriginateError::ParseError(
@@ -117,7 +155,7 @@ impl FromStr for BridgeDialString {
             ));
         }
 
-        let (variables, rest) = extract_scoped_variables(s, CARRIER, GLOBAL_SCOPES)?;
+        let (variables, rest) = extract_scoped_variables(s, target, GLOBAL_SCOPES)?;
 
         // Split on | for sequential groups, respecting brackets
         let group_strs = split_respecting_brackets(rest, '|');

@@ -71,7 +71,7 @@ impl FromStr for GroupCall {
     type Err = OriginateError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (variables, uri) = extract_variables(s, DialStringCarrier::EslApi)?;
+        let (variables, uri) = extract_variables(s, DialStringCarrier::EslApi.into())?;
         let inner = uri
             .strip_prefix("${group_call(")
             .and_then(|r| r.strip_suffix(")}"))
