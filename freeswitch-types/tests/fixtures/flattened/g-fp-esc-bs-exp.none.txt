@@ -1,0 +1,1 @@
+[presence_id=fp-esc-bs-exp@pbx.example.com,path=a\b]loopback/9199/test

@@ -1,0 +1,1 @@
+[presence_id=fp-ent@pbx.example.com]loopback/9199/test:_:loopback/9199/test:_:[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test

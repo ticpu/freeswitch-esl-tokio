@@ -1,0 +1,1 @@
+[presence_id=fp-quote-last@pbx.example.com,sentinel=s]loopback/9199/test,[presence_id=fp-quote-last@pbx.example.com,q=it's]loopback/9199/test

@@ -1,0 +1,1 @@
+[presence_id=fp-esc-emptyval@pbx.example.com,sentinel=s,k=]loopback/9199/test

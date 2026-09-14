@@ -1,0 +1,1 @@
+[presence_id=fp-err-empty@pbx.example.com]error/

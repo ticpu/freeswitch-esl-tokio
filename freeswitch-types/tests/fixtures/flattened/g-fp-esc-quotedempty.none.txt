@@ -1,0 +1,1 @@
+[presence_id=fp-esc-quotedempty@pbx.example.com,k=1][sentinel=s,k='']loopback/9199/test

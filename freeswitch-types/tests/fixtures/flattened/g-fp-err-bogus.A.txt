@@ -1,0 +1,1 @@
+[presence_id=fp-err-bogus@pbx.example.com]error/NOT_A_CAUSE

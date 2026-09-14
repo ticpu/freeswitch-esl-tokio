@@ -1,0 +1,1 @@
+[k=a,pa=fp-scopes-ent][k=l,b=1][k=e,local_var_clobber=true]loopback/9199/test

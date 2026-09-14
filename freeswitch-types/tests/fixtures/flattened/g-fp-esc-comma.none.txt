@@ -1,0 +1,1 @@
+[^^:presence_id=fp-esc-comma@pbx.example.com:codecs=PCMA,PCMU]loopback/9199/test

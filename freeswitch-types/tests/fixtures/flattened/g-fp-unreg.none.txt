@@ -1,0 +1,1 @@
+[^^:sip_invite_domain=pbx.example.com:presence_id=fp-unreg@pbx.example.com]error/user_not_registered
