@@ -1542,4 +1542,65 @@ mod tests {
         let parsed: BlockParse = serde_json::from_str(r#""pair_split_cleans""#).unwrap();
         assert_eq!(parsed, BlockParse::PairSplitCleans);
     }
+
+    #[test]
+    fn for_version_maps_a_vouched_release() {
+        for version in [
+            FreeswitchVersion::new(1, 10, 0),
+            FreeswitchVersion::new(1, 10, 7),
+            FreeswitchVersion::new(1, 10, 12),
+        ] {
+            assert_eq!(
+                BlockParse::for_version(&version).ok(),
+                Some(BlockParse::PairSplitCleans),
+                "{version}"
+            );
+        }
+    }
+
+    /// A dev build reports one version across every commit, so even one below
+    /// the vouched range's last release is refused.
+    #[test]
+    fn for_version_refuses_what_it_cannot_vouch_for() {
+        for version in [
+            FreeswitchVersion::new(1, 10, 12).dev(),
+            FreeswitchVersion::new(1, 10, 5).dev(),
+        ] {
+            let err = BlockParse::for_version(&version).expect_err(&version.to_string());
+            assert!(
+                matches!(err, UnvouchedVersion::Dev { .. }),
+                "{version}: {err:?}"
+            );
+            assert_eq!(err.version(), version);
+        }
+        for version in [
+            FreeswitchVersion::new(1, 10, 13),
+            FreeswitchVersion::new(1, 11, 1),
+        ] {
+            let err = BlockParse::for_version(&version).expect_err(&version.to_string());
+            assert!(
+                matches!(err, UnvouchedVersion::NewerThanVouched { .. }),
+                "{version}: {err:?}"
+            );
+        }
+        let version = FreeswitchVersion::new(1, 8, 7);
+        let err = BlockParse::for_version(&version).expect_err(&version.to_string());
+        assert!(
+            matches!(err, UnvouchedVersion::OlderThanVouched { .. }),
+            "{version}: {err:?}"
+        );
+    }
+
+    /// The caller has to decide what to name instead, so the refusal says what
+    /// would have been accepted.
+    #[test]
+    fn an_unvouched_version_names_the_vouched_range() {
+        let msg = BlockParse::for_version(&FreeswitchVersion::new(1, 11, 1))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            msg.contains("1.10.0") && msg.contains("1.10.12"),
+            "does not name the vouched range: {msg}"
+        );
+    }
 }

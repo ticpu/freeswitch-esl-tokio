@@ -41,6 +41,7 @@ pub mod prelude;
 pub mod sdp;
 pub mod sofia;
 pub mod variables;
+pub mod version;
 #[doc(hidden)]
 pub mod wire_safety;
 
