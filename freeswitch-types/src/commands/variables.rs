@@ -1273,4 +1273,138 @@ mod tests {
                 .is_ok()
         );
     }
+
+    /// Every revision a block can be rendered for; a new variant joins this list.
+    const REVISIONS: &[BlockParse] = &[BlockParse::PairSplitCleans];
+
+    #[test]
+    fn a_bare_carrier_is_a_target_at_the_default_revision() {
+        let target = DialStringTarget::from(DialStringCarrier::Dialplan);
+        assert_eq!(target.carrier(), DialStringCarrier::Dialplan);
+        assert_eq!(target.block_parse(), BlockParse::default());
+        assert_eq!(BlockParse::default(), BlockParse::PairSplitCleans);
+        assert_eq!(
+            DialStringTarget::new(DialStringCarrier::EslApi)
+                .with_block_parse(BlockParse::PairSplitCleans)
+                .block_parse(),
+            BlockParse::PairSplitCleans
+        );
+    }
+
+    /// An enterprise block is parsed at the same depth as a default one; nothing
+    /// else pins its forms.
+    #[test]
+    fn enterprise_scope_escapes_like_default_scope() {
+        let cases = [
+            (DialStringCarrier::Dialplan, "it's", r"it\\\\\\'s"),
+            (DialStringCarrier::EslApi, "it's", r"it\\\\\\\'s"),
+            (DialStringCarrier::EslApi, r"a\nb", r"a\\\\\\\\nb"),
+            (DialStringCarrier::EslApi, "a,b", r"a\,b"),
+        ];
+        for (carrier, value, want) in cases {
+            let target =
+                DialStringTarget::new(carrier).with_block_parse(BlockParse::PairSplitCleans);
+            assert_eq!(
+                escape_value(value, target, true, VariablesType::Enterprise),
+                want,
+                "{value:?} for {carrier:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn round_trips_at_every_target() {
+        let cases = [
+            (
+                VariablesType::Default,
+                &["it's", r"C:\path", "a,b", r"a\nb", "with space"][..],
+            ),
+            (
+                VariablesType::Enterprise,
+                &["it's", r"C:\path", "a,b", "with space"][..],
+            ),
+            (
+                VariablesType::Channel,
+                &[r"C:\path", "a,b", "a|b", "with space"][..],
+            ),
+        ];
+        for &block_parse in REVISIONS {
+            for carrier in [DialStringCarrier::EslApi, DialStringCarrier::Dialplan] {
+                let target = DialStringTarget::new(carrier).with_block_parse(block_parse);
+                for (scope, values) in cases {
+                    for &value in values {
+                        let mut vars = Variables::new(scope);
+                        vars.insert("k", value);
+                        vars.insert("after", "sentinel");
+                        let rendered = vars
+                            .display_for(target)
+                            .to_string();
+
+                        let back = Variables::parse_for(&rendered, target).unwrap_or_else(|e| {
+                            panic!("{value:?} for {target:?} rendered {rendered}: {e}")
+                        });
+                        assert_eq!(back.get("k"), Some(value), "rendered {rendered}");
+                        assert_eq!(back.get("after"), Some("sentinel"), "rendered {rendered}");
+                    }
+                }
+            }
+        }
+    }
+
+    /// What the switch cannot deliver is decided before any block parse runs, so
+    /// no revision makes one of these representable.
+    #[test]
+    fn refusals_do_not_depend_on_the_revision() {
+        for &block_parse in REVISIONS {
+            for carrier in [DialStringCarrier::EslApi, DialStringCarrier::Dialplan] {
+                let target = DialStringTarget::new(carrier).with_block_parse(block_parse);
+                for block in [
+                    r"[cid=it\\\\\\\'s]",
+                    "{k=,after=sentinel}",
+                    "{k=oops}extra}",
+                    "{^^=a=1=b=2}",
+                    "[^^|a=1|b=2]",
+                ] {
+                    assert!(
+                        Variables::parse_for(block, target).is_err(),
+                        "{block} accepted at {target:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn block_parse_reads_config_spellings_and_writes_the_canonical_one() {
+        for spelling in [
+            "pair_split_cleans",
+            "PAIR_SPLIT_CLEANS",
+            "Pair_Split_Cleans",
+        ] {
+            assert_eq!(
+                spelling
+                    .parse::<BlockParse>()
+                    .ok(),
+                Some(BlockParse::PairSplitCleans),
+                "{spelling}"
+            );
+        }
+        assert_eq!(BlockParse::PairSplitCleans.to_string(), "pair_split_cleans");
+
+        let err = "pair_split_whatever"
+            .parse::<BlockParse>()
+            .unwrap_err()
+            .to_string();
+        assert!(!err.contains("whatever"), "error quoted its input: {err}");
+    }
+
+    #[test]
+    fn serde_block_parse_uses_the_config_spelling() {
+        assert_eq!(
+            serde_json::to_string(&BlockParse::PairSplitCleans).unwrap(),
+            r#""pair_split_cleans""#
+        );
+        let parsed: BlockParse = serde_json::from_str(r#""pair_split_cleans""#).unwrap();
+        assert_eq!(parsed, BlockParse::PairSplitCleans);
+    }
 }

@@ -924,6 +924,29 @@ mod tests {
         );
     }
 
+    /// `Display` and `FromStr` are the default revision, not a second render path.
+    #[test]
+    fn display_and_from_str_are_the_default_revision() {
+        use crate::commands::variables::BlockParse;
+
+        let mut vars = Variables::new(VariablesType::Default);
+        vars.insert("cid", "it's");
+        let orig = Originate::application(
+            Endpoint::SofiaGateway(SofiaGateway::new("gw", "1234").with_variables(vars)),
+            Application::simple("park"),
+        );
+
+        let rendered = orig
+            .display_with(BlockParse::PairSplitCleans)
+            .to_string();
+        assert_eq!(rendered, orig.to_string());
+        assert_eq!(
+            Originate::parse_with(&rendered, BlockParse::PairSplitCleans)
+                .unwrap_or_else(|e| panic!("{rendered} failed to parse: {e}")),
+            orig
+        );
+    }
+
     #[test]
     fn loopback_endpoint_display() {
         let mut vars = Variables::new(VariablesType::Default);

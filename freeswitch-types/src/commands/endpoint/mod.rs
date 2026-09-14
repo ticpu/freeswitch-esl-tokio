@@ -572,6 +572,26 @@ mod tests {
         }
     }
 
+    /// A target naming only a carrier is that carrier: both spellings render and
+    /// parse identically.
+    #[test]
+    fn a_target_and_its_bare_carrier_agree() {
+        use crate::commands::variables::{BlockParse, DialStringTarget};
+
+        let input = r"{a=it\\\\\\'s}sofia/internal/1000@example.com";
+        let target = DialStringTarget::new(DialStringCarrier::Dialplan)
+            .with_block_parse(BlockParse::PairSplitCleans);
+        let by_target = Endpoint::parse_for(input, target).unwrap();
+        let by_carrier = Endpoint::parse_for(input, DialStringCarrier::Dialplan).unwrap();
+        assert_eq!(by_target, by_carrier);
+        assert_eq!(
+            by_target
+                .display_for(target)
+                .to_string(),
+            input
+        );
+    }
+
     #[test]
     fn endpoint_from_str_unknown_errors() {
         let result = "verto/1234".parse::<Endpoint>();

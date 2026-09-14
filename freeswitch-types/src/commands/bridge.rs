@@ -184,9 +184,32 @@ mod tests {
     use crate::commands::endpoint::{
         DialString, ErrorEndpoint, LoopbackEndpoint, SofiaEndpoint, SofiaGateway,
     };
-    use crate::commands::variables::VariablesType;
+    use crate::commands::variables::{BlockParse, VariablesType};
 
     // === Display ===
+
+    /// `Display` and `FromStr` are the default revision, not a second render path.
+    #[test]
+    fn display_and_from_str_are_the_default_revision() {
+        let mut vars = Variables::new(VariablesType::Default);
+        vars.insert("cid", "it's");
+        let mut ep_vars = Variables::new(VariablesType::Channel);
+        ep_vars.insert("path", r"C:\path");
+        let bridge = BridgeDialString::new(vec![vec![SofiaGateway::new("gw", "1234")
+            .with_variables(ep_vars)
+            .into()]])
+        .with_variables(vars);
+
+        let rendered = bridge
+            .display_with(BlockParse::PairSplitCleans)
+            .to_string();
+        assert_eq!(rendered, bridge.to_string());
+        assert_eq!(
+            BridgeDialString::parse_with(&rendered, BlockParse::PairSplitCleans)
+                .unwrap_or_else(|e| panic!("{rendered} failed to parse: {e}")),
+            bridge
+        );
+    }
 
     /// The block reaches a dialplan application whole, one tokenizer pass
     /// shallower than an `originate` argument, so a quoted value carries one
