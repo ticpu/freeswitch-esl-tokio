@@ -45,10 +45,13 @@ but not the programmatic path.
 
 ### Consider removing `Display` for `Variables` and `Endpoint`
 
-Both render for `DialStringCarrier::EslApi`, which is right for what this crate
-mostly drives but silently wrong for a block hand-spliced into a dialplan
-string. Removing the impls would force `display_for(carrier)` at every call
-site, making a wrong carrier unrepresentable rather than merely unlikely. The
+Both render for `DialStringCarrier::EslApi` at the default `BlockParse`, which
+is right for what this crate mostly drives but silently wrong for a block
+hand-spliced into a dialplan string or bound for a switch on another parser
+revision. Removing the impls would force `display_for(target)` at every call
+site, making a wrong target unrepresentable rather than merely unlikely.
+`Originate` and `BridgeDialString` render with the default revision the same
+way and belong in the same decision. The
 cost is ergonomic and it breaks `format!("{vars}")` everywhere, so it is worth
 weighing against how often the default is actually wrong in practice.
 

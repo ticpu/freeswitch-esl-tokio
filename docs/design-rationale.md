@@ -281,7 +281,11 @@ carrying it. A variable block passes through the switch's tokenizer a differing
 number of times depending on which command took it, and each pass consumes one
 level of escaping, so a render that cannot name its destination is right for one
 carrier and quietly wrong for the rest. Such a value names its target, and its
-bare `Display` is the shorthand for one carrier rather than the only form.
+bare `Display` is the shorthand for one carrier rather than the only form. The
+target includes the switch's parser revision, taken from a version the
+application states rather than one read off the connection, and a version the
+escaping was never measured against, a development build included, is refused
+rather than assumed.
 
 A special character is rendered so that it is still escaped entering the last
 pass. That the last pass happens to keep a bare one is no contract: the final

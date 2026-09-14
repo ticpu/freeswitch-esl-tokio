@@ -4,7 +4,8 @@ Reference for endpoint strings, variable scoping, and bridge semantics as they
 appear on the ESL wire and in FreeSWITCH configuration. Based on FreeSWITCH
 1.10.x source code (`switch_ivr_originate.c`, `mod_sofia.c`, `mod_loopback.c`,
 `mod_dptools.c`). Line numbers index FreeSWITCH `v1.11.1`
-(commit `c2c59645f6911a76589e5008c4d73349ded44b65`).
+(commit `c2c59645f6911a76589e5008c4d73349ded44b65`). Behaviour described as
+measured was measured on FreeSWITCH 1.10.13-dev (git 8bb2a39).
 
 ## Endpoint types
 
@@ -192,7 +193,7 @@ How much escaping a value needs depends on **which command carries the block**,
 because the switch escape-processes it a different number of times per carrier.
 See [Parse depth](#parse-depth) below before relying on any of the forms here;
 the rules in this section are what the `freeswitch-esl-tokio` crate emits, and
-were measured against a live switch rather than derived from the source.
+were measured on the build named at the top rather than derived from the source.
 
 ### Backslash escaping
 
@@ -352,6 +353,31 @@ Consequences worth knowing before hand-writing a block:
 - A log line is not evidence either way. `mod_logfile` splits its own output
   with the same tokenizer, so a value is mangled in the log whether or not it
   was mangled on the wire. Read values back with `uuid_getvar` or `uuid_dump`.
+
+### Parser revisions
+
+Every count above belongs to one revision of the block parser,
+`BlockParse::PairSplitCleans`, in which both of the block's own splits run
+`cleanup_separated_string`. Nothing on the wire says which revision a switch
+runs, so the application names the FreeSWITCH version it targets and
+`BlockParse::for_version` answers:
+
+- Releases 1.10.0 through 1.10.12 map to `PairSplitCleans`. The block parse,
+  both carrier passes and the leg splits are unchanged in meaning across the
+  1.10.0 to 1.11.1 source, and the live escaping suite passes on a 1.10 build.
+- A 1.11 release is refused until that suite has run on a 1.11 build.
+- Every `-dev` build is refused: it reports the same version before and after
+  an upstream commit.
+
+A refusal names the vouched range, and the application then passes a revision
+explicitly. After a switch upgrade, run
+`cargo test --test live_channel -- --ignored escaping` with
+`FREESWITCH_BLOCK_PARSE` naming the revision under test; a switch that fails it
+parses blocks in a way this crate has no revision for yet.
+
+A revision covers `{}`, `<>` and `[]` escaping only. The inline action list has
+its own parser, and the quote pre-scan that makes a quote undeliverable in a
+`[]` value runs before any block parse, so neither changes with it.
 
 ## Keeping a value out of the tokenizer entirely
 
@@ -588,4 +614,7 @@ on a bare `Variables` or `Endpoint` means the API carrier, because that is what
 this crate mostly drives — so a block rendered on its own and spliced into a
 dialplan string by hand is the one case that needs
 `display_for(DialStringCarrier::Dialplan)` and will otherwise be escaped one
-level too deep.
+level too deep. All of these assume the default
+[parser revision](#parser-revisions): `Originate::display_with` and
+`BridgeDialString::display_with` take another, and a `DialStringTarget` carries
+carrier and revision together wherever `display_for` accepts a carrier.
