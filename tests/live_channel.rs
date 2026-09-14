@@ -9,7 +9,8 @@ mod live_common;
 
 use freeswitch_esl_tokio::commands::originate::{Variables, VariablesType};
 use freeswitch_esl_tokio::commands::{
-    DialStringCarrier, ExecuteOn, LoopbackEndpoint, UuidGetVar, UuidKill, UuidSetVar,
+    BlockParse, DialStringCarrier, DialStringTarget, ExecuteOn, LoopbackEndpoint, UuidGetVar,
+    UuidKill, UuidSetVar,
 };
 use freeswitch_esl_tokio::ExecuteOptions;
 use freeswitch_esl_tokio::{
@@ -323,6 +324,22 @@ fn carried_in(scope: VariablesType, pairs: &[(&str, &str)]) -> bool {
             .all(|(_, v)| !v.contains('\''))
 }
 
+/// The revision these tests render for: `FREESWITCH_BLOCK_PARSE` names one to
+/// measure a switch against, and unset is the crate default.
+fn block_parse_under_test() -> BlockParse {
+    match std::env::var("FREESWITCH_BLOCK_PARSE") {
+        Ok(name) => name
+            .parse()
+            .unwrap_or_else(|e| panic!("FREESWITCH_BLOCK_PARSE: {e}")),
+        Err(std::env::VarError::NotPresent) => BlockParse::default(),
+        Err(e) => panic!("FREESWITCH_BLOCK_PARSE: {e}"),
+    }
+}
+
+fn target_under_test(carrier: DialStringCarrier) -> DialStringTarget {
+    DialStringTarget::new(carrier).with_block_parse(block_parse_under_test())
+}
+
 /// Every case through `originate`, whose argument list the switch splits before
 /// the block is parsed.
 async fn escaping_over_the_api_carrier(separator: Option<char>, scope: VariablesType) {
@@ -333,13 +350,14 @@ async fn escaping_over_the_api_carrier(separator: Option<char>, scope: Variables
             continue;
         }
         let vars = escaping_block(&[], pairs, separator, scope);
+        let block = vars.display_for(target_under_test(DialStringCarrier::EslApi));
         let resp = client
-            .api(&format!("originate {vars}null/escaping &park()"))
+            .api(&format!("originate {block}null/escaping &park()"))
             .await
             .unwrap_or_else(|e| panic!("{label}: originate transport error: {e}"));
         let uuid = resp
             .api_result()
-            .unwrap_or_else(|e| panic!("{label}: originate rejected {vars}: {e}"))
+            .unwrap_or_else(|e| panic!("{label}: originate rejected {block}: {e}"))
             .to_string();
 
         let mut reaper = ChannelReaper::new(&client);
@@ -356,7 +374,7 @@ async fn escaping_over_the_api_carrier(separator: Option<char>, scope: Variables
             assert_eq!(
                 got.as_deref(),
                 Some(want),
-                "{label}: {key} arrived wrong from {vars}"
+                "{label}: {key} arrived wrong from {block}"
             );
         }
     }
@@ -397,7 +415,7 @@ async fn escaping_over_the_dialplan_carrier(separator: Option<char>, scope: Vari
 
         let dial_string = format!(
             "{}null/escaping",
-            vars.display_for(DialStringCarrier::Dialplan)
+            vars.display_for(target_under_test(DialStringCarrier::Dialplan))
         );
         client
             .execute_with_options(

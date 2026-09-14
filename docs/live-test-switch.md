@@ -119,6 +119,13 @@ breaks it. See [freeswitch-directory-users.md](freeswitch-directory-users.md).
 local port and originates with the `socket` application pointed back at it, so
 FreeSWITCH must be able to reach `127.0.0.1` on an arbitrary high port.
 
+## Escaping tests and the parser revision
+
+The escaping tests in `live_channel.rs` render for the crate's default block-parser
+revision. Set `FREESWITCH_BLOCK_PARSE` to a revision name (`pair_split_cleans`) to
+measure a switch against another; run them after every switch upgrade, since a
+switch that fails them parses blocks in a way no revision describes yet.
+
 ## Writing a live test
 
 Two rules, both learned from tests that passed for the wrong reason:
