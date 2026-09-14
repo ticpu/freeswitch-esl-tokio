@@ -31,7 +31,8 @@ which re-exports everything from this crate.
 | `sofia` | `SofiaChannelName` (borrow-based `sofia/<profile>/<user>@<host>` parser), `SofiaEventSubclass`, `GatewayRegState`, `SipUserPingStatus` |
 | `variables` | `ChannelVariable`, `CoreMediaVariable` (`unit()` → `RtpStatUnit`), `SofiaVariable`, `LoopbackVariable` (+ `LoopbackResignation`, the bowout marker, and `LoopbackChannelName`/`LoopbackLeg` — the name is the one field a resignation does not copy onto the surviving channel), `ConferenceVariable`, `SipPassthroughHeader` (unified `sip_h_*`/`sip_i_*`/etc. with `extract_from()`), `EslArray`, `MultipartBody`, `CarriedHeader` (the exhaustive mapping `SofiaVariable::carried_header()` returns from a channel variable to the SIP header(s) it carries) |
 | `event` | `EslEvent`, `EslEventType`, `EventFormat`, `EslEventPriority`, `LossyValues`/`LossyValue` (non-UTF-8 header-value signal) *(requires `esl` feature)* |
-| `commands` | `Originate`, `BridgeDialString`, `UuidKill`, `UuidBridge`, endpoint types *(requires `esl` feature)* |
+| `commands` | `Originate`, `BridgeDialString`, `UuidKill`, `UuidBridge`, endpoint types, `BlockParse` *(requires `esl` feature)* |
+| `version` | `FreeswitchVersion`, the version an application states it targets |
 | `sdp` | `CodecString`/`CodecStringEntry` (the FreeSWITCH codec-string grammar, parse and emit, with `dedup`/`simplify` ported from the switch), `SdpCodecs` (SDP offer → typed codec list, plus `SdpMediaSection` for every `m=` line the offer carried — held streams included — and `NonCodecPayload` for what the switch negotiates outside the string), `CodecImplementation` (filter a codec string against what a switch has loaded) *(requires `sdp` feature)* |
 
 `SipHeaderAddr`, `extract_header`, `SipHeader`, `SipHeaderLookup`, and the
@@ -107,6 +108,11 @@ assert!(cmd.to_string().starts_with("originate sofia/gateway/"));
 let parsed: Originate = cmd.to_string().parse().unwrap();
 assert_eq!(parsed.to_string(), cmd.to_string());
 ```
+
+Variable values are escaped for the switch's bracket-block parser as measured on
+one build; `BlockParse::for_version` maps the FreeSWITCH version you target to
+the revision `display_with` renders for, see
+[parser revisions](https://github.com/ticpu/freeswitch-esl-tokio/blob/master/docs/dial-string-format.md#parser-revisions).
 
 ### Typed event accessors
 

@@ -67,6 +67,17 @@ vars:
   key: value
 ```
 
+## FreeSWITCH version and parser revision
+
+The version a deployment targets belongs in the application's own config, next to the connection, never inside an originate: it describes the switch, not the command. `FreeswitchVersion` and `BlockParse` both deserialize, so an application can carry the version and an explicit override for a build the crate does not vouch for:
+
+```yaml
+freeswitch_version: "1.10.13-dev"
+block_parse: pair_split_cleans
+```
+
+Map it with `BlockParse::for_version` when `block_parse` is absent, and render with `display_with`; see [commands.md](commands.md#the-switchs-parser-revision).
+
 ## How endpoint types appear in YAML
 
 The `!sofia_gateway` prefix in the example above is a YAML tag -- it tells the deserializer which endpoint type to build from the fields that follow. Each variant of the `Endpoint` enum has its own tag:

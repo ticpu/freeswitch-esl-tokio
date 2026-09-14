@@ -94,6 +94,30 @@ client.send_command(AppCommand::bridge(bridge)).await?;
 
 See [dial-string-format.md](../dial-string-format.md) for the complete dial string reference (variable scoping, `^^:` custom delimiters, enterprise `:_:` originate).
 
+## The switch's parser revision
+
+How deeply a variable value is escaped depends on the switch's bracket-block parser as well as the command carrying it. `Display` renders for the revision this crate measured; state the FreeSWITCH version you target and render with the revision it maps to. A development build or a version outside the vouched range is refused, and the application names a `BlockParse` itself:
+
+```rust
+use freeswitch_esl_tokio::commands::*;
+use freeswitch_esl_tokio::FreeswitchVersion;
+
+let cmd = Originate::application(
+    Endpoint::SofiaGateway(SofiaGateway::new("my_provider", "18005551234")),
+    Application::simple("park"),
+);
+
+let version: FreeswitchVersion = "1.10.12".parse().unwrap();
+let parse = BlockParse::for_version(&version).unwrap();
+let wire = cmd.display_with(parse).to_string();
+assert_eq!(wire, cmd.to_string());
+
+let dev: FreeswitchVersion = "1.10.13-dev".parse().unwrap();
+assert!(BlockParse::for_version(&dev).is_err());
+```
+
+The vouched range and what a revision does and does not cover are in [dial-string-format.md](../dial-string-format.md#parser-revisions).
+
 ## A value that must not cross the dial string
 
 A large or free-text value — a PIDF-LO for `sip_multipart`, say — is set on the new channel by an `execute_on_originate` hook instead, which runs before the channel's session thread starts and so before a SIP leg builds its INVITE. `ExecuteOn` builds the hook's value and refuses the shapes the switch would misread; the block then carries paths and nothing the tokenizer can damage:

@@ -10,25 +10,56 @@
 //!
 //! Usage: RUST_LOG=info cargo run --example originate_examples
 //!   Configure via ESL_HOST, ESL_PORT, ESL_PASSWORD env vars (defaults from constants).
+//!   FREESWITCH_VERSION (e.g. 1.10.12) picks the parser revision part 2 renders
+//!   for; ESL_BLOCK_PARSE names one outright, for a dev build or unvouched version.
 
 use freeswitch_esl_tokio::commands::endpoint::GroupCallOrder;
 use freeswitch_esl_tokio::commands::{
-    AudioEndpoint, ErrorEndpoint, GroupCall, LoopbackEndpoint, SofiaContact, SofiaEndpoint,
-    SofiaGateway, UserEndpoint,
+    AudioEndpoint, BlockParse, ErrorEndpoint, GroupCall, LoopbackEndpoint, SofiaContact,
+    SofiaEndpoint, SofiaGateway, UserEndpoint,
 };
+use std::env::VarError;
 use std::time::Duration;
 
 mod common;
 
 use freeswitch_esl_tokio::{
-    Application, BgJobTracker, DialplanType, Endpoint, EslEventType, EventFormat, HeaderLookup,
-    Originate, SipPassthroughHeader, Variables, VariablesType,
+    Application, BgJobTracker, DialplanType, Endpoint, EslEventType, EventFormat,
+    FreeswitchVersion, HeaderLookup, Originate, SipPassthroughHeader, Variables, VariablesType,
 };
 use tracing::{error, info};
 
 /// The originate carries its own 10s timeout, so anything past this means no
 /// result is coming.
 const CALL_DEADLINE: Duration = Duration::from_secs(30);
+
+/// The parser revision part 2 renders for. The version is the application's to
+/// state: the crate never asks the switch, and refuses a version it cannot vouch
+/// for rather than guessing, so the error names the range to fix the config by.
+fn block_parse_from_env() -> Result<BlockParse, String> {
+    match std::env::var("ESL_BLOCK_PARSE") {
+        Ok(name) => {
+            return name
+                .parse()
+                .map_err(|e| format!("ESL_BLOCK_PARSE: {e}"))
+        }
+        Err(VarError::NotPresent) => {}
+        Err(e) => return Err(format!("ESL_BLOCK_PARSE: {e}")),
+    }
+    match std::env::var("FREESWITCH_VERSION") {
+        Ok(value) => {
+            let version: FreeswitchVersion = value
+                .parse()
+                .map_err(|e| format!("FREESWITCH_VERSION: {e}"))?;
+            BlockParse::for_version(&version).map_err(|e| e.to_string())
+        }
+        Err(VarError::NotPresent) => {
+            println!("FREESWITCH_VERSION unset: rendering for the crate's default parser revision");
+            Ok(BlockParse::default())
+        }
+        Err(e) => Err(format!("FREESWITCH_VERSION: {e}")),
+    }
+}
 
 fn print_endpoint_examples() {
     println!("=== Endpoint wire formats ===");
@@ -313,6 +344,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Part 2: live call via bgapi
     // -----------------------------------------------------------------------
 
+    // Resolved before connecting, so a config naming a version the crate cannot
+    // vouch for fails here rather than after a call went out escaped wrong.
+    let block_parse = block_parse_from_env()?;
+    println!("\nparser revision: {block_parse}");
+
     let (client, mut events) = common::connect_from_env().await?;
 
     client
@@ -339,7 +375,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .timeout(Duration::from_secs(10));
 
     println!("\n=== Live call via bgapi ===");
-    println!("originate: {}", cmd);
+    // display_with, not to_string: the wire form has to match the revision the
+    // switch runs, which Display cannot know.
+    let wire = cmd
+        .display_with(block_parse)
+        .to_string();
+    println!("originate: {wire}");
 
     // bgapi returns immediately with a Job-UUID and the originate result
     // arrives later as a BACKGROUND_JOB event. BACKGROUND_JOB is a switch-wide
@@ -347,7 +388,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // bookkeeping, and reports a refused bgapi as the denial it is rather than
     // as a missing header.
     let mut jobs: BgJobTracker<()> = BgJobTracker::new();
-    jobs.bgapi(&client, &cmd.to_string(), ())
+    jobs.bgapi(&client, &wire, ())
         .await?;
 
     let mut call_uuid: Option<String> = None;
