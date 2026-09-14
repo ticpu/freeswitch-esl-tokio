@@ -69,8 +69,9 @@ pub use commands::{
     DialStringCarrier, DialStringTarget, DialplanType, Endpoint, EndpointDisplay, ExecuteOn,
     GroupCallOrder, Originate, OriginateDisplay, OriginateError, OriginateTarget,
     ParseBlockParseError, ParseDialplanTypeError, ParseGroupCallOrderError, ParseHoldActionError,
-    ParseMuteActionError, UuidAnswer, UuidBridge, UuidDeflect, UuidGetVar, UuidHold, UuidKill,
-    UuidSendDtmf, UuidSetVar, UuidTransfer, Variables, VariablesDisplay, VariablesType,
+    ParseMuteActionError, UnvouchedVersion, UuidAnswer, UuidBridge, UuidDeflect, UuidGetVar,
+    UuidHold, UuidKill, UuidSendDtmf, UuidSetVar, UuidTransfer, Variables, VariablesDisplay,
+    VariablesType,
 };
 #[cfg(feature = "esl")]
 pub use event::{
@@ -100,6 +101,7 @@ pub use variables::{
     ParseCoreMediaVariableError, ParseSipPassthroughError, RtpStatUnit, SipHeaderPrefix,
     SipPassthroughHeader, VariableName, MAX_ARRAY_ITEMS,
 };
+pub use version::{FreeswitchVersion, ParseFreeswitchVersionError};
 
 #[cfg(all(doctest, feature = "esl"))]
 mod readme {

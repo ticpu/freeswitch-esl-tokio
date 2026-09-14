@@ -36,7 +36,8 @@ pub use originate::{
     OriginateTarget, ParseDialplanTypeError, Variables, VariablesType,
 };
 pub use variables::{
-    BlockParse, DialStringCarrier, DialStringTarget, ParseBlockParseError, VariablesDisplay,
+    BlockParse, DialStringCarrier, DialStringTarget, ParseBlockParseError, UnvouchedVersion,
+    VariablesDisplay,
 };
 
 use originate::DEFAULT_INLINE_DELIMITER;

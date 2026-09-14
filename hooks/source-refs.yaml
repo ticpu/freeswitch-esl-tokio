@@ -73,6 +73,7 @@ refs:
 - src/switch_core_media.c:13813 0de628ec76b4
 - src/switch_event.c:1665 36da3239d352
 - src/switch_event.c:1732 ec4fa0756d0f
+- src/switch_event.c:1737 535525245b83
 - src/switch_loadable_module.c:222-232 ceff2c30be98
 - src/switch_loadable_module.c:237 c602d7aa6920
 - src/switch_loadable_module.c:238-242 e8887fefae00
@@ -117,5 +118,6 @@ refs:
 - src/switch_utils.c:2782-2783 a8eedd668f97
 - src/switch_utils.c:2789 0a8b610dc9fd
 - src/switch_utils.c:2791 7dbb736d32ec
+- src/switch_utils.c:2804 78f40c036101
 - src/switch_utils.c:2841-2845 e9a8c9a57a63
 - src/switch_utils.c:2877-2884 dccafc7f6727

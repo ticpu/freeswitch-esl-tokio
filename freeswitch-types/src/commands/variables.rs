@@ -1,10 +1,14 @@
 //! Channel variable scope and ordered key-value storage for originate commands.
+//!
+//! Line numbers in this module index FreeSWITCH `v1.11.1`
+//! (`c2c59645f6911a76589e5008c4d73349ded44b65`).
 
 use indexmap::IndexMap;
 use std::fmt;
 use std::str::FromStr;
 
 use super::originate::OriginateError;
+use crate::version::FreeswitchVersion;
 
 /// Scope for channel variables in an originate command.
 ///
@@ -131,7 +135,82 @@ impl BlockParse {
             Self::PairSplitCleans => 2,
         }
     }
+
+    /// The revision a FreeSWITCH release is vouched to run, or why it cannot be.
+    ///
+    /// A release is vouched for only inside a range whose block parse
+    /// (`switch_event.c:1737`, `switch_utils.c:2804`) was checked at every tag and
+    /// whose line passed the live escaping suite. Anything else, a development
+    /// build included, is refused; name a revision explicitly for it instead.
+    pub fn for_version(version: &FreeswitchVersion) -> Result<Self, UnvouchedVersion> {
+        let version = *version;
+        let (first, last) = VOUCHED_PAIR_SPLIT_CLEANS;
+        if version.is_dev() {
+            Err(UnvouchedVersion::Dev { version })
+        } else if version < first {
+            Err(UnvouchedVersion::OlderThanVouched { version })
+        } else if version > last {
+            Err(UnvouchedVersion::NewerThanVouched { version })
+        } else {
+            Ok(Self::PairSplitCleans)
+        }
+    }
 }
+
+const VOUCHED_PAIR_SPLIT_CLEANS: (FreeswitchVersion, FreeswitchVersion) = (
+    FreeswitchVersion::new(1, 10, 0),
+    FreeswitchVersion::new(1, 10, 12),
+);
+
+/// A FreeSWITCH version [`BlockParse::for_version`] cannot vouch for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum UnvouchedVersion {
+    /// A development build, whose version stays the same across commits.
+    Dev {
+        /// The version refused.
+        version: FreeswitchVersion,
+    },
+    /// A release newer than the vouched range.
+    NewerThanVouched {
+        /// The version refused.
+        version: FreeswitchVersion,
+    },
+    /// A release older than the vouched range.
+    OlderThanVouched {
+        /// The version refused.
+        version: FreeswitchVersion,
+    },
+}
+
+impl UnvouchedVersion {
+    /// The version refused.
+    pub fn version(&self) -> FreeswitchVersion {
+        match *self {
+            Self::Dev { version }
+            | Self::NewerThanVouched { version }
+            | Self::OlderThanVouched { version } => version,
+        }
+    }
+}
+
+impl fmt::Display for UnvouchedVersion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let (first, last) = VOUCHED_PAIR_SPLIT_CLEANS;
+        let why = match self {
+            Self::Dev { .. } => "is a development build",
+            Self::NewerThanVouched { .. } => "is newer than any vouched release",
+            Self::OlderThanVouched { .. } => "is older than any vouched release",
+        };
+        write!(
+            f,
+            "FreeSWITCH {} {why}; releases {first} to {last} are vouched for, name a BlockParse explicitly",
+            self.version()
+        )
+    }
+}
+
+impl std::error::Error for UnvouchedVersion {}
 
 impl fmt::Display for BlockParse {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
