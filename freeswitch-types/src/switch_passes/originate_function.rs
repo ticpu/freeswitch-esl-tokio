@@ -134,6 +134,17 @@ pub(crate) fn parse_originate_target(
         let (delimiter, s) = split_inline_prefix(s);
         let delimiter = delimiter.unwrap_or(DEFAULT_INLINE_DELIMITER);
         check_inline_delimiter(delimiter)?;
+        // The hunt's split takes a leading `^^` and the byte after it as its separator.
+        if let Some(picked) = s
+            .strip_prefix("^^")
+            .and_then(|rest| {
+                rest.chars()
+                    .next()
+            })
+            .filter(|picked| !picked.is_ascii())
+        {
+            return Err(OriginateError::InvalidInlineDelimiter(picked));
+        }
         let mut apps = Vec::new();
         for action in split_inline_actions(s, delimiter) {
             let part = action.trim_start_matches(' ');

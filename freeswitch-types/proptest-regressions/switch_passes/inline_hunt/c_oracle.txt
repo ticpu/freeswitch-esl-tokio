@@ -5,3 +5,4 @@
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
 cc 29f48b45cbaa60418ed23c5ff3165d5ab7b4ab6afe5fc1842e5aa093ae39df24 # shrinks to ('\0', [("park", None)], false)
+cc cf2de1bad975a444175587b24715cb6da6108e4cb2d37bcfe33c2bc63e8920c3 # shrinks to "^^é"

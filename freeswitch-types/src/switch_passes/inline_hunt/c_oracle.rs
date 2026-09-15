@@ -1,38 +1,74 @@
 //! `inline_dialplan_hunt`'s split against the switch's own C on every built tree.
 
-use freeswitch_c_oracle::{against_the_c, Action, Oracle};
+use freeswitch_c_oracle::{against_the_c, Action, InlineApplication, Oracle};
 use proptest::collection::vec;
 use proptest::option;
 use proptest::prelude::*;
 use proptest::sample::select;
 
+use crate::commands::originate::{DialplanType, OriginateError, OriginateTarget};
 use crate::commands::{Application, Endpoint, LoopbackEndpoint, Originate};
 use crate::switch_passes::originate_function::c_oracle::APP_NAMES;
+use crate::switch_passes::originate_function::parse_originate_target;
 use crate::test_text::text;
 
-/// The applications and data `inline_dialplan_hunt` adds for an action list, its split the switch's C.
-fn c_hunt(c: Oracle, list: &[u8]) -> Vec<(Vec<u8>, Vec<u8>)> {
-    let (delimiter, list) = match list {
-        [b'm', b':', delimiter, b':', rest @ ..] => (*delimiter, rest),
-        list => (b',', list),
-    };
-    c.separate_string(list, delimiter, 128)
-        .into_iter()
-        .map(|action| {
-            let (name, data) = match action
-                .iter()
-                .position(|&b| b == b':')
-            {
-                Some(at) => (&action[..at], &action[at + 1..]),
-                None => (&action[..], &[][..]),
-            };
-            let lead = name
-                .iter()
-                .take_while(|&&b| b == b' ')
-                .count();
-            (name[lead..].to_vec(), data.to_vec())
-        })
-        .collect()
+/// An inline target parses to the applications the switch's hunt adds, an empty data read as none,
+/// or is refused for a separator the hunt's split breaks on.
+#[test]
+fn inline_targets_parse_as_the_c_hunt_reads_them() {
+    let piece = prop_oneof![
+        3 => text(),
+        1 => select(&["m:|:", "m:;:", "m:,:", "m:::", "m: :", "m:\\:", "m:'", ":", ",", "set:", "park"][..])
+            .prop_map(str::to_owned),
+    ];
+    against_the_c(
+        file!(),
+        "inline_targets_parse_as_the_c_hunt_reads_them",
+        vec(piece, 0..5).prop_map(|pieces| pieces.concat()),
+        |c, target| {
+            if target.starts_with('&') {
+                return Ok(());
+            }
+            match parse_originate_target(&target, Some(&DialplanType::Inline)) {
+                Ok(OriginateTarget::InlineApplications(apps)) => {
+                    let parsed: Vec<InlineApplication> = apps
+                        .iter()
+                        .map(|app| {
+                            (
+                                app.name()
+                                    .as_bytes()
+                                    .to_vec(),
+                                app.args()
+                                    .map(|args| {
+                                        args.as_bytes()
+                                            .to_vec()
+                                    }),
+                            )
+                        })
+                        .collect();
+                    let switch: Vec<InlineApplication> = c_hunt(c, target.as_bytes())
+                        .into_iter()
+                        .map(|(name, data)| (name, data.filter(|data| !data.is_empty())))
+                        .collect();
+                    prop_assert_eq!(parsed, switch, "{:?}", target);
+                }
+                Err(OriginateError::InvalidInlineDelimiter(_)) => {}
+                other => {
+                    return Err(TestCaseError::fail(format!(
+                        "{target:?} parses as {other:?}"
+                    )));
+                }
+            }
+            Ok(())
+        },
+    );
+}
+
+/// An action list's applications as the switch's hunt adds them, each data `None` without a `:`,
+/// empty where it returns no extension.
+fn c_hunt(c: Oracle, list: &[u8]) -> Vec<InlineApplication> {
+    c.inline_dialplan_hunt(list)
+        .unwrap_or_default()
 }
 
 /// Every separator `inline_with_delimiter` accepts delivers each action as built through
@@ -85,15 +121,14 @@ fn inline_actions_arrive_through_the_c_hunt() {
                 )));
             };
             prop_assert_eq!(&dialplan[..], b"inline", "{:?}", line);
-            let want: Vec<(Vec<u8>, Vec<u8>)> = apps
+            let want: Vec<InlineApplication> = apps
                 .iter()
                 .map(|(name, args)| {
                     (
                         name.as_bytes()
                             .to_vec(),
                         args.clone()
-                            .unwrap_or_default()
-                            .into_bytes(),
+                            .map(String::into_bytes),
                     )
                 })
                 .collect();
