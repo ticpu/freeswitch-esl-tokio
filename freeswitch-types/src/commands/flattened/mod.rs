@@ -23,6 +23,9 @@ use crate::variables::VariableName;
 #[cfg(test)]
 mod tests;
 
+#[cfg(all(test, feature = "serde"))]
+mod c_oracle;
+
 /// A dial string read by the passes the switch applies for one target.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FlattenedDialString {
@@ -715,14 +718,14 @@ impl LegTarget {
 /// `switch_channel_str2cause` on the text after `error/`.
 fn str2cause(text: &str) -> CauseReading {
     if text.starts_with(|c: char| c.is_ascii_digit()) {
-        let number = text
+        // glibc's atoi: strtol clamps to a 64-bit long, which the switch truncates to its cause.
+        let long = text
             .bytes()
             .take_while(u8::is_ascii_digit)
-            .fold(0u32, |n, digit| {
-                n.saturating_mul(10)
-                    .saturating_add(u32::from(digit - b'0'))
+            .fold(0i128, |n, digit| {
+                (n * 10 + i128::from(digit - b'0')).min(i128::from(i64::MAX))
             });
-        return CauseReading::Number(number);
+        return CauseReading::Number(long as i64 as u32);
     }
     text.to_ascii_uppercase()
         .parse::<HangupCause>()
