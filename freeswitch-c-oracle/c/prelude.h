@@ -140,34 +140,92 @@ static int oracle_known(const char *const *names, const char *name)
 	return 0;
 }
 
-/* Every header an extracted pass installs is reported; nothing is stored. A header read answers
-   from the NULL-terminated name and value pairs the harness sets. */
+/* An event stores what an extracted pass installs, and a harness reports it with
+   oracle_report_headers; a destroyed event reports first. A header read answers from the
+   NULL-terminated name and value pairs the harness sets. */
+#define ORACLE_EVENT_HEADERS 1024
 typedef struct switch_event {
 	int flags;
+	int count;
+	char *names[ORACLE_EVENT_HEADERS];
+	char *values[ORACLE_EVENT_HEADERS];
 } switch_event_t;
 #define EF_UNIQ_HEADERS 1
 #define SWITCH_EVENT_CHANNEL_DATA 0
 #define SWITCH_STACK_BOTTOM 0
 static _Thread_local const char *const *oracle_headers;
 
+/* The model of switch_event_base_add_header this oracle holds the port to: an empty value
+   deletes the name, and under EF_UNIQ_HEADERS a set replaces it, both ignoring case. */
+static void oracle_delete_header(switch_event_t *event, const char *name)
+{
+	int from, to = 0;
+
+	for (from = 0; from < event->count; from++) {
+		if (strcasecmp(event->names[from], name)) {
+			event->names[to] = event->names[from];
+			event->values[to++] = event->values[from];
+		} else {
+			free(event->names[from]);
+			free(event->values[from]);
+		}
+	}
+	event->count = to;
+}
+
+static void oracle_report_headers(const switch_event_t *event)
+{
+	int x;
+
+	for (x = 0; x < event->count; x++) {
+		oracle_record(ORACLE_PAIR, event->names[x], event->values[x]);
+	}
+}
+
+static void oracle_clear_headers(switch_event_t *event)
+{
+	while (event->count) {
+		event->count--;
+		free(event->names[event->count]);
+		free(event->values[event->count]);
+	}
+}
+
 static switch_status_t switch_event_create_plain(switch_event_t **event, int id)
 {
-	(void) id;
 	*event = calloc(1, sizeof(**event));
-	return *event ? SWITCH_STATUS_SUCCESS : SWITCH_STATUS_FALSE;
+	if (!*event) {
+		return SWITCH_STATUS_FALSE;
+	}
+	if (id == SWITCH_EVENT_CHANNEL_DATA) {
+		(*event)->flags |= EF_UNIQ_HEADERS;
+	}
+	return SWITCH_STATUS_SUCCESS;
 }
 
 static void switch_event_destroy(switch_event_t **event)
 {
+	oracle_report_headers(*event);
+	oracle_clear_headers(*event);
 	free(*event);
 	*event = NULL;
 }
 
 static switch_status_t switch_event_add_header_string(switch_event_t *event, int stack, const char *name, const char *value)
 {
-	(void) event;
 	(void) stack;
-	oracle_record(ORACLE_PAIR, name, value);
+	if (!value || !*value) {
+		oracle_delete_header(event, name);
+		return SWITCH_STATUS_SUCCESS;
+	}
+	if (event->flags & EF_UNIQ_HEADERS) {
+		oracle_delete_header(event, name);
+	}
+	if (event->count == ORACLE_EVENT_HEADERS) {
+		abort();
+	}
+	event->names[event->count] = strdup(name);
+	event->values[event->count++] = strdup(value);
 	return SWITCH_STATUS_SUCCESS;
 }
 

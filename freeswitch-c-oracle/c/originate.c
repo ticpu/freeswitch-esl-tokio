@@ -10,16 +10,20 @@
    the block, or -1 where the call fails. */
 long oracle_brackets(char *data, char a, char b, char c, oracle_emit_fn emit, void *ctx)
 {
-	switch_event_t event = { 0 };
+	static _Thread_local switch_event_t event;
 	switch_event_t *var_event = &event;
 	char *parsed = NULL;
+	long rest = -1;
 
 	oracle_emit = emit;
 	oracle_ctx = ctx;
-	if (switch_event_create_brackets(data, a, b, c, &var_event, &parsed, SWITCH_FALSE) != SWITCH_STATUS_SUCCESS || !parsed) {
-		return -1;
+	event.flags = EF_UNIQ_HEADERS;
+	if (switch_event_create_brackets(data, a, b, c, &var_event, &parsed, SWITCH_FALSE) == SWITCH_STATUS_SUCCESS && parsed) {
+		oracle_report_headers(var_event);
+		rest = (long) (parsed - data);
 	}
-	return (long) (parsed - data);
+	oracle_clear_headers(&event);
+	return rest;
 }
 
 /* switch_ivr_originate from its first space strip to each leg's endpoint, the passes the port
@@ -28,8 +32,7 @@ static switch_status_t oracle_originate(const char *bridgeto)
 {
 	switch_status_t status = SWITCH_STATUS_SUCCESS;
 	switch_core_session_t *session = NULL;
-	switch_event_t event = { 0 };
-	switch_event_t *var_event = &event;
+	switch_event_t *var_event = NULL;
 	switch_event_t *local_var_event = NULL;
 	char *pipe_names[MAX_PEERS] = { 0 };
 	char *peer_names[MAX_PEERS] = { 0 };
@@ -41,6 +44,7 @@ static switch_status_t oracle_originate(const char *bridgeto)
 	int or_argc = 0, and_argc = 0, r, i;
 
 	(void) session;
+	switch_event_create_plain(&var_event, SWITCH_EVENT_CHANNEL_DATA);
 
 	/* strip leading spaces */
 	while (data && *data && *data == ' ') {
@@ -54,6 +58,8 @@ static switch_status_t oracle_originate(const char *bridgeto)
 	//@ block src/switch_ivr_originate.c switch_ivr_originate if (*data == '<') {
 
 	//@ block src/switch_ivr_originate.c switch_ivr_originate while (*data == '{') {
+
+	oracle_report_headers(var_event);
 
 	/* strip leading spaces (again) */
 	while (data && *data && *data == ' ') {
@@ -125,6 +131,8 @@ static switch_status_t oracle_originate(const char *bridgeto)
 	if (local_var_event) {
 		switch_event_destroy(&local_var_event);
 	}
+	oracle_clear_headers(var_event);
+	free(var_event);
 	switch_safe_free(loop_data);
 	switch_safe_free(odata);
 	return status;
@@ -136,8 +144,7 @@ static switch_status_t oracle_enterprise_originate(const char *bridgeto)
 {
 	switch_status_t status = SWITCH_STATUS_FALSE;
 	switch_core_session_t *session = NULL;
-	switch_event_t event = { 0 };
-	switch_event_t *var_event = &event;
+	switch_event_t *var_event = NULL;
 	char *x_argv[MAX_PEERS] = { 0 };
 	char *odata = strdup(bridgeto);
 	char *data = odata;
@@ -145,6 +152,7 @@ static switch_status_t oracle_enterprise_originate(const char *bridgeto)
 	int x_argc = 0, i;
 
 	(void) session;
+	switch_event_create_plain(&var_event, SWITCH_EVENT_CHANNEL_DATA);
 
 	/* strip leading spaces */
 	while (data && *data && *data == ' ') {
@@ -152,6 +160,8 @@ static switch_status_t oracle_enterprise_originate(const char *bridgeto)
 	}
 
 	//@ block src/switch_ivr_originate.c switch_ivr_enterprise_originate while (data && *data == '<') {
+
+	oracle_report_headers(var_event);
 
 	/* strip leading spaces (again) */
 	while (data && *data && *data == ' ') {
@@ -173,6 +183,8 @@ static switch_status_t oracle_enterprise_originate(const char *bridgeto)
 	if (status != SWITCH_STATUS_SUCCESS) {
 		oracle_record(ORACLE_FAILURE, failure, NULL);
 	}
+	oracle_clear_headers(var_event);
+	free(var_event);
 	switch_safe_free(odata);
 	return status;
 }

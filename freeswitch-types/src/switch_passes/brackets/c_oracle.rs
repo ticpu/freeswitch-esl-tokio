@@ -5,33 +5,24 @@ use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest::sample::select;
 
-use super::{parse_block, Block, PairEffect};
+use super::{install, parse_block, Block, PairEffect};
 use crate::switch_passes::originate_legs::UNQUOTED_ESC_COMMA;
 use crate::switch_passes::separate::CBuffer;
 use crate::switch_passes::{trace, untrace};
 use crate::test_text::text;
 
-/// The headers installing `blocks` adds, as the switch hands them to the event.
+/// The headers an event carrying `EF_UNIQ_HEADERS` holds once `blocks` install into it.
 pub(crate) fn installed<'a>(blocks: impl IntoIterator<Item = &'a Block>) -> Vec<Pair> {
-    blocks
+    install(blocks)
         .into_iter()
-        .flat_map(|block| &block.pairs)
-        .filter_map(|pair| {
-            let value = match &pair.effect {
-                PairEffect::Set(value) => value.as_str(),
-                PairEffect::Cleared => "",
-                PairEffect::Ignored | PairEffect::Unreadable | PairEffect::Valueless => {
-                    return None
-                }
-            };
-            Some((
-                pair.key
-                    .clone()
-                    .into_bytes(),
+        .map(|(key, value)| {
+            (
+                key.as_bytes()
+                    .to_vec(),
                 value
                     .as_bytes()
                     .to_vec(),
-            ))
+            )
         })
         .collect()
 }
@@ -120,4 +111,22 @@ fn blocks_match_the_switch() {
             Ok(())
         },
     );
+}
+
+/// The block's event replaces a header by name ignoring case, as the port's event store does;
+/// `GONE=` splits into one field, so it installs and deletes nothing.
+#[test]
+fn a_block_event_folds_names_by_case() {
+    let block = "{k=1,K=2,gone=x,GONE=,kept=y}";
+    let text = trace(block);
+    let parsed = parse_block(&mut CBuffer::new(&text), 0, '{', '}', ',').expect("the block closes");
+    let pair = |key: &[u8], value: &[u8]| -> Pair { (key.to_vec(), value.to_vec()) };
+    let want = vec![pair(b"K", b"2"), pair(b"gone", b"x"), pair(b"kept", b"y")];
+    assert_eq!(installed([&parsed.block]), want);
+    for (tree, c) in freeswitch_c_oracle::oracles() {
+        let read = c
+            .brackets(block.as_bytes(), b'{', b'}', b',')
+            .expect("the block closes");
+        assert_eq!(read.pairs, want, "tree {tree}");
+    }
 }

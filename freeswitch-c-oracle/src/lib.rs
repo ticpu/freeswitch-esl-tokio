@@ -68,7 +68,7 @@ pub type Pair = (Vec<u8>, Vec<u8>);
 /// What `switch_event_create_brackets` read of the block opening its data.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Brackets {
-    /// Every header installed, in order.
+    /// The headers the event holds, in the order they were last set.
     pub pairs: Vec<Pair>,
     /// The offset of the data after the block.
     pub rest: usize,
