@@ -33,7 +33,5 @@ void oracle_api_originate(const char *arg, oracle_emit_fn emit, void *ctx)
 	}
 	oracle_assert_jump = NULL;
 	free(stripped);
-	while (oracle_session_string_count) {
-		free(oracle_session_strings[--oracle_session_string_count]);
-	}
+	oracle_session_release();
 }

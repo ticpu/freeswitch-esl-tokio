@@ -26,8 +26,6 @@ size_t oracle_core_url_encode_opt(const char *url, switch_bool_t double_encode, 
 	} else {
 		len = (size_t) -1;
 	}
-	while (pool.count) {
-		free(pool.allocs[--pool.count]);
-	}
+	oracle_pool_release(&pool);
 	return len;
 }

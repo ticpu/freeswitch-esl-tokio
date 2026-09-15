@@ -27,7 +27,19 @@ const UNITS: &[&str] = &[
     "c/originate.c",
     "c/expand.c",
     "c/api_originate.c",
+    "c/inline_dialplan.c",
+    "c/cause.c",
+    "c/sofia.h",
+    "c/protect_dest_uri.c",
+    "c/sofia_outgoing.c",
+    "c/sofia_contact.c",
+    "c/loopback.c",
+    "c/user.c",
+    "c/group_call.c",
 ];
+
+/// The domain the core's default-domain stub answers with.
+const DEFAULT_DOMAIN: &str = "default.example.com";
 
 /// A C symbol Rust links against: the `Abi` field holding it and its parameter list and return.
 struct Export {
@@ -119,6 +131,51 @@ const EXPORTS: &[Export] = &[
         symbol: "oracle_switch_true",
         signature: "(expr: *const c_char) -> c_int",
     },
+    Export {
+        field: "inline_dialplan_hunt",
+        symbol: "oracle_inline_dialplan_hunt",
+        signature: RECORDED,
+    },
+    Export {
+        field: "str2cause",
+        symbol: "oracle_str2cause",
+        signature: "(str: *const c_char) -> c_int",
+    },
+    Export {
+        field: "cause_chart",
+        symbol: "oracle_cause_chart",
+        signature: "(emit: Emit, ctx: *mut c_void)",
+    },
+    Export {
+        field: "protect_dest_uri",
+        symbol: "oracle_protect_dest_uri",
+        signature: RECORDED,
+    },
+    Export {
+        field: "sofia_outgoing_channel",
+        symbol: "oracle_sofia_outgoing_channel",
+        signature: "(destination: *const c_char, headers: *const *const c_char, profiles: *const *const c_char, gateways: *const *const c_char, emit: Emit, ctx: *mut c_void)",
+    },
+    Export {
+        field: "sofia_contact",
+        symbol: "oracle_sofia_contact",
+        signature: "(arg: *const c_char, profiles: *const *const c_char, emit: Emit, ctx: *mut c_void)",
+    },
+    Export {
+        field: "loopback_outgoing_channel",
+        symbol: "oracle_loopback_outgoing_channel",
+        signature: RECORDED,
+    },
+    Export {
+        field: "user_outgoing_channel",
+        symbol: "oracle_user_outgoing_channel",
+        signature: RECORDED,
+    },
+    Export {
+        field: "group_call",
+        symbol: "oracle_group_call",
+        signature: RECORDED,
+    },
 ];
 
 /// What the harness reports through its callback, numbered alike in C and in Rust.
@@ -138,6 +195,18 @@ const TAGS: &[&str] = &[
     "TRANSFER",
     "CONTEXT",
     "OUTPUT",
+    "HEADER",
+    "VARIABLE",
+    "DOMAIN",
+    "EXTENSION",
+    "CAUSE",
+    "RESULT",
+    "FIELD",
+    "PROFILE",
+    "GATEWAY",
+    "REGISTRATION",
+    "HOST",
+    "SELECT",
 ];
 
 #[derive(Deserialize)]
@@ -243,6 +312,11 @@ fn abi() -> String {
     {
         writeln!(generated, "const {tag}: c_int = {};", number + 1).expect("String write");
     }
+    writeln!(
+        generated,
+        "/// The domain every tree's core answers as its default.\npub const DEFAULT_DOMAIN: &[u8] = b{DEFAULT_DOMAIN:?};"
+    )
+    .expect("String write");
     generated.push_str("#[derive(Debug)]\nstruct Abi {\n");
     for export in EXPORTS {
         writeln!(
@@ -419,6 +493,7 @@ fn compile(tree: &Tree, source: &mut Source<'_>, units: &[(&str, String)], out: 
     {
         writeln!(unit, "#define ORACLE_{tag} {}", number + 1).expect("String write");
     }
+    writeln!(unit, "#define ORACLE_DEFAULT_DOMAIN {DEFAULT_DOMAIN:?}").expect("String write");
     let exported = EXPORTS
         .iter()
         .map(|export| export.symbol)

@@ -12,7 +12,7 @@ mod every_tree;
 #[path = "../build/extract.rs"]
 mod extract;
 
-pub use every_tree::{against_the_c, config, on_every_tree};
+pub use every_tree::{against_the_c, config, on_every_tree, oracles, trees_agree};
 
 /// One FreeSWITCH tree the build compiles: the pin, or an entry of `trees` in the index.
 #[derive(Debug)]
@@ -166,6 +166,220 @@ pub enum Action {
         /// The context, `default` when absent.
         context: Vec<u8>,
     },
+}
+
+/// An application `inline_dialplan_hunt` added: its name, then its data, `None` without a `:`.
+pub type InlineApplication = (Vec<u8>, Option<Vec<u8>>);
+
+/// What `protect_dest_uri` did to a destination number.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ProtectedDestination {
+    /// The destination number the call left, whether it returned nonzero or not.
+    pub destination: Vec<u8>,
+    /// The call returned nonzero, having URL-encoded the user part.
+    pub encoded: bool,
+}
+
+/// What the mod_sofia stubs answer: every lookup is reported, and only a listed name is found.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Sofia<'a> {
+    /// Profiles `sofia_glue_find_profile` finds, each with SIP IP `192.0.2.1` and no domain name.
+    pub profiles: &'a [&'a [u8]],
+    /// Gateways `sofia_reg_find_gateway` finds, each up over UDP with an empty destination prefix,
+    /// proxy `sip:gateway.example.com`, contact `<sip:gw@192.0.2.1:5060>` and from
+    /// `<sip:gw@gateway.example.com>`.
+    pub gateways: &'a [&'a [u8]],
+    /// Headers of the originate's variable event, name then value, matched in any case.
+    pub headers: &'a [(&'a [u8], &'a [u8])],
+}
+
+/// What `sofia_outgoing_channel` made of a destination. A registration and a host resolution
+/// answer nothing.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SofiaOutgoing {
+    /// The cause it failed with, `None` where it reached the attach.
+    pub cause: Option<i32>,
+    /// The destination number `protect_dest_uri` left.
+    pub destination_number: Vec<u8>,
+    /// Every variable event header read, in order.
+    pub header_lookups: Vec<Vec<u8>>,
+    /// Every channel variable read, in order.
+    pub variable_lookups: Vec<Vec<u8>>,
+    /// Every gateway name looked up.
+    pub gateway_lookups: Vec<Vec<u8>>,
+    /// Every profile name looked up.
+    pub profile_lookups: Vec<Vec<u8>>,
+    /// Every registration looked up, user then host.
+    pub registration_lookups: Vec<(Vec<u8>, Vec<u8>)>,
+    /// Every host name resolved.
+    pub host_lookups: Vec<Vec<u8>>,
+    /// Channel variables set, in order.
+    pub variables: Vec<Pair>,
+    /// The `sofia_transport_t` of the private object.
+    pub transport: i32,
+    /// `gateway_name` of the private object.
+    pub gateway_name: Option<Vec<u8>>,
+    /// `gateway_from_str` of the private object.
+    pub gateway_from_str: Option<Vec<u8>>,
+    /// `dest`, the request URI.
+    pub dest: Option<Vec<u8>>,
+    /// `e_dest`.
+    pub e_dest: Option<Vec<u8>>,
+    /// `dest_to`, the To URI.
+    pub dest_to: Option<Vec<u8>>,
+    /// `invite_contact`.
+    pub invite_contact: Option<Vec<u8>>,
+    /// `local_url`.
+    pub local_url: Option<Vec<u8>>,
+    /// `mparams.remote_ip`.
+    pub remote_ip: Option<Vec<u8>>,
+}
+
+/// What `sofia_contact_function` did with its argument. The profile hash is empty and a
+/// registration query finds no contact.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SofiaContact {
+    /// Every line written to the API stream.
+    pub output: Vec<Vec<u8>>,
+    /// Every profile name looked up.
+    pub profile_lookups: Vec<Vec<u8>>,
+    /// How often the core's default domain was asked for.
+    pub default_domain_lookups: usize,
+    /// Every registration query, in order.
+    pub selects: Vec<ContactSelect>,
+    /// The `switch_assert` expression that failed, which aborts the switch.
+    pub assertion: Option<Vec<u8>>,
+}
+
+/// The arguments of one `select_from_profile` call.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ContactSelect {
+    /// The profile's name.
+    pub profile: Vec<u8>,
+    /// Contacts seen on an earlier profile are skipped.
+    pub dedup: bool,
+    /// The user matched.
+    pub user: Option<Vec<u8>>,
+    /// The host matched.
+    pub domain: Option<Vec<u8>>,
+    /// Appended to each contact.
+    pub concat: Option<Vec<u8>>,
+    /// A contact containing it is skipped.
+    pub exclude_contact: Option<Vec<u8>>,
+    /// A user agent that does not contain it is skipped.
+    pub match_user_agent: Option<Vec<u8>>,
+}
+
+/// The caller profile `channel_outgoing_channel` gives the new loopback channel.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LoopbackOutgoing {
+    /// The channel name.
+    pub name: Option<Vec<u8>>,
+    /// The extension.
+    pub destination_number: Vec<u8>,
+    /// The context.
+    pub context: Option<Vec<u8>>,
+    /// The dialplan.
+    pub dialplan: Option<Vec<u8>>,
+    /// The channel runs `loopback_app` rather than a dialplan.
+    pub app: bool,
+    /// Channel variables set, in order.
+    pub variables: Vec<Pair>,
+}
+
+/// The directory entry `user_outgoing_channel` looks up.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct UserOutgoing {
+    /// The user id.
+    pub user: Vec<u8>,
+    /// The domain.
+    pub domain: Vec<u8>,
+    /// The domain is the core's default, [`DEFAULT_DOMAIN`].
+    pub default_domain: bool,
+}
+
+/// The group `group_call_function` looks up and how it joins its members.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct GroupCall {
+    /// The group name.
+    pub group: Vec<u8>,
+    /// The domain.
+    pub domain: Option<Vec<u8>>,
+    /// What separates members in the dial string.
+    pub call_delim: Vec<u8>,
+    /// The domain is the core's default, [`DEFAULT_DOMAIN`].
+    pub default_domain: bool,
+}
+
+/// The fields a harness reported, taken by name.
+#[derive(Default)]
+struct Fields(Vec<(Vec<u8>, Option<Vec<u8>>)>);
+
+impl Fields {
+    fn push(&mut self, name: Option<Vec<u8>>, value: Option<Vec<u8>>) {
+        self.0
+            .push((text(name), value));
+    }
+
+    fn is_empty(&self) -> bool {
+        self.0
+            .is_empty()
+    }
+
+    fn take(&mut self, name: &str) -> Option<Vec<u8>> {
+        let at = self
+            .0
+            .iter()
+            .rposition(|(field, _)| field == name.as_bytes())
+            .unwrap_or_else(|| panic!("the harness reported no field {name}"));
+        self.0
+            .remove(at)
+            .1
+    }
+}
+
+/// NUL-terminated copies of some strings behind a NULL-terminated pointer array.
+struct CArray {
+    _buffers: Vec<Vec<u8>>,
+    pointers: Vec<*const c_char>,
+}
+
+impl CArray {
+    fn new<'a>(strings: impl IntoIterator<Item = &'a [u8]>) -> Self {
+        let buffers: Vec<Vec<u8>> = strings
+            .into_iter()
+            .map(buffer)
+            .collect();
+        let pointers = buffers
+            .iter()
+            .map(|buffer| {
+                buffer
+                    .as_ptr()
+                    .cast()
+            })
+            .chain(std::iter::once(std::ptr::null()))
+            .collect();
+        Self {
+            _buffers: buffers,
+            pointers,
+        }
+    }
+
+    fn as_ptr(&self) -> *const *const c_char {
+        self.pointers
+            .as_ptr()
+    }
+}
+
+fn number(field: Option<Vec<u8>>) -> i32 {
+    String::from_utf8(text(field))
+        .ok()
+        .and_then(|number| {
+            number
+                .parse()
+                .ok()
+        })
+        .expect("the harness prints the number in decimal")
 }
 
 type Record = (c_int, Option<Vec<u8>>, Option<Vec<u8>>);
@@ -634,6 +848,294 @@ impl Oracle {
             )
         };
         truth != 0
+    }
+
+    /// `inline_dialplan_hunt` on `target`, an `m:<delim>:` head included, over an empty
+    /// destination number: the applications it adds, `None` where it returns no extension.
+    pub fn inline_dialplan_hunt(self, target: &[u8]) -> Option<Vec<InlineApplication>> {
+        let mut applications = Vec::new();
+        let mut extension = false;
+        for (tag, a, b) in self.run(
+            self.abi
+                .inline_dialplan_hunt,
+            target,
+        ) {
+            match tag {
+                APPLICATION => applications.push((text(a), b)),
+                EXTENSION => extension = true,
+                tag => panic!("the inline hunt harness reported tag {tag}"),
+            }
+        }
+        extension.then_some(applications)
+    }
+
+    /// `switch_channel_str2cause`.
+    pub fn str2cause(self, text: &[u8]) -> i32 {
+        let buffer = buffer(text);
+        // SAFETY: the buffer is NUL-terminated and the C only reads it.
+        unsafe {
+            (self
+                .abi
+                .str2cause)(
+                buffer
+                    .as_ptr()
+                    .cast(),
+            )
+        }
+    }
+
+    /// Every named entry of `CAUSE_CHART`, in its order.
+    pub fn cause_chart(self) -> Vec<(Vec<u8>, i32)> {
+        recorded(|emit, ctx| {
+            // SAFETY: `emit` and `ctx` outlive the call.
+            unsafe {
+                (self
+                    .abi
+                    .cause_chart)(emit, ctx);
+            }
+        })
+        .into_iter()
+        .map(|(tag, name, cause)| {
+            assert_eq!(tag, CAUSE, "the cause chart reports only causes");
+            (text(name), number(cause))
+        })
+        .collect()
+    }
+
+    /// `protect_dest_uri` in mod_sofia on a destination number.
+    pub fn protect_dest_uri(self, destination: &[u8]) -> ProtectedDestination {
+        let mut protected = ProtectedDestination::default();
+        for (tag, a, _) in self.run(
+            self.abi
+                .protect_dest_uri,
+            destination,
+        ) {
+            match tag {
+                OUTPUT => protected.destination = text(a),
+                RESULT => protected.encoded = number(a) != 0,
+                tag => panic!("the protect_dest_uri harness reported tag {tag}"),
+            }
+        }
+        protected
+    }
+
+    /// `sofia_outgoing_channel` in mod_sofia on a destination, the `sofia/` endpoint text after its
+    /// prefix, up to attaching its private object to the profile.
+    pub fn sofia_outgoing_channel(self, destination: &[u8], sofia: &Sofia<'_>) -> SofiaOutgoing {
+        let input = buffer(destination);
+        let headers = CArray::new(
+            sofia
+                .headers
+                .iter()
+                .flat_map(|&(name, value)| [name, value]),
+        );
+        let profiles = CArray::new(
+            sofia
+                .profiles
+                .iter()
+                .copied(),
+        );
+        let gateways = CArray::new(
+            sofia
+                .gateways
+                .iter()
+                .copied(),
+        );
+        let records = recorded(|emit, ctx| {
+            // SAFETY: every string is NUL-terminated, every array NULL-terminated, and all of them,
+            // `emit` and `ctx` outlive the call.
+            unsafe {
+                (self
+                    .abi
+                    .sofia_outgoing_channel)(
+                    input
+                        .as_ptr()
+                        .cast(),
+                    headers.as_ptr(),
+                    profiles.as_ptr(),
+                    gateways.as_ptr(),
+                    emit,
+                    ctx,
+                );
+            }
+        });
+        let mut outgoing = SofiaOutgoing::default();
+        let mut fields = Fields::default();
+        for (tag, a, b) in records {
+            match tag {
+                HEADER => outgoing
+                    .header_lookups
+                    .push(text(a)),
+                LOOKUP => outgoing
+                    .variable_lookups
+                    .push(text(a)),
+                VARIABLE => outgoing
+                    .variables
+                    .push((text(a), text(b))),
+                GATEWAY => outgoing
+                    .gateway_lookups
+                    .push(text(a)),
+                PROFILE => outgoing
+                    .profile_lookups
+                    .push(text(a)),
+                REGISTRATION => outgoing
+                    .registration_lookups
+                    .push((text(a), text(b))),
+                HOST => outgoing
+                    .host_lookups
+                    .push(text(a)),
+                CAUSE => outgoing.cause = Some(number(a)),
+                FIELD => fields.push(a, b),
+                tag => panic!("the sofia outgoing harness reported tag {tag}"),
+            }
+        }
+        outgoing.destination_number = text(fields.take("destination_number"));
+        outgoing.transport = number(fields.take("transport"));
+        outgoing.gateway_name = fields.take("gateway_name");
+        outgoing.gateway_from_str = fields.take("gateway_from_str");
+        outgoing.dest = fields.take("dest");
+        outgoing.e_dest = fields.take("e_dest");
+        outgoing.dest_to = fields.take("dest_to");
+        outgoing.invite_contact = fields.take("invite_contact");
+        outgoing.local_url = fields.take("local_url");
+        outgoing.remote_ip = fields.take("remote_ip");
+        outgoing
+    }
+
+    /// `sofia_contact_function` in mod_sofia on an API argument, with no session.
+    pub fn sofia_contact(self, arg: &[u8], profiles: &[&[u8]]) -> SofiaContact {
+        let input = buffer(arg);
+        let profiles = CArray::new(
+            profiles
+                .iter()
+                .copied(),
+        );
+        let records = recorded(|emit, ctx| {
+            // SAFETY: the argument is NUL-terminated, the array NULL-terminated, and both, `emit`
+            // and `ctx` outlive the call.
+            unsafe {
+                (self
+                    .abi
+                    .sofia_contact)(
+                    input
+                        .as_ptr()
+                        .cast(),
+                    profiles.as_ptr(),
+                    emit,
+                    ctx,
+                );
+            }
+        });
+        let mut contact = SofiaContact::default();
+        let mut selects: Vec<(Vec<u8>, bool, Fields)> = Vec::new();
+        for (tag, a, b) in records {
+            match tag {
+                OUTPUT => contact
+                    .output
+                    .push(text(a)),
+                PROFILE => contact
+                    .profile_lookups
+                    .push(text(a)),
+                DOMAIN => contact.default_domain_lookups += 1,
+                FAILURE => contact.assertion = a,
+                SELECT => selects.push((text(a), b.as_deref() == Some(b"true"), Fields::default())),
+                FIELD => selects
+                    .last_mut()
+                    .expect("a select reports its fields after it")
+                    .2
+                    .push(a, b),
+                tag => panic!("the sofia contact harness reported tag {tag}"),
+            }
+        }
+        contact.selects = selects
+            .into_iter()
+            .map(|(profile, dedup, mut fields)| ContactSelect {
+                profile,
+                dedup,
+                user: fields.take("user"),
+                domain: fields.take("domain"),
+                concat: fields.take("concat"),
+                exclude_contact: fields.take("exclude_contact"),
+                match_user_agent: fields.take("match_user_agent"),
+            })
+            .collect();
+        contact
+    }
+
+    /// `channel_outgoing_channel` in mod_loopback on a destination, the `loopback/` endpoint text
+    /// after its prefix, over an outbound profile with no context or dialplan.
+    pub fn loopback_outgoing_channel(self, destination: &[u8]) -> LoopbackOutgoing {
+        let mut loopback = LoopbackOutgoing::default();
+        let mut fields = Fields::default();
+        for (tag, a, b) in self.run(
+            self.abi
+                .loopback_outgoing_channel,
+            destination,
+        ) {
+            match tag {
+                VARIABLE => loopback
+                    .variables
+                    .push((text(a), text(b))),
+                FIELD => fields.push(a, b),
+                tag => panic!("the loopback harness reported tag {tag}"),
+            }
+        }
+        loopback.name = fields.take("name");
+        loopback.destination_number = text(fields.take("destination_number"));
+        loopback.context = fields.take("context");
+        loopback.dialplan = fields.take("dialplan");
+        loopback.app = fields
+            .take("app")
+            .as_deref()
+            == Some(b"true");
+        loopback
+    }
+
+    /// `user_outgoing_channel` in mod_dptools on a destination, the `user/` endpoint text after its
+    /// prefix, up to the directory lookup: `None` where it stops first.
+    pub fn user_outgoing_channel(self, destination: &[u8]) -> Option<UserOutgoing> {
+        let mut default_domain = false;
+        let mut fields = Fields::default();
+        for (tag, a, b) in self.run(
+            self.abi
+                .user_outgoing_channel,
+            destination,
+        ) {
+            match tag {
+                DOMAIN => default_domain = true,
+                FIELD => fields.push(a, b),
+                tag => panic!("the user harness reported tag {tag}"),
+            }
+        }
+        (!fields.is_empty()).then(|| UserOutgoing {
+            user: text(fields.take("user")),
+            domain: text(fields.take("domain")),
+            default_domain,
+        })
+    }
+
+    /// `group_call_function` in mod_commands on an API argument, up to the directory lookup:
+    /// `None` where it stops first.
+    pub fn group_call(self, arg: &[u8]) -> Option<GroupCall> {
+        let mut default_domain = false;
+        let mut fields = Fields::default();
+        for (tag, a, b) in self.run(
+            self.abi
+                .group_call,
+            arg,
+        ) {
+            match tag {
+                DOMAIN => default_domain = true,
+                FIELD => fields.push(a, b),
+                tag => panic!("the group call harness reported tag {tag}"),
+            }
+        }
+        (!fields.is_empty()).then(|| GroupCall {
+            group: text(fields.take("group")),
+            domain: fields.take("domain"),
+            call_delim: text(fields.take("call_delim")),
+            default_domain,
+        })
     }
 
     /// Run a recording harness function over a NUL-terminated copy of `input`.

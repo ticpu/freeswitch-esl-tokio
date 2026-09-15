@@ -1,8 +1,9 @@
 //! Running a property against the C of every built tree.
 
+use std::fmt::Debug;
 use std::io::Write as _;
 
-use proptest::prelude::ProptestConfig;
+use proptest::prelude::{prop_assert_eq, ProptestConfig};
 use proptest::strategy::Strategy;
 use proptest::test_runner::{TestCaseResult, TestRunner};
 
@@ -59,6 +60,49 @@ pub fn on_every_tree<S: Strategy>(
             panic!("{name} on tree {}: {failure}", tree.name());
         }
     }
+}
+
+/// Every built tree, by name, with its C.
+pub fn oracles() -> impl Iterator<Item = (&'static str, Oracle)> {
+    trees()
+        .iter()
+        .filter_map(|tree| {
+            tree.oracle()
+                .ok()
+                .map(|oracle| (tree.name(), oracle))
+        })
+}
+
+/// [`on_every_tree`] asserting `read` gives on each tree what it gives on the first built one,
+/// the pin where it is built.
+///
+/// # Panics
+///
+/// On the first tree that reads a value differently, naming it.
+pub fn trees_agree<S, T>(
+    source: &'static str,
+    name: &str,
+    strategy: S,
+    read: impl Fn(Oracle, &S::Value) -> T,
+) where
+    S: Strategy,
+    S::Value: Debug,
+    T: PartialEq + Debug,
+{
+    let reference = oracles().next();
+    on_every_tree(source, name, strategy, |tree, oracle, value| {
+        if let Some((first, reference)) = reference {
+            prop_assert_eq!(
+                read(oracle, &value),
+                read(reference, &value),
+                "tree {} against {} on {:?}",
+                tree,
+                first,
+                value
+            );
+        }
+        Ok(())
+    });
 }
 
 /// [`on_every_tree`] for a property every tree must meet alike.
