@@ -137,7 +137,8 @@ variable scoping documentation.
 
 **originate_split()** — splits a command line the way the `originate` API splits its
 arguments: `separate_string_blank_delim` on a space, `separate_string_char_delim` on
-any other delimiter. Tokens keep their quoting, which later parsing consumes.
+any other delimiter. A leading `^^X` overrides the delimiter it is given, as the
+switch reads one. Tokens keep their quoting, which later parsing consumes.
 
 **FlattenedDialString** — a dial string the switch produced, such as a
 `group_call` expansion, read through the switch's own passes for a
@@ -145,6 +146,17 @@ any other delimiter. Tokens keep their quoting, which later parsing consumes.
 receives, carries a `LegTarget` (`error/` cause, typed `Endpoint`, or unparsed
 text) and per-pair warnings. `retain()` drops legs; `display_raw()` forwards the
 kept legs as written, `display_for()` renders them canonically.
+
+**DialStringTarget::with_argv_separator** — the target for a line that splits
+`originate`'s arguments on a `^^X` separator. The dial string is one argument of
+that split: rendered, it is escaped once for the split; parsed, the split's
+cleanup runs first. `escape_argument()` applies that escape to text the caller
+holds. A caller that writes its own `originate ^^~<list>~&park` escapes a
+switch-produced list with `escape_argument()`, reads it with
+`FlattenedDialString::parse_for()` at the same target, drops legs with
+`retain()`, and splices `display_raw()`, still escaped, between the separators.
+Refused separators and the reason for each are in
+[dial-string-format.md](dial-string-format.md#x-argument-separator).
 
 ### Channel Commands
 

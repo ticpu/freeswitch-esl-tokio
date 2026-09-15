@@ -345,6 +345,7 @@ is true on the channel, which then leaves that carrier at the API's depth.
 |---|---|
 | `bridge` and other dialplan applications, incl. `sendmsg execute` | expansion + 2 |
 | `api originate`, `bgapi originate` | argv split + 2 |
+| `originate` after `^^X` | argv split on `X` + 2 |
 
 Consequences worth knowing before hand-writing a block:
 
@@ -666,6 +667,84 @@ originate loopback/9199/test '&socket(127.0.0.1:8040 async full)'
 
 The `freeswitch-esl-tokio` library handles this quoting automatically via
 `originate_quote()` / `originate_unquote()`.
+
+### `^^X` argument separator
+
+A line whose arguments open with `^^` and a byte, with at least one more byte
+after it, splits `originate`'s arguments on that byte instead of on blanks
+(`switch_separate_string`), and the prefix is dropped:
+
+```
+originate ^^~{k=v}loopback/9199/test~&park()
+```
+
+All of the following were measured over `originate`:
+
+- **One byte.** The switch reads the separator as a byte, so `^^é` splits on
+  the first byte of its UTF-8 encoding.
+- **Spaces are text.** `^^~ error/USER_BUSY &park()` is a single argument and
+  answers with the usage line. `^^ ` names the blank split itself.
+- **Trailing and doubled separators.** A trailing separator adds no argument:
+  `^^~error/USER_BUSY~` is one argument. Two in a row, `~~`, add an empty one.
+- **Quotes still pair.** The split keeps its quote handling, so a `'` separator
+  splits once and pairs with the next `'` as quotes after that.
+
+Each argument is cleaned up once with the separator as the delimiter, so an
+argument written for this split escapes, once:
+
+- `\`, `'` and the separator itself with a backslash;
+- newline, CR and tab as `\n`, `\r`, `\t`;
+- a space at either edge of the argument as `\s`, since the edges are trimmed
+  and `\s` keeps them.
+
+The same cleanup also turns `\"` into `"`, under every separator and under the
+blank split alike, and leaves an unknown escape with its backslash. It is the
+same single pass the blank split makes, so the block escape counts under
+[Variable value escaping](#variable-value-escaping) stand: the argument escape
+wraps what the API carrier already writes.
+
+A space needs no quotes under a separator: `q=a b` arrives as `a b` in `{}`,
+`<>`, `[]`, a `|` failover and a `:_:` list. A quote that protects a delimiter
+inside a value has to survive to the pass splitting on that delimiter, and the
+argument cleanup consumes one quote level:
+
+| Delimiter in the value | Block | Written under `^^~` |
+|---|---|---|
+| `,` | `{}`, `<>` | `q=\'a,b\'` |
+| `,` | `[]` | `q=\\\'a,b\\\'`, the leg split consuming a level |
+| `\|` | `[]` | `q=\'x\|y\'` |
+| `:_:` | any | none: the enterprise split ignores quotes at every depth |
+
+`originate_split` honours the override, for an ASCII separator only; a line
+opening with a non-ASCII one splits on `split_at` whole.
+`DialStringTarget::with_argv_separator` names the split. `Variables`, `Endpoint`
+and `FlattenedDialString` rendered at such a target are escaped once at the edge
+of the argument, and parsed at it run the cleanup first and refuse text that
+splits into a second argument or hides a separator inside quotes.
+`escape_argument` escapes caller text the same way, and is `None` without a
+separator: the blank split has no escape that inverts it.
+`DialStringCarrier::Dialplan` takes no separator, because an application's
+argument is never split.
+
+`with_argv_separator` refuses separators that break the split or its escapes:
+
+- space, which is the blank split;
+- `\`, because the cleanup reads an escape before it tests for the delimiter,
+  so `^^\` never splits;
+- `'`, which pairs with the next separator as quotes;
+- non-ASCII, which the switch splits on its first byte;
+- ASCII controls: newline and CR end the ESL command, and the rest are
+  unprintable or whitespace the switch trims at an argument's edge;
+- lowercase `n`, `r`, `t`, `s`: under `^^n`, `\n` is an escaped separator and
+  no spelling carries a newline.
+
+It refuses others as policy, though the switch splits on them:
+
+- `^`, `"`, `,`, `|`, `[`, `]`, `{`, `}`, `<`, `>`, `=`, `:`, which a reader
+  takes for the dial-string grammar or a block's `^^` separator;
+- uppercase `N`, `R`, `T`, `S`, which under `^^N` still leave `\n` a newline
+  but read like the escapes;
+- every other letter and digit, which endpoints and values carry.
 
 These two lines are the two carriers of [Parse depth](#parse-depth), and the
 typed API picks the right escaping for each without being told: `Originate`

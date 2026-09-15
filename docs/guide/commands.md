@@ -118,6 +118,29 @@ assert!(BlockParse::for_version(&dev).is_err());
 
 The vouched range and what a revision does and does not cover are in [dial-string-format.md](../dial-string-format.md#parser-revisions).
 
+## Forwarding a switch-produced list under `^^X`
+
+A list the switch expanded, such as a `group_call` result, can carry values with spaces that the blank split of `originate` would cut. Name a separator on the target, escape the list for it, read it, keep the legs you want, and splice what is left into your own line:
+
+```rust
+use freeswitch_esl_tokio::commands::*;
+
+let target = DialStringTarget::new(DialStringCarrier::EslApi)
+    .with_argv_separator('~')
+    .unwrap(); // '~' is a usable separator
+let expanded = "[sip_h_X-Seat=desk one]user/1001@pbx.example.com,error/USER_NOT_REGISTERED";
+
+// escape_argument is None only on a target without a separator.
+let escaped = target.escape_argument(expanded).unwrap();
+let mut list = FlattenedDialString::parse_for(&escaped, target).unwrap();
+list.retain(|leg| !matches!(leg.target(), LegTarget::Error(_)));
+
+let line = format!("originate ^^~{}~&park()", list.display_raw());
+assert_eq!(line, "originate ^^~[sip_h_X-Seat=desk one]user/1001@pbx.example.com~&park()");
+```
+
+The measured behaviour of the override and the separators `with_argv_separator` refuses are in [dial-string-format.md](../dial-string-format.md#x-argument-separator).
+
 ## A value that must not cross the dial string
 
 A large or free-text value — a PIDF-LO for `sip_multipart`, say — is set on the new channel by an `execute_on_originate` hook instead, which runs before the channel's session thread starts and so before a SIP leg builds its INVITE. `ExecuteOn` builds the hook's value and refuses the shapes the switch would misread; the block then carries paths and nothing the tokenizer can damage:
