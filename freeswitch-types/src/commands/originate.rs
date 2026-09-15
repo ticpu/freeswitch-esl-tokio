@@ -56,6 +56,33 @@ fn check_deliverable(apps: &[Application]) -> Result<(), OriginateError> {
     Ok(())
 }
 
+/// Reject a target `originate_function` reads as something else: it runs any target opening `&`
+/// and more as an application, and ends that application's arguments at the first `)`.
+pub(super) fn check_target_readable(target: &OriginateTarget) -> Result<(), OriginateError> {
+    match target {
+        OriginateTarget::Extension(extension)
+            if extension.len() > 1 && extension.starts_with('&') =>
+        {
+            Err(OriginateError::ExtensionReadsAsApplication)
+        }
+        OriginateTarget::Application(app)
+            if app
+                .name()
+                .contains(['(', ')'])
+                || app
+                    .args()
+                    .is_some_and(|args| args.contains(')')) =>
+        {
+            Err(OriginateError::ParenthesisInApplication {
+                application: app
+                    .name()
+                    .to_string(),
+            })
+        }
+        _ => Ok(()),
+    }
+}
+
 /// Render `apps` as one inline action list, escaping the separator wherever it
 /// occurs inside an application.
 ///
@@ -393,6 +420,7 @@ mod serde_support {
             {
                 return Err(OriginateError::UndefPositional("target"));
             }
+            check_target_readable(&originate.target)?;
             match raw.argv_separator {
                 Some(sep) => originate.with_argv_separator(sep),
                 None => Ok(originate),
@@ -1072,6 +1100,14 @@ pub enum OriginateError {
     InvalidArgvSeparator(InvalidArgvSeparator),
     /// A positional argument reads `undef`, which the switch takes as absent. Names the field.
     UndefPositional(&'static str),
+    /// An extension opens with `&` and more, which `originate` runs as an application.
+    ExtensionReadsAsApplication,
+    /// An `&name(args)` application whose name carries a parenthesis or whose arguments carry
+    /// `)`, where `originate` ends the arguments.
+    ParenthesisInApplication {
+        /// The application name.
+        application: String,
+    },
 }
 
 impl std::fmt::Display for OriginateError {
@@ -1120,6 +1156,13 @@ impl std::fmt::Display for OriginateError {
                 f,
                 "{field} reads as the undef placeholder, which the switch takes as absent"
             ),
+            Self::ExtensionReadsAsApplication => f.write_str(
+                "the extension opens with & and more, which originate runs as an application",
+            ),
+            Self::ParenthesisInApplication { .. } => f.write_str(
+                "an application's name carries a parenthesis or its arguments carry ), \
+                 where originate ends the arguments",
+            ),
         }
     }
 }
@@ -1139,7 +1182,9 @@ impl std::error::Error for OriginateError {
             | Self::UnknownEndpointType(_)
             | Self::InvalidInlineDelimiter(_)
             | Self::UndeliverableArgument { .. }
-            | Self::UndefPositional(_) => None,
+            | Self::UndefPositional(_)
+            | Self::ExtensionReadsAsApplication
+            | Self::ParenthesisInApplication { .. } => None,
         }
     }
 }
@@ -2640,6 +2685,33 @@ mod tests {
             .parse()
             .unwrap();
         assert_eq!(parsed.caller_id_name(), Some("it's"));
+    }
+
+    /// `originate_function` runs a target opening `&` and more as an application and ends its
+    /// arguments at the first `)`.
+    #[test]
+    fn a_target_originate_reads_as_something_else_is_refused() {
+        assert_eq!(
+            "originate loopback/9199/test &park(a)b)".parse::<Originate>(),
+            Err(OriginateError::ParenthesisInApplication {
+                application: "park".into()
+            })
+        );
+        for target in [
+            r#""application": {"name": "park", "args": "a)b"}"#,
+            r#""application": {"name": "pa(rk"}"#,
+            r#""extension": "&park()""#,
+            r#""extension": "&x""#,
+        ] {
+            let json =
+                format!(r#"{{"endpoint": {{"loopback": {{"extension": "9199"}}}}, {target}}}"#);
+            let msg = serde_json::from_str::<Originate>(&json)
+                .expect_err(&json)
+                .to_string();
+            assert!(!msg.contains("park") && !msg.contains("a)b"), "{msg}");
+        }
+        let json = r#"{"endpoint": {"loopback": {"extension": "9199"}}, "extension": "&"}"#;
+        assert!(serde_json::from_str::<Originate>(json).is_ok());
     }
 
     #[test]

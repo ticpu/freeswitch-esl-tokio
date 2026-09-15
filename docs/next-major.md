@@ -61,6 +61,15 @@ assert on the missing extension. Parse and config load refuse both; `extension`,
 `context`, `cid_name`, `cid_num` and `dialplan_raw` cannot until they return
 `Result`.
 
+### `Originate::extension` and `application` need to refuse what `originate_function` misreads
+
+`originate_function` runs any target opening `&` and more as an application,
+and ends that application's arguments at the first `)`. An extension opening
+`&`, and an application whose name carries a parenthesis or whose arguments
+carry `)`, build and render, then run as something else. Parse and config load
+refuse them; the constructors, `target_mut`, `Application::new` and
+`Application::args_mut` cannot until they return `Result`.
+
 ### Consider removing `Display` for `Variables` and `Endpoint`
 
 Both render for `DialStringCarrier::EslApi` at the default `BlockParse`, which

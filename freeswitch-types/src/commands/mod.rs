@@ -52,7 +52,7 @@ pub use variables::{
 use crate::tokenizer::{
     blank_delim_spans, char_delim_spans, cleanup, delimiter_override, trace, untrace,
 };
-use originate::DEFAULT_INLINE_DELIMITER;
+use originate::{check_target_readable, DEFAULT_INLINE_DELIMITER};
 
 /// Find the index of the closing bracket matching the opener at position 0.
 ///
@@ -226,7 +226,9 @@ pub fn parse_originate_target(
             .split_once('(')
             .ok_or_else(|| OriginateError::ParseError("missing opening paren".into()))?;
         let args = if args.is_empty() { None } else { Some(args) };
-        Ok(OriginateTarget::Application(Application::new(name, args)))
+        let target = OriginateTarget::Application(Application::new(name, args));
+        check_target_readable(&target)?;
+        Ok(target)
     } else if matches!(dialplan, Some(DialplanType::Inline)) {
         let (delimiter, s) = split_inline_prefix(s);
         let delimiter = delimiter.unwrap_or(DEFAULT_INLINE_DELIMITER);

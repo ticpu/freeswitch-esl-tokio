@@ -139,7 +139,10 @@ variable scoping documentation.
 the rest strictly by position: the third is the dialplan whatever it says, and
 past seven it answers usage. Both splits parse through one reader with those
 rules, refusing an eighth argument and an `undef` target, which the switch
-asserts is set and aborts on. A dialplan word `DialplanType` does not cover is
+asserts is set and aborts on. A target of `&` and more is an application
+whatever the dialplan, its arguments ending at the first `)`: parse and config
+load refuse an application carrying a `)` there, and config load an extension
+opening `&`. A dialplan word `DialplanType` does not cover is
 kept by name (`dialplan_raw()` / `dialplan_name()`); the transfer looks a
 dialplan module up by it, and a name no module registers hangs the channel up
 with `NO_ROUTE_DESTINATION` (measured). A positional left `None` but forced
