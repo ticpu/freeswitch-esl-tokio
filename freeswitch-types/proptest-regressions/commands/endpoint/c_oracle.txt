@@ -13,3 +13,4 @@ cc 9f50361ecbc550766eb5fcc308d7b5d4aec62352bea6207e2ef39c9977986f25 # shrinks to
 cc 7ab97a97ba15c8ab0218c2f38b4a1680f6ac71efb65d24d31960420dbc856420 # shrinks to "sofia/  /%  "
 cc 21f23f0f6eb868eff74f1c60bcfb7378651468448ef3258a0c052bd98a6d9f76 # shrinks to "sofia/gateway/gateway/"
 cc 7c0eccb1e35139d2fc7175e1278bb5451f7d27245f8eced9e15620b9ac138038 # shrinks to (SofiaGateway(SofiaGateway { gateway: "gateway", destination: "", profile: None, variables: None }), DialStringTarget { carrier: EslApi, block_parse: PairSplitCleans, argument: Blank })
+cc d4c7c47820c62c1ba556a6a1dff77e50fa17a25c7800bbc08eb8dcf0c51eae95 # shrinks to "${sofia_contact(@${})}"

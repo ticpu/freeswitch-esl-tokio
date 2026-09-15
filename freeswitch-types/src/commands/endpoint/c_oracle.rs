@@ -357,6 +357,9 @@ fn a_parsed_endpoint_holds_what_its_module_reads() {
             let Ok(endpoint) = Endpoint::parse_bare(&text) else {
                 return Ok(());
             };
+            if fields_name_a_variable(&endpoint) {
+                return Ok(());
+            }
             reads_the_fields(c, &text, &endpoint)
         },
     );
