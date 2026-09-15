@@ -2469,6 +2469,121 @@ mod tests {
         assert!(serde_json::from_str::<Originate>(json).is_ok());
     }
 
+    /// `originate_function` NULLs an `undef` target and then asserts it is set, which aborts
+    /// the switch.
+    #[test]
+    fn an_undef_target_is_refused() {
+        for line in [
+            "originate loopback/9199/test undef",
+            "originate loopback/9199/test 'UNDEF'",
+            "originate loopback/9199/test Undef inline",
+            "originate ^^~loopback/9199/test~undef",
+            "originate ^^~loopback/9199/test~UNDEF~inline",
+        ] {
+            assert_eq!(
+                line.parse::<Originate>(),
+                Err(OriginateError::UndefPositional("target")),
+                "{line}"
+            );
+        }
+        for target in [
+            r#""extension": "undef""#,
+            r#""extension": "UNDEF", "argv_separator": "~""#,
+            r#""inline_applications": [{"name": "Undef"}]"#,
+        ] {
+            let json =
+                format!(r#"{{"endpoint": {{"loopback": {{"extension": "9199"}}}}, {target}}}"#);
+            let msg = serde_json::from_str::<Originate>(&json)
+                .expect_err(&json)
+                .to_string();
+            assert!(msg.contains("target"), "does not name the target: {msg}");
+        }
+        assert!(Originate::extension(test_endpoint(), "undefined")
+            .to_string()
+            .parse::<Originate>()
+            .is_ok());
+    }
+
+    /// The blank split reads its positionals by the same rules as a separator split: the
+    /// third argument is strictly the dialplan, `undef` is absent, and an eighth is refused.
+    #[test]
+    fn blank_positionals_read_as_the_separator_split_does() {
+        for line in [
+            "originate loopback/9199/test 1000 ctx",
+            "originate loopback/9199/test &park() XML default a b 30 extra",
+        ] {
+            assert!(
+                line.parse::<Originate>()
+                    .is_err(),
+                "{line}"
+            );
+        }
+
+        let parsed: Originate = "originate loopback/9199/test &park() undef UNDEF Alice"
+            .parse()
+            .unwrap();
+        assert_eq!(parsed.dialplan_type(), None);
+        assert_eq!(parsed.context_str(), None);
+        assert_eq!(parsed.caller_id_name(), Some("Alice"));
+
+        let parsed: Originate = "originate loopback/9199/test &park() undef ctx"
+            .parse()
+            .unwrap();
+        assert_eq!(parsed.dialplan_type(), None);
+        assert_eq!(parsed.context_str(), Some("ctx"));
+    }
+
+    /// The blank split collapses a run of spaces and splits a bare space, so an empty or
+    /// spaced positional is quoted to arrive as one argument.
+    #[test]
+    fn blank_split_quotes_empty_and_spaced_positionals() {
+        let cases = [
+            (
+                Originate::extension(test_endpoint(), "1000")
+                    .context("")
+                    .cid_name("Alice"),
+                "originate loopback/9199/test 1000 XML '' Alice",
+            ),
+            (
+                Originate::extension(test_endpoint(), "1000")
+                    .context("ctx with space")
+                    .cid_name("Alice"),
+                "originate loopback/9199/test 1000 XML 'ctx with space' Alice",
+            ),
+            (
+                Originate::extension(test_endpoint(), "1000")
+                    .cid_name("Alice")
+                    .cid_num(""),
+                "originate loopback/9199/test 1000 XML default Alice ''",
+            ),
+        ];
+        for (cmd, wire) in cases {
+            assert_eq!(cmd.to_string(), wire);
+            let parsed: Originate = wire
+                .parse()
+                .unwrap_or_else(|e| panic!("{wire} failed to parse: {e}"));
+            assert_eq!(parsed.context_str(), cmd.context_str(), "{wire}");
+            assert_eq!(parsed.caller_id_name(), cmd.caller_id_name(), "{wire}");
+            assert_eq!(parsed.caller_id_number(), cmd.caller_id_number(), "{wire}");
+            assert_eq!(parsed.to_string(), wire);
+        }
+    }
+
+    /// `switch_separate_string` takes `^^ ` as picking the blank split itself.
+    #[test]
+    fn a_blank_argv_separator_picks_the_blank_split() {
+        let parsed: Originate = "originate ^^ loopback/9199/test &park() XML ctx"
+            .parse()
+            .unwrap();
+        assert_eq!(parsed.argv_separator(), None);
+        assert_eq!(parsed.endpoint(), &test_endpoint());
+        assert_eq!(parsed.context_str(), Some("ctx"));
+        assert_eq!(
+            parsed.to_string(),
+            "originate loopback/9199/test &park() XML ctx"
+        );
+    }
+
     /// The switch splits any dial string holding `:_:` into enterprise threads, quoted or not.
     #[test]
     fn an_enterprise_separator_in_a_variable_value_is_refused() {
