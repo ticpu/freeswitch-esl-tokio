@@ -12,6 +12,12 @@ Everything below is what those tests assume. A missing piece shows up as one
 test failing for a reason that has nothing to do with the library, so check
 here first when a live test fails in isolation.
 
+This file stays generic. What one machine runs — which FreeSWITCH builds, on
+which ports, managed how — belongs in the untracked `CLAUDE.local.md` beside it,
+not here. Running the suite against more than one build (an upstream tree beside
+a vendor fork) is worth doing, since the two can differ on what the tests
+measure.
+
 ## Connection
 
 | | |
