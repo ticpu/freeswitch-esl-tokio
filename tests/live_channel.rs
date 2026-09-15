@@ -253,6 +253,33 @@ async fn originate_positionals(separator: Option<char>) {
                 ("origination_caller_id_number", None),
             ],
         ),
+        (
+            "single quote in an application argument and a caller id",
+            separated(
+                Originate::application(test_9199(), Application::new("set", Some("quoted=it's")))
+                    .cid_name("it's"),
+            ),
+            "set",
+            &[(EventHeader::ApplicationData, Some("quoted=it's"))],
+            &[("origination_caller_id_name", Some("it's"))],
+        ),
+        (
+            "single quote beside a comma in an inline argument",
+            separated(
+                Originate::inline(
+                    test_9199(),
+                    vec![
+                        Application::new("set", Some("quoted=it's,b")),
+                        Application::simple("park"),
+                    ],
+                )
+                .expect("one quote is deliverable")
+                .cid_num("it's"),
+            ),
+            "set",
+            &[(EventHeader::ApplicationData, Some("quoted=it's,b"))],
+            &[("origination_caller_id_number", Some("it's"))],
+        ),
     ];
 
     for (label, cmd, app, headers, variables) in cases {
