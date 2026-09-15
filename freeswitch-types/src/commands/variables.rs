@@ -9,6 +9,7 @@ use std::fmt;
 use std::fmt::Write as _;
 use std::str::FromStr;
 
+use super::flattened::pipeline::ENTERPRISE_DELIM;
 use super::originate::OriginateError;
 use crate::tokenizer::{sole_argument, trace, untrace, ArgvCut};
 use crate::version::FreeswitchVersion;
@@ -532,18 +533,27 @@ impl From<DialStringCarrier> for DialStringTarget {
 
 /// Reject a value the wire cannot carry, whatever escaping is applied to it.
 ///
-/// Three shapes qualify. An empty value is discarded by the switch under every
+/// An empty value is discarded by the switch under every
 /// encoding, and the block's own parse reports nothing when it happens. A value
 /// carrying an unbalanced bracket ends the block early, because the switch finds
 /// the block's end by counting depth and does not honour escapes while doing so;
 /// a balanced pair such as `${var}` is fine and common. A single quote in a
 /// channel-scope value pairs with the next quote anywhere before the peer split,
 /// escaped or not, and the pair between them is swallowed into the first value.
+/// A `:_:` anywhere in the dial string sends `switch_ivr_originate` down the
+/// enterprise path, whose split honours no quote or escape.
 fn check_representable(
     key: &str,
     value: &str,
     vars_type: VariablesType,
 ) -> Result<(), OriginateError> {
+    if value.contains(ENTERPRISE_DELIM) {
+        return Err(OriginateError::ParseError(format!(
+            "variable {key} carries the enterprise separator {ENTERPRISE_DELIM}, on which \
+             the switch splits the dial string into threads whatever quoting or escaping \
+             surrounds it"
+        )));
+    }
     if vars_type == VariablesType::Channel && value.contains('\'') {
         return Err(OriginateError::ParseError(format!(
             "variable {key} carries a single quote in channel scope: the switch \
