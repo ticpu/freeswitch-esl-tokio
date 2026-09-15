@@ -2442,6 +2442,33 @@ mod tests {
         assert!(serde_json::from_str::<Originate>(refused).is_err());
     }
 
+    /// `originate_function` reads `undef` in any case as an absent argument, so no spelling
+    /// delivers it; a config naming one fails at load.
+    #[test]
+    fn serde_refuses_an_undef_positional() {
+        for (field, value) in [
+            ("context", "undef"),
+            ("cid_name", "UNDEF"),
+            ("cid_num", "Undef"),
+        ] {
+            let json = format!(
+                r#"{{"endpoint": {{"loopback": {{"extension": "9199"}}}},
+                "application": {{"name": "park"}}, "{field}": "{value}"}}"#
+            );
+            let msg = serde_json::from_str::<Originate>(&json)
+                .expect_err(&json)
+                .to_string();
+            assert!(msg.contains(field), "does not name {field}: {msg}");
+            assert!(
+                value == "undef" || !msg.contains(value),
+                "quoted its input: {msg}"
+            );
+        }
+        let json = r#"{"endpoint": {"loopback": {"extension": "9199"}},
+            "application": {"name": "park"}, "cid_name": "undefined"}"#;
+        assert!(serde_json::from_str::<Originate>(json).is_ok());
+    }
+
     /// The switch splits any dial string holding `:_:` into enterprise threads, quoted or not.
     #[test]
     fn an_enterprise_separator_in_a_variable_value_is_refused() {
