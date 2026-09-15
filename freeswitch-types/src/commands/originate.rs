@@ -922,6 +922,30 @@ mod tests {
     use super::*;
     use crate::commands::endpoint::{LoopbackEndpoint, SofiaEndpoint, SofiaGateway};
 
+    /// `switch_strip_whitespace` strips tab, newline, vertical tab, CR and space only.
+    #[test]
+    fn parse_strips_only_the_switch_whitespace() {
+        let extension = |line: &str| match Originate::from_str(line)
+            .unwrap()
+            .target()
+        {
+            OriginateTarget::Extension(ext) => ext.clone(),
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(
+            extension("originate \t\x0bloopback/9199/test 9199 \x0b\r\n"),
+            "9199"
+        );
+        assert_eq!(
+            extension("originate loopback/9199/test 9199\x0c"),
+            "9199\x0c"
+        );
+        assert_eq!(
+            extension("originate loopback/9199/test 9199\u{a0}"),
+            "9199\u{a0}"
+        );
+    }
+
     // --- Endpoint ---
 
     #[test]

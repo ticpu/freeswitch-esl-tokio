@@ -108,6 +108,50 @@ fn dropping_error_legs_rejoins_the_rest() {
 }
 
 #[test]
+fn a_leg_ending_in_an_escaped_char_keeps_it_after_retain() {
+    let cases = [
+        (API, r"loopback/9199/test\\s"),
+        (API, r"loopback/9199/test\\\\\\\\"),
+        (DIALPLAN, r"loopback/9199/test\\\\\\\\"),
+        (DIALPLAN, r"loopback/9199/test\s"),
+    ];
+    for (carrier, kept) in cases {
+        let input = format!("{kept},error/USER_BUSY");
+        let mut list = parse(&input, carrier);
+        list.retain(|leg| !is_error(leg));
+        assert_eq!(
+            list.display_raw()
+                .to_string(),
+            kept,
+            "{input:?} at {carrier:?}"
+        );
+    }
+}
+
+/// The switch splits on the first byte of a non-ASCII `^^` separator, which no char
+/// delimiter mirrors, so the blank split runs over the whole argument.
+#[test]
+fn a_non_ascii_argument_separator_is_not_taken() {
+    assert_eq!(
+        FlattenedDialString::parse_for("^^é{v=a b}loopback/9199/test", API),
+        Err(FlattenedDialStringError::ArgvSplit)
+    );
+}
+
+#[test]
+fn a_thread_ending_in_an_escaped_quote_keeps_it_after_retain() {
+    let kept = r"loopback/9199/test\'";
+    let input = format!("{kept}:_:error/USER_BUSY");
+    let mut list = parse(&input, API);
+    list.retain(|leg| !is_error(leg));
+    assert_eq!(
+        list.display_raw()
+            .to_string(),
+        kept
+    );
+}
+
+#[test]
 fn an_edge_leg_takes_its_one_separator() {
     let input = fixture!("g-fp-reg.A");
     let (first, last) = input

@@ -407,6 +407,30 @@ mod tests {
     }
 
     #[test]
+    fn split_honours_a_leading_argument_separator() {
+        assert_eq!(
+            originate_split(r"^^~{v=a b}loopback/9199/test~&park()", ' ').unwrap(),
+            ["{v=a b}loopback/9199/test", "&park()"]
+        );
+        assert_eq!(originate_split("^^~a b~c", ',').unwrap(), ["a b", "c"]);
+        assert_eq!(originate_split("^^~é", ' ').unwrap(), ["é"]);
+    }
+
+    #[test]
+    fn split_takes_no_override_without_a_byte_after_it() {
+        assert_eq!(originate_split("^^~", ' ').unwrap(), ["^^~"]);
+        assert_eq!(originate_split("^^~", ',').unwrap(), ["^^~"]);
+    }
+
+    /// The switch splits on the first byte of a non-ASCII separator, which no
+    /// char delimiter can mirror, so the default split runs over the whole line.
+    #[test]
+    fn split_takes_no_override_on_a_non_ascii_separator() {
+        assert_eq!(originate_split("^^éaéb c", ' ').unwrap(), ["^^éaéb", "c"]);
+        assert_eq!(originate_split("^^éaé,b", ',').unwrap(), ["^^éaé", "b"]);
+    }
+
+    #[test]
     fn parse_target_bare_extension() {
         let target = parse_originate_target("123", None).unwrap();
         assert!(matches!(target, OriginateTarget::Extension(ref e) if e == "123"));
