@@ -1061,3 +1061,14 @@ fn a_cause_is_read_as_the_switch_reads_it() {
         assert_eq!(str2cause(text), want, "{text:?}");
     }
 }
+
+#[test]
+fn variable_str_reads_a_key_not_in_any_enum() {
+    let list = parse("[sip_h_X-Seat=42]loopback/9199/test", API);
+    let leg = list
+        .legs()
+        .next()
+        .unwrap();
+    assert_eq!(leg.variable_str("sip_h_X-Seat"), Some("42"));
+    assert_eq!(leg.variable_str("SIP_H_X-SEAT"), Some("42"));
+}
