@@ -49,6 +49,7 @@ static switch_call_cause_t oracle_loopback(switch_caller_profile_t *outbound_pro
 	return SWITCH_CAUSE_SUCCESS;
 }
 
+//@ export oracle_loopback_outgoing_channel (input: *const c_char, emit: Emit, ctx: *mut c_void)
 void oracle_loopback_outgoing_channel(const char *destination, oracle_emit_fn emit, void *ctx)
 {
 	switch_memory_pool_t pool = { { 0 }, 0 };

@@ -28,6 +28,7 @@ static void select_from_profile(sofia_profile_t *profile, const char *user, cons
 
 //@ function src/mod/endpoints/mod_sofia/mod_sofia.c sofia_contact_function
 
+//@ export oracle_sofia_contact (arg: *const c_char, profiles: *const *const c_char, emit: Emit, ctx: *mut c_void)
 void oracle_sofia_contact(const char *arg, const char *const *profiles, oracle_emit_fn emit, void *ctx)
 {
 	switch_stream_handle_t stream = { 0 };

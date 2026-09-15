@@ -1,5 +1,6 @@
 /* user_outgoing_channel from mod_dptools.c up to the directory lookup: the user and domain it splits
    the destination into, reported where it reaches the lookup. */
+//@ export oracle_user_outgoing_channel (input: *const c_char, emit: Emit, ctx: *mut c_void)
 void oracle_user_outgoing_channel(const char *destination, oracle_emit_fn emit, void *ctx)
 {
 	switch_caller_profile_t outbound = { 0 };

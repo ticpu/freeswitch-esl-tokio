@@ -9,6 +9,7 @@
 
 /* switch_event_create_brackets on a block opening data, as originate calls it: the offset after
    the block, or -1 where the call fails. */
+//@ export oracle_brackets (data: *mut c_char, a: c_char, b: c_char, c: c_char, emit: Emit, ctx: *mut c_void) -> c_long
 long oracle_brackets(char *data, char a, char b, char c, oracle_emit_fn emit, void *ctx)
 {
 	static _Thread_local switch_event_t event;
@@ -169,6 +170,7 @@ static void oracle_enterprise_originate(const char *bridgeto)
 	free(odata);
 }
 
+//@ export oracle_dial (input: *const c_char, emit: Emit, ctx: *mut c_void)
 void oracle_dial(const char *bridgeto, oracle_emit_fn emit, void *ctx)
 {
 	oracle_begin(emit, ctx);

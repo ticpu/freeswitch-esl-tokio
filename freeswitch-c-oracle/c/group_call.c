@@ -1,5 +1,6 @@
 /* group_call_function from mod_commands.c up to the directory lookup: the group, domain and call
    delimiter it reads from its argument, reported where it reaches the lookup. */
+//@ export oracle_group_call (input: *const c_char, emit: Emit, ctx: *mut c_void)
 void oracle_group_call(const char *cmd, oracle_emit_fn emit, void *ctx)
 {
 	char *domain = NULL, *dup_domain = NULL;

@@ -42,141 +42,28 @@ const UNITS: &[&str] = &[
 const DEFAULT_DOMAIN: &str = "default.example.com";
 
 /// A C symbol Rust links against: the `Abi` field holding it and its parameter list and return.
-struct Export {
-    field: &'static str,
-    symbol: &'static str,
-    signature: &'static str,
+struct Export<'a> {
+    field: &'a str,
+    symbol: &'a str,
+    signature: &'a str,
 }
 
-const RECORDED: &str = "(input: *const c_char, emit: Emit, ctx: *mut c_void)";
-
-const EXPORTS: &[Export] = &[
-    Export {
-        field: "cleanup",
-        symbol: "oracle_cleanup",
-        signature: "(str: *mut c_char, delim: c_char) -> *mut c_char",
-    },
-    Export {
-        field: "char_delim",
-        symbol: "oracle_char_delim",
-        signature: "(buf: *mut c_char, delim: c_char, array: *mut *mut c_char, arraylen: c_uint) -> c_uint",
-    },
-    Export {
-        field: "blank_delim",
-        symbol: "oracle_blank_delim",
-        signature: "(buf: *mut c_char, array: *mut *mut c_char, arraylen: c_uint) -> c_uint",
-    },
-    Export {
-        field: "separate_string",
-        symbol: "switch_separate_string",
-        signature: "(buf: *mut c_char, delim: c_char, array: *mut *mut c_char, arraylen: c_uint) -> c_uint",
-    },
-    Export {
-        field: "separate_string_string",
-        symbol: "switch_separate_string_string",
-        signature: "(buf: *mut c_char, delim: *mut c_char, array: *mut *mut c_char, arraylen: c_uint) -> c_uint",
-    },
-    Export {
-        field: "find_end_paren",
-        symbol: "switch_find_end_paren",
-        signature: "(s: *const c_char, open: c_char, close: c_char) -> *mut c_char",
-    },
-    Export {
-        field: "url_encode_opt",
-        symbol: "switch_url_encode_opt",
-        signature: "(url: *const c_char, buf: *mut c_char, len: usize, double_encode: c_int) -> *mut c_char",
-    },
-    Export {
-        field: "url_encode",
-        symbol: "switch_url_encode",
-        signature: "(url: *const c_char, buf: *mut c_char, len: usize) -> *mut c_char",
-    },
-    Export {
-        field: "needs_url_encode",
-        symbol: "oracle_needs_url_encode",
-        signature: "(s: *const c_char) -> c_int",
-    },
-    Export {
-        field: "core_url_encode_opt",
-        symbol: "oracle_core_url_encode_opt",
-        signature: "(url: *const c_char, double_encode: c_int, out: *mut c_char, outlen: usize) -> usize",
-    },
-    Export {
-        field: "url_unsafe",
-        symbol: "oracle_url_unsafe",
-        signature: "() -> *const c_char",
-    },
-    Export {
-        field: "brackets",
-        symbol: "oracle_brackets",
-        signature: "(data: *mut c_char, a: c_char, b: c_char, c: c_char, emit: Emit, ctx: *mut c_void) -> c_long",
-    },
-    Export {
-        field: "dial",
-        symbol: "oracle_dial",
-        signature: RECORDED,
-    },
-    Export {
-        field: "expand",
-        symbol: "oracle_expand",
-        signature: RECORDED,
-    },
-    Export {
-        field: "api_originate",
-        symbol: "oracle_api_originate",
-        signature: RECORDED,
-    },
-    Export {
-        field: "switch_true",
-        symbol: "oracle_switch_true",
-        signature: "(expr: *const c_char) -> c_int",
-    },
-    Export {
-        field: "inline_dialplan_hunt",
-        symbol: "oracle_inline_dialplan_hunt",
-        signature: RECORDED,
-    },
-    Export {
-        field: "str2cause",
-        symbol: "oracle_str2cause",
-        signature: "(str: *const c_char) -> c_int",
-    },
-    Export {
-        field: "cause_chart",
-        symbol: "oracle_cause_chart",
-        signature: "(emit: Emit, ctx: *mut c_void)",
-    },
-    Export {
-        field: "protect_dest_uri",
-        symbol: "oracle_protect_dest_uri",
-        signature: RECORDED,
-    },
-    Export {
-        field: "sofia_outgoing_channel",
-        symbol: "oracle_sofia_outgoing_channel",
-        signature: "(destination: *const c_char, headers: *const *const c_char, profiles: *const *const c_char, gateways: *const *const c_char, emit: Emit, ctx: *mut c_void)",
-    },
-    Export {
-        field: "sofia_contact",
-        symbol: "oracle_sofia_contact",
-        signature: "(arg: *const c_char, profiles: *const *const c_char, emit: Emit, ctx: *mut c_void)",
-    },
-    Export {
-        field: "loopback_outgoing_channel",
-        symbol: "oracle_loopback_outgoing_channel",
-        signature: RECORDED,
-    },
-    Export {
-        field: "user_outgoing_channel",
-        symbol: "oracle_user_outgoing_channel",
-        signature: RECORDED,
-    },
-    Export {
-        field: "group_call",
-        symbol: "oracle_group_call",
-        signature: RECORDED,
-    },
-];
+/// `//@ export <symbol> <signature>`, its field the symbol without its `oracle_` or `switch_`.
+fn export(line: &str) -> Option<Export<'_>> {
+    let (symbol, signature) = line
+        .trim_start()
+        .strip_prefix("//@ export ")?
+        .split_once(' ')?;
+    let field = symbol
+        .strip_prefix("oracle_")
+        .or_else(|| symbol.strip_prefix("switch_"))
+        .unwrap_or_else(|| panic!("export {symbol} is named neither oracle_ nor switch_"));
+    Some(Export {
+        field,
+        symbol,
+        signature,
+    })
+}
 
 /// What the harness reports through its callback, numbered alike in C and in Rust.
 const TAGS: &[&str] = &[
@@ -254,8 +141,13 @@ fn main() {
         Some(root) => Ok(Path::new(root)),
     };
     let units = read_units(&manifest);
+    let exports: Vec<Export<'_>> = units
+        .iter()
+        .flat_map(|(_, text)| text.lines())
+        .filter_map(export)
+        .collect();
 
-    let mut generated = abi();
+    let mut generated = abi(&exports);
     generated.push_str("static TREES: &[Tree] = &[\n");
     let mut modules = String::new();
     for tree in trees(&index) {
@@ -264,9 +156,9 @@ fn main() {
             .and_then(|root| Source::open(root, &tree))
         {
             Ok(mut source) => {
-                compile(&tree, &mut source, &units, &out);
+                compile(&tree, &mut source, &units, &exports, &out);
                 println!("cargo::rustc-cfg=c_oracle");
-                modules.push_str(&tree_module(&tree.name));
+                modules.push_str(&tree_module(&tree.name, &exports));
                 format!("Ok(&{}::ABI)", tree.name)
             }
             Err(missing) => {
@@ -304,7 +196,7 @@ fn read_units(manifest: &Path) -> Vec<(&'static str, String)> {
 }
 
 /// The tag constants and the `Abi` struct every tree module fills.
-fn abi() -> String {
+fn abi(exports: &[Export<'_>]) -> String {
     let mut generated = String::new();
     for (number, tag) in TAGS
         .iter()
@@ -318,7 +210,7 @@ fn abi() -> String {
     )
     .expect("String write");
     generated.push_str("#[derive(Debug)]\nstruct Abi {\n");
-    for export in EXPORTS {
+    for export in exports {
         writeln!(
             generated,
             "    {}: unsafe extern \"C\" fn{},",
@@ -331,9 +223,9 @@ fn abi() -> String {
 }
 
 /// The module linking one tree's prefixed symbols into its `ABI`.
-fn tree_module(tree: &str) -> String {
+fn tree_module(tree: &str, exports: &[Export<'_>]) -> String {
     let mut module = format!("mod {tree} {{\n    use super::*;\n    extern \"C\" {{\n");
-    for export in EXPORTS {
+    for export in exports {
         writeln!(
             module,
             "        #[link_name = \"{tree}_{}\"]\n        fn {}{};",
@@ -342,7 +234,7 @@ fn tree_module(tree: &str) -> String {
         .expect("String write");
     }
     module.push_str("    }\n    pub(super) static ABI: Abi = Abi {\n");
-    for export in EXPORTS {
+    for export in exports {
         writeln!(module, "        {},", export.field).expect("String write");
     }
     module.push_str("    };\n}\n");
@@ -470,12 +362,21 @@ fn git(root: &Path) -> Command {
     git
 }
 
-fn compile(tree: &Tree, source: &mut Source<'_>, units: &[(&str, String)], out: &Path) {
+fn compile(
+    tree: &Tree,
+    source: &mut Source<'_>,
+    units: &[(&str, String)],
+    exports: &[Export<'_>],
+    out: &Path,
+) {
     let mut body = String::new();
     let mut symbols: Vec<&str> = Vec::new();
     let mut taken = HashSet::new();
     for (unit, text) in units {
         for line in text.lines() {
+            if export(line).is_some() {
+                continue;
+            }
             let directive = extract::directive(line).unwrap_or_else(|e| panic!("{unit}: {e}"));
             let Some(directive) = directive else {
                 body.push_str(line);
@@ -497,7 +398,7 @@ fn compile(tree: &Tree, source: &mut Source<'_>, units: &[(&str, String)], out: 
         writeln!(unit, "#define ORACLE_{tag} {}", number + 1).expect("String write");
     }
     writeln!(unit, "#define ORACLE_DEFAULT_DOMAIN {DEFAULT_DOMAIN:?}").expect("String write");
-    let exported = EXPORTS
+    let exported = exports
         .iter()
         .map(|export| export.symbol)
         .filter(|symbol| !taken.contains(symbol));

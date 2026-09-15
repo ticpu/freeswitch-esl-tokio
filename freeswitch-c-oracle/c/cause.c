@@ -3,12 +3,14 @@
 //@ declaration src/switch_channel.c CAUSE_CHART
 //@ function src/switch_channel.c switch_channel_str2cause
 
+//@ export oracle_str2cause (str: *const c_char) -> c_int
 int oracle_str2cause(const char *str)
 {
 	return (int) switch_channel_str2cause(str);
 }
 
 /* Every named entry of CAUSE_CHART, in order, its number as the second string. */
+//@ export oracle_cause_chart (emit: Emit, ctx: *mut c_void)
 void oracle_cause_chart(oracle_emit_fn emit, void *ctx)
 {
 	size_t x;

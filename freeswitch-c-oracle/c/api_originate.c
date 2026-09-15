@@ -17,6 +17,7 @@ static switch_status_t oracle_stream_write(switch_stream_handle_t *handle, const
 }
 
 /* The api line after switch_api_execute strips its argument, run through originate_function. */
+//@ export oracle_api_originate (input: *const c_char, emit: Emit, ctx: *mut c_void)
 void oracle_api_originate(const char *arg, oracle_emit_fn emit, void *ctx)
 {
 	switch_stream_handle_t stream = { 0 };

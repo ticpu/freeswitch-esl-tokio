@@ -41,6 +41,7 @@ static const char *sofia_reg_find_reg_url(sofia_profile_t *profile, const char *
 	return NULL;
 }
 
+//@ export oracle_sofia_outgoing_channel (destination: *const c_char, headers: *const *const c_char, profiles: *const *const c_char, gateways: *const *const c_char, emit: Emit, ctx: *mut c_void)
 void oracle_sofia_outgoing_channel(const char *destination, const char *const *headers, const char *const *profiles,
 								   const char *const *gateways, oracle_emit_fn emit, void *ctx)
 {

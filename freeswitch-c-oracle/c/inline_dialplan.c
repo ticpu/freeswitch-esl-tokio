@@ -5,6 +5,7 @@
 
 /* The hunt over target with an empty destination number: each application it adds, then
    EXTENSION where it returns one. */
+//@ export oracle_inline_dialplan_hunt (input: *const c_char, emit: Emit, ctx: *mut c_void)
 void oracle_inline_dialplan_hunt(const char *target, oracle_emit_fn emit, void *ctx)
 {
 	switch_caller_profile_t profile = { 0 };

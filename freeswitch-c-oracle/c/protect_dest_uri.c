@@ -2,6 +2,7 @@
 //@ function src/mod/endpoints/mod_sofia/mod_sofia.c protect_dest_uri
 
 /* The destination number the call leaves, then RESULT with what it returned. */
+//@ export oracle_protect_dest_uri (input: *const c_char, emit: Emit, ctx: *mut c_void)
 void oracle_protect_dest_uri(const char *destination, oracle_emit_fn emit, void *ctx)
 {
 	switch_memory_pool_t pool = { { 0 }, 0 };
