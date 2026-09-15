@@ -8,8 +8,11 @@ use std::str::FromStr;
 
 use crate::sdp::error::CodecStringError;
 use crate::sdp::static_payload::{default_ptime, default_rate};
+use crate::switch_passes::separate::escape_inside_token;
 
-use super::parse::{escape_fmtp, normalize_fmtp_trailing_space, parse_entry, split_codec_string};
+use super::parse::{
+    normalize_fmtp_trailing_space, parse_entry, split_codec_string, ENTRY_DELIMITER,
+};
 
 /// The first grammar-delimiter character in a name, or `None` when clean.
 ///
@@ -325,7 +328,7 @@ impl fmt::Display for CodecStringEntry {
         }
         write!(f, "{}", self.name)?;
         if let Some(ref fmtp) = self.fmtp {
-            write!(f, "~{}", escape_fmtp(fmtp))?;
+            write!(f, "~{}", escape_inside_token(fmtp, Some(ENTRY_DELIMITER)))?;
         }
         if let Some(r) = self.rate {
             write!(f, "@{r}h")?;

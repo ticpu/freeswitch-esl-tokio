@@ -5,7 +5,9 @@ use std::borrow::Cow;
 use std::fmt::{self, Write as _};
 use std::ops::Range;
 
-use super::separate::{cleanup, separate, separate_on, Token};
+use super::separate::{
+    cleanup, escape_inside_token, separate, separate_on, takes_a_backslash, Token,
+};
 use super::{byte_range, extent, trace, untrace, Traced};
 use crate::commands::originate::OriginateError;
 
@@ -83,7 +85,7 @@ impl<W: fmt::Write> fmt::Write for ArgumentEscape<W> {
                 '\t' => self
                     .out
                     .write_str(r"\t")?,
-                c if c == '\\' || c == '\'' || c == self.sep => {
+                c if takes_a_backslash(c, Some(self.sep)) => {
                     self.out
                         .write_char('\\')?;
                     self.out
@@ -190,17 +192,7 @@ pub(crate) fn sole_argument(text: &[Traced], delim: char) -> Result<Option<Token
 
 /// `value` escaped and single-quoted for the blank split's cleanup.
 pub(crate) fn quote_for_uuid_setvar(value: &str) -> String {
-    let mut out = String::with_capacity(value.len() + 2);
-    out.push('\'');
-    for ch in value.chars() {
-        match ch {
-            '\'' => out.push_str("\\'"),
-            '\\' => out.push_str("\\\\"),
-            c => out.push(c),
-        }
-    }
-    out.push('\'');
-    out
+    format!("'{}'", escape_inside_token(value, None))
 }
 
 /// `token` quoted as [`quote_for_uuid_setvar`] quotes it when empty or carrying what the blank

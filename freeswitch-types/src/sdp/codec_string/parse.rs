@@ -58,26 +58,12 @@ pub(super) fn normalize_fmtp_trailing_space(fmtp: String) -> String {
     }
 }
 
-/// Escape `,` `\` `'` in an fmtp value for safe embedding in a codec string.
-///
-/// A raw comma splits entries; a lone `'` or `\` has grammar significance in the
-/// surrounding separator layer (`cleanup_separated_string`, `switch_utils.c:2702`).
-pub(super) fn escape_fmtp(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for ch in s.chars() {
-        match ch {
-            '\\' => out.push_str("\\\\"),
-            '\'' => out.push_str("\\'"),
-            ',' => out.push_str("\\,"),
-            c => out.push(c),
-        }
-    }
-    out
-}
+/// What separates codec-string entries.
+pub(super) const ENTRY_DELIMITER: char = ',';
 
 /// Split a codec string into cleaned entry tokens, as `switch_separate_string(…, ',', …)` does.
 pub(super) fn split_codec_string(s: &str) -> Vec<String> {
-    separate_string_char_delim(s, ',')
+    separate_string_char_delim(s, ENTRY_DELIMITER)
 }
 
 /// Parse one codec-string entry token (after comma-splitting and unescaping).

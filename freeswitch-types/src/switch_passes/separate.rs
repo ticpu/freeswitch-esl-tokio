@@ -166,6 +166,25 @@ fn unescape(next: char, delim: Option<char>) -> Option<char> {
     }
 }
 
+/// Whether `c` needs a backslash inside a token for the split on `delim` and [`cleanup`] to read it
+/// back: `\`, `'` and `delim`.
+pub(crate) fn takes_a_backslash(c: char, delim: Option<char>) -> bool {
+    matches!(c, '\\' | '\'') || Some(c) == delim
+}
+
+/// `text` escaped to stand inside one token of the split on `delim`, away from its edges, which
+/// [`cleanup`] trims.
+pub(crate) fn escape_inside_token(text: &str, delim: Option<char>) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        if takes_a_backslash(c, delim) {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
+}
+
 /// `cleanup_separated_string`, `delim` being `None` where the switch passes 0.
 pub(crate) fn cleanup(raw: &[Traced], delim: Option<char>) -> Vec<Traced> {
     let (mut out, end) = cleanup_written(raw, delim);
