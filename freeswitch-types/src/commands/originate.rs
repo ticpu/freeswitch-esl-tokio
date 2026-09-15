@@ -2047,4 +2047,208 @@ mod tests {
         assert_eq!(apps.len(), 2);
         assert_eq!(apps[1].args(), Some("a,b"));
     }
+
+    fn test_endpoint() -> Endpoint {
+        Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("test"))
+    }
+
+    fn spaced_endpoint() -> Endpoint {
+        let mut vars = Variables::new(VariablesType::Default);
+        vars.insert("k", "a b");
+        Endpoint::Loopback(
+            LoopbackEndpoint::new("9199")
+                .with_context("test")
+                .with_variables(vars),
+        )
+    }
+
+    fn separated_commands() -> Vec<(Originate, &'static str)> {
+        vec![
+            (
+                Originate::application(
+                    spaced_endpoint(),
+                    Application::new("socket", Some("127.0.0.1:8040 async full")),
+                )
+                .cid_name("it's ~ here")
+                .with_argv_separator('~')
+                .unwrap(),
+                r"originate ^^~{k=\'a b\'}loopback/9199/test~&socket(127.0.0.1:8040 async full)~undef~undef~it\'s \~ here",
+            ),
+            (
+                Originate::extension(test_endpoint(), "1000")
+                    .context("")
+                    .cid_name(" Lead ")
+                    .cid_num("")
+                    .with_argv_separator('~')
+                    .unwrap(),
+                r"originate ^^~loopback/9199/test~1000~undef~~\sLead\s~''",
+            ),
+            (
+                Originate::application(test_endpoint(), Application::simple("park"))
+                    .timeout(Duration::from_secs(30))
+                    .with_argv_separator('~')
+                    .unwrap(),
+                "originate ^^~loopback/9199/test~&park()~undef~undef~undef~undef~30",
+            ),
+            (
+                Originate::inline(
+                    null_endpoint(),
+                    [
+                        Application::new("playback", Some("tone_stream://%(500,0,800)")),
+                        Application::simple("park"),
+                    ],
+                )
+                .unwrap()
+                .with_argv_separator('~')
+                .unwrap(),
+                r"originate ^^~loopback/9199~playback:tone_stream://%(500\\,0\\,800),park~inline",
+            ),
+            (
+                Originate::extension(test_endpoint(), "1000")
+                    .dialplan(DialplanType::Xml)
+                    .unwrap()
+                    .context("ctx with space")
+                    .cid_num("555 1234")
+                    .with_argv_separator('!')
+                    .unwrap(),
+                "originate ^^!loopback/9199/test!1000!XML!ctx with space!undef!555 1234",
+            ),
+        ]
+    }
+
+    /// Each argument is escaped once for the split on the separator, an absent slot a later
+    /// one forces reads `undef`, and an empty value stays an argument.
+    #[test]
+    fn argv_separator_renders_each_argument_escaped_once() {
+        for (cmd, wire) in separated_commands() {
+            assert_eq!(cmd.to_string(), wire);
+            assert_eq!(
+                cmd.display_with(BlockParse::PairSplitCleans)
+                    .to_string(),
+                wire
+            );
+        }
+    }
+
+    #[test]
+    fn argv_separator_round_trips() {
+        for (cmd, wire) in separated_commands() {
+            let parsed: Originate = wire
+                .parse()
+                .unwrap_or_else(|e| panic!("{wire} failed to parse: {e}"));
+            assert_eq!(parsed, cmd, "{wire}");
+            assert_eq!(parsed.to_string(), wire);
+        }
+    }
+
+    #[test]
+    fn argv_separator_is_absent_by_default() {
+        assert_eq!(
+            Originate::extension(test_endpoint(), "1000").argv_separator(),
+            None
+        );
+        assert_eq!(
+            "originate loopback/9199/test 1000"
+                .parse::<Originate>()
+                .unwrap()
+                .argv_separator(),
+            None
+        );
+    }
+
+    /// Measured: `undef` in any case and quoting reads as absent, `\undef` keeps its
+    /// backslash, an empty token is an empty value.
+    #[test]
+    fn argv_separator_parse_reads_the_switch_spellings() {
+        let parsed: Originate = r"originate ^^~loopback/9199/test~&park()~XML~~'UNDEF'~\undef"
+            .parse()
+            .unwrap();
+        assert_eq!(parsed.argv_separator(), Some('~'));
+        assert_eq!(parsed.dialplan_type(), Some(&DialplanType::Xml));
+        assert_eq!(parsed.context_str(), Some(""));
+        assert_eq!(parsed.caller_id_name(), None);
+        assert_eq!(parsed.caller_id_number(), Some(r"\undef"));
+
+        let parsed: Originate =
+            r"originate ^^~loopback/9199/test~&park()~undef~undef~  Lead Trail  ~\s\sx"
+                .parse()
+                .unwrap();
+        assert_eq!(parsed.dialplan_type(), None);
+        assert_eq!(parsed.context_str(), None);
+        assert_eq!(parsed.caller_id_name(), Some("Lead Trail"));
+        assert_eq!(parsed.caller_id_number(), Some("  x"));
+    }
+
+    #[test]
+    fn argv_separator_parse_takes_the_endpoint_at_the_separator_target() {
+        let parsed: Originate = r"originate ^^~{k=\'a b\'}loopback/9199/test~&park()"
+            .parse()
+            .unwrap();
+        assert_eq!(parsed.endpoint(), &spaced_endpoint());
+    }
+
+    #[test]
+    fn an_unusable_argv_separator_is_refused() {
+        let err = Originate::application(test_endpoint(), Application::simple("park"))
+            .with_argv_separator('\'')
+            .unwrap_err();
+        assert_eq!(
+            err,
+            OriginateError::InvalidArgvSeparator(InvalidArgvSeparator::Unusable('\''))
+        );
+        assert!(std::error::Error::source(&err).is_some());
+
+        assert_eq!(
+            "originate ^^|loopback/9199/test|&park()"
+                .parse::<Originate>()
+                .unwrap_err(),
+            OriginateError::InvalidArgvSeparator(InvalidArgvSeparator::Unusable('|'))
+        );
+    }
+
+    /// `originate_function` answers usage past seven arguments, and reads its third
+    /// strictly as the dialplan.
+    #[test]
+    fn argv_separator_parse_refuses_what_the_switch_refuses() {
+        for line in [
+            "originate ^^~loopback/9199/test~&park()~XML~default~a~b~30~extra",
+            "originate ^^~loopback/9199/test~1000~enum~ctx",
+        ] {
+            assert!(line
+                .parse::<Originate>()
+                .is_err());
+        }
+    }
+
+    #[test]
+    fn serde_argv_separator_round_trips_and_is_checked() {
+        let cmd = Originate::application(test_endpoint(), Application::simple("park"))
+            .with_argv_separator('~')
+            .unwrap();
+        let json = serde_json::to_string(&cmd).unwrap();
+        assert!(json.contains(r#""argv_separator":"~""#), "{json}");
+        assert_eq!(serde_json::from_str::<Originate>(&json).unwrap(), cmd);
+
+        let plain = serde_json::to_string(&Originate::application(
+            test_endpoint(),
+            Application::simple("park"),
+        ))
+        .unwrap();
+        assert!(!plain.contains("argv_separator"), "{plain}");
+
+        let refused = r#"{
+            "endpoint": {"loopback": {"extension": "9199"}},
+            "application": {"name": "park"},
+            "argv_separator": "|"
+        }"#;
+        assert!(serde_json::from_str::<Originate>(refused).is_err());
+    }
+
+    /// The switch splits any dial string holding `:_:` into enterprise threads, quoted or not.
+    #[test]
+    fn an_enterprise_separator_in_a_variable_value_is_refused() {
+        assert!("originate {k=x:_:y}loopback/9199/test &park()"
+            .parse::<Originate>()
+            .is_err());
+    }
 }

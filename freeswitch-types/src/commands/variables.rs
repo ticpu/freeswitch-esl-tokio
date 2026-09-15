@@ -2106,6 +2106,19 @@ mod tests {
         );
     }
 
+    /// `switch_ivr_originate` takes the enterprise path on any `:_:` in the dial string, and
+    /// that split honours no quote or escape.
+    #[test]
+    fn a_value_carrying_the_enterprise_separator_is_refused() {
+        for block in ["{k=x:_:y}", "<k=x:_:y>", "[k=x:_:y]", "{k='a :_: b'}"] {
+            let err = Variables::parse_for(block, DialStringCarrier::EslApi).expect_err(block);
+            assert!(!err
+                .to_string()
+                .contains("x:_:y"));
+        }
+        assert!(serde_json::from_str::<Variables>(r#"{"k":"x:_:y"}"#).is_err());
+    }
+
     /// The caller has to decide what to name instead, so the refusal says what
     /// would have been accepted.
     #[test]
