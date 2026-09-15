@@ -122,6 +122,11 @@ Audio device endpoints (shared `AudioEndpoint` struct):
 - `PulseAudio` — `{vars}pulseaudio[/destination]`
 - `Alsa` — `{vars}alsa[/destination]`
 
+The text after the block is escaped for the carrier's pass and the leg splits,
+and parsed through the port of those passes; a field the endpoint module splits
+elsewhere is refused on parse and config load
+([Endpoint text](dial-string-format.md#endpoint-text)).
+
 See [dial-string-format.md](dial-string-format.md) for full endpoint and
 variable scoping documentation.
 

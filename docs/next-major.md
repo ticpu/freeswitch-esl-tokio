@@ -53,6 +53,19 @@ return `Result`, such a value is built silently and lost on the wire.
 boundary without waiting for the major — that covers config-driven construction
 but not the programmatic path.
 
+### Endpoint fields need to refuse what the module misreads
+
+A sofia profile carrying `/` or `^` or reading `gateway`, a gateway key whose
+`::` reads at another place, a loopback extension or context carrying `/`, an
+empty loopback context or dialplan or either after an `app=` extension, a user
+name carrying `@`, and `:_:` in any field build and render, then reach the
+module as something else. Parse and config load refuse them
+(`OriginateError::UndeliverableEndpointField`); the constructors, the `with_*`
+builders and the public fields cannot until those fields sit behind fallible
+setters. `BridgeDialString::new` and `groups_mut` accept a group whose bracket
+spans legs, which parse and config load refuse as
+`OriginateError::BracketSpansLegs`.
+
 ### `Originate` setters need to refuse `undef`
 
 `originate_function` reads every argument equal to `undef` as absent, so a

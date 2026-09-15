@@ -121,6 +121,51 @@ alsa/auto_answer
 All three share the same `AudioEndpoint` struct in the library and differ
 only in the module prefix.
 
+### Endpoint text
+
+The text after a leg's blocks, which the endpoint module parses, meets the
+carrier's pass and both leg splits first: `switch_ivr_originate` cuts groups on
+`|` and legs on `,` with `switch_separate_string`, each token through
+`cleanup_separated_string`. An endpoint renders that text escaped once for each
+pass, as a `{}` value is, with `\,` and `\|` for the separators: a backslash
+needs eight on either carrier, a quote seven backslashes over `originate` and six
+through a dialplan application, a space quotes the text on the blank split, and
+an edge space rides as `\s`. Through a dialplan application every `$` of a text
+holding `$$` or `${` is written `\$` behind a leading `\'`, so the module
+receives the reference as text. `sofia_contact` and `group_call` expressions are
+written as they stand, for the carrier's expansion to read.
+
+What no escaping delivers is refused on parse and config load, and built
+unchecked:
+
+- `:_:` in any field.
+- sofia: a profile carrying `/` or `^`, or reading `gateway` in any case.
+  `sofia_outgoing_channel` cuts its text at the first `^` for the To override and
+  the profile at the first `/`, and takes a text opening `gateway/` in any case
+  for the gateway path.
+- sofia gateway: a gateway or profile carrying `/` or `^`, a profile carrying
+  `::` or ending in `:`, and a gateway carrying `::` without a profile. The
+  gateway is looked up by the whole text between `gateway/` and the next `/`, in
+  a hash holding each gateway under both `name` and `profile::name`, so the key
+  does not say where a profile ends.
+- loopback: an extension or context carrying `/`, and an empty context or
+  dialplan, which `channel_outgoing_channel` replaces with `default` and `xml`.
+  An extension opening `app=` in any case runs that application: a `/` may
+  follow the first `:` but not precede it, and a context or dialplan after it
+  is read into the argument.
+- user: a name carrying `@`, where `user_outgoing_channel` starts the domain.
+
+A sofia destination is mod_sofia's own grammar and arrives whole. Unless
+`sofia_suppress_url_encoding` is true, `protect_dest_uri` URL-encodes the user
+part of a text holding `@`, and truncates the text at its last `/` when what
+follows carries a `SWITCH_URL_UNSAFE` character and no `@`, as a profile
+holding `@` or a destination with a `/` after its `@` do.
+
+In a bridge, the comma scan ahead of the leg split protects commas from a `[`
+to its matching `]` whichever leg holds either, so an endpoint whose `[` closes
+in a later leg of its group merges the legs between. `BridgeDialString`
+refuses such a group on parse and config load.
+
 ## Variable scoping
 
 Channel variables can be set on the B-leg (destination) of an originate or
