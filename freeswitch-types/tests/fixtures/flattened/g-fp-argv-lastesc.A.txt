@@ -1,0 +1,1 @@
+[presence_id=fp-argv-lastesc@pbx.example.com,sentinel=s,v=x\~]loopback/9199/test,[presence_id=fp-argv-lastesc@pbx.example.com,sentinel=s2]loopback/9199/test

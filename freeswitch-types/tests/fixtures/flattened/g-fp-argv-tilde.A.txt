@@ -1,0 +1,1 @@
+[presence_id=fp-argv-tilde@pbx.example.com,v=x~y,sentinel=s]loopback/9199/test
