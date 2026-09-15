@@ -20,6 +20,31 @@ pub enum Directive<'a> {
     Declaration { path: &'a str, opening: &'a str },
     /// `//@ typedef <path> <name>`: the `typedef` closing on `} name;`.
     Typedef { path: &'a str, name: &'a str },
+    /// `//@ after <path> <function> <anchor> => <marker>`: the statement opening on the first line
+    /// reading `marker` after the one line of `function` reading `anchor`.
+    After {
+        path: &'a str,
+        function: &'a str,
+        anchor: &'a str,
+        marker: &'a str,
+    },
+    /// `//@ before <path> <function> <anchor> => <marker>`: the statement opening on the last line
+    /// reading `marker` before the one line of `function` reading `anchor`.
+    Before {
+        path: &'a str,
+        function: &'a str,
+        anchor: &'a str,
+        marker: &'a str,
+    },
+}
+
+/// Which side of its anchor a marker is looked for on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Side {
+    /// The first marker after the anchor.
+    After,
+    /// The last marker before the anchor.
+    Before,
 }
 
 impl Directive<'_> {
@@ -30,7 +55,9 @@ impl Directive<'_> {
             | Directive::Function { path, .. }
             | Directive::Block { path, .. }
             | Directive::Declaration { path, .. }
-            | Directive::Typedef { path, .. } => path,
+            | Directive::Typedef { path, .. }
+            | Directive::After { path, .. }
+            | Directive::Before { path, .. } => path,
         }
     }
 
@@ -46,6 +73,20 @@ impl Directive<'_> {
             } => block(&function(text, name)?, marker).map_err(|e| format!("{name}: {e}")),
             Directive::Declaration { opening, .. } => declaration(text, opening),
             Directive::Typedef { name, .. } => typedef(text, name),
+            Directive::After {
+                function: name,
+                anchor,
+                marker,
+                ..
+            } => beside(&function(text, name)?, anchor, marker, Side::After)
+                .map_err(|e| format!("{name}: {e}")),
+            Directive::Before {
+                function: name,
+                anchor,
+                marker,
+                ..
+            } => beside(&function(text, name)?, anchor, marker, Side::Before)
+                .map_err(|e| format!("{name}: {e}")),
         }
     }
 }
@@ -95,6 +136,31 @@ pub fn directive(line: &str) -> Result<Option<Directive<'_>>, String> {
             path,
             name: argument,
         },
+        kind @ ("after" | "before") => {
+            let Some((function, rest)) = argument.split_once(' ') else {
+                return Err(format!("{kind} directive {line:?} names no anchor"));
+            };
+            let Some((anchor, marker)) = rest.split_once(" => ") else {
+                return Err(format!(
+                    "{kind} directive {line:?} names no marker after =>"
+                ));
+            };
+            if kind == "after" {
+                Directive::After {
+                    path,
+                    function,
+                    anchor,
+                    marker,
+                }
+            } else {
+                Directive::Before {
+                    path,
+                    function,
+                    anchor,
+                    marker,
+                }
+            }
+        }
         other => return Err(format!("directive {line:?} has unknown kind {other}")),
     };
     Ok(Some(directive))
@@ -160,6 +226,39 @@ pub fn block(body: &str, marker: &str) -> Result<String, String> {
             starts.len()
         ));
     };
+    let end = statement_end(&lines, start).ok_or_else(|| format!("{marker:?} never closes"))?;
+    Ok(format!("{}\n", lines[start..=end].join("\n")))
+}
+
+/// The statement opening on the nearest line of `body` reading `marker` on `side` of the one line
+/// reading `anchor`.
+pub fn beside(body: &str, anchor: &str, marker: &str, side: Side) -> Result<String, String> {
+    let lines: Vec<&str> = body
+        .lines()
+        .collect();
+    let anchors: Vec<usize> = lines
+        .iter()
+        .enumerate()
+        .filter(|(_, line)| line.trim() == anchor)
+        .map(|(at, _)| at)
+        .collect();
+    let [at] = anchors[..] else {
+        return Err(format!(
+            "reads {anchor:?} on {} lines, not one",
+            anchors.len()
+        ));
+    };
+    let reads = |line: &&str| line.trim() == marker;
+    let start = match side {
+        Side::After => lines[at + 1..]
+            .iter()
+            .position(reads)
+            .map(|found| at + 1 + found),
+        Side::Before => lines[..at]
+            .iter()
+            .rposition(reads),
+    }
+    .ok_or_else(|| format!("reads no {marker:?} beside {anchor:?}"))?;
     let end = statement_end(&lines, start).ok_or_else(|| format!("{marker:?} never closes"))?;
     Ok(format!("{}\n", lines[start..=end].join("\n")))
 }
@@ -509,6 +608,48 @@ typedef enum {
             block(&body, "if (t) {"),
             Err("reads \"if (t) {\" on 0 lines, not one".to_owned())
         );
+    }
+
+    #[test]
+    fn a_marker_beside_its_anchor_is_the_nearest_one() {
+        let body = "static int f(void)\n{\n\tx = 1;\n\tif (a) {\n\t\ty();\n\t}\n\tx = 2;\n\tanchor();\n\tx = 1;\n\tz();\n\tx = 1;\n}\n";
+        assert_eq!(
+            beside(body, "anchor();", "x = 1;", Side::After),
+            Ok("\tx = 1;\n".to_owned())
+        );
+        assert_eq!(
+            beside(body, "if (a) {", "x = 1;", Side::Before),
+            Ok("\tx = 1;\n".to_owned())
+        );
+        assert_eq!(
+            beside(body, "x = 1;", "z();", Side::After),
+            Err("reads \"x = 1;\" on 3 lines, not one".to_owned())
+        );
+        assert!(beside(body, "anchor();", "missing();", Side::After).is_err());
+        assert!(beside(body, "if (a) {", "z();", Side::Before).is_err());
+    }
+
+    #[test]
+    fn beside_directives_name_an_anchor_and_a_marker() {
+        assert_eq!(
+            directive("//@ after src/a.c f anchor(); => x = 1;"),
+            Ok(Some(Directive::After {
+                path: "src/a.c",
+                function: "f",
+                anchor: "anchor();",
+                marker: "x = 1;"
+            }))
+        );
+        assert_eq!(
+            directive("\t//@ before src/a.c f if (a) { => x = 1;"),
+            Ok(Some(Directive::Before {
+                path: "src/a.c",
+                function: "f",
+                anchor: "if (a) {",
+                marker: "x = 1;"
+            }))
+        );
+        assert!(directive("//@ before src/a.c f anchor();").is_err());
     }
 
     #[test]

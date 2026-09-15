@@ -33,7 +33,29 @@ static char *oracle_strdup(const char *s)
 #define zstr(x) _zstr(x)
 static void oracle_assert_failed(const char *expr);
 #define switch_assert(expr) do { if (!(expr)) { oracle_assert_failed(#expr); } } while (0)
-#define switch_log_printf(...) ((void) 0)
+/* The last line the extracted code logged, its newline cut: what a harness reports as the reason a
+   pass stopped, in the switch's own words. */
+static _Thread_local char oracle_log_line[512];
+
+static void oracle_log(const char *fmt, ...)
+{
+	va_list ap;
+	size_t len;
+
+	va_start(ap, fmt);
+	vsnprintf(oracle_log_line, sizeof(oracle_log_line), fmt, ap);
+	va_end(ap);
+	len = strlen(oracle_log_line);
+	if (len && oracle_log_line[len - 1] == '\n') {
+		oracle_log_line[len - 1] = '\0';
+	}
+}
+#define switch_log_printf(channel, level, ...) oracle_log(__VA_ARGS__)
+/* A core variable lookup answers nothing, and no dial handle is passed. */
+#define switch_core_get_variable(name) ((void) (name), (const char *) NULL)
+#define switch_dial_handle_get_total(dh) ((void) (dh), 0)
+#define switch_dial_handle_get_peers(dh, idx, names, max) ((void) (dh), 0)
+#define switch_dial_handle_get_vars(dh, idx, vars, max) ((void) 0)
 typedef int switch_bool_t;
 #define SWITCH_FALSE 0
 #define SWITCH_TRUE 1

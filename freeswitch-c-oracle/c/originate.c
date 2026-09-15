@@ -1,5 +1,6 @@
 /* switch_event_create_brackets and the passes switch_ivr_originate and
-   switch_ivr_enterprise_originate run over a dial string up to each leg's endpoint. */
+   switch_ivr_enterprise_originate run over a dial string up to each leg's endpoint. Every statement
+   of the switch is taken by directive; only the harness's loops, labels and records are its own. */
 //@ define src/include/switch_types.h SWITCH_ENT_ORIGINATE_DELIM
 //@ define src/switch_ivr_originate.c QUOTED_ESC_COMMA
 //@ define src/switch_ivr_originate.c UNQUOTED_ESC_COMMA
@@ -15,8 +16,7 @@ long oracle_brackets(char *data, char a, char b, char c, oracle_emit_fn emit, vo
 	char *parsed = NULL;
 	long rest = -1;
 
-	oracle_emit = emit;
-	oracle_ctx = ctx;
+	oracle_begin(emit, ctx);
 	event.flags = EF_UNIQ_HEADERS;
 	if (switch_event_create_brackets(data, a, b, c, &var_event, &parsed, SWITCH_FALSE) == SWITCH_STATUS_SUCCESS && parsed) {
 		oracle_report_headers(var_event);
@@ -26,32 +26,35 @@ long oracle_brackets(char *data, char a, char b, char c, oracle_emit_fn emit, vo
 	return rest;
 }
 
-/* switch_ivr_originate from its first space strip to each leg's endpoint, the passes the port
-   models, in its order; the statements between are the switch's own. */
-static switch_status_t oracle_originate(const char *bridgeto)
+/* switch_ivr_originate from its first space strip to each leg's endpoint, over a copy of bridgeto
+   with no session, variables, dial handle or caller channel. */
+static void oracle_originate(const char *bridgeto)
 {
 	switch_status_t status = SWITCH_STATUS_SUCCESS;
 	switch_core_session_t *session = NULL;
-	switch_event_t *var_event = NULL;
-	switch_event_t *local_var_event = NULL;
+	switch_channel_t *caller_channel = NULL;
+	switch_event_t *ovars = NULL, *var_event = NULL, *local_var_event = NULL;
+	void *dh = NULL;
+	struct {
+		switch_bool_t check_vars;
+	} oglobals = { SWITCH_TRUE };
 	char *pipe_names[MAX_PEERS] = { 0 };
 	char *peer_names[MAX_PEERS] = { 0 };
 	char *odata = strdup(bridgeto);
 	char *data = odata;
 	char *loop_data = NULL;
 	char *chan_type = NULL;
-	const char *failure = "Parse Error!";
 	int or_argc = 0, and_argc = 0, r, i;
 
 	(void) session;
+	oracle_log_line[0] = '\0';
 	switch_event_create_plain(&var_event, SWITCH_EVENT_CHANNEL_DATA);
 
-	/* strip leading spaces */
-	while (data && *data && *data == ' ') {
-		data++;
-	}
+	//@ after src/switch_ivr_originate.c switch_ivr_originate switch_channel_process_export(caller_channel, NULL, var_event, SWITCH_EXPORT_VARS_VARIABLE); => while (data && *data && *data == ' ') {
 
-	if (switch_stristr("origination_nested_vars=true", data)) {
+	//@ block src/switch_ivr_originate.c switch_ivr_originate if ((ovars && switch_true(switch_event_get_header(ovars,"origination_nested_vars"))) ||
+
+	if (!oglobals.check_vars) {
 		oracle_record(ORACLE_NESTED, NULL, NULL);
 	}
 
@@ -61,60 +64,40 @@ static switch_status_t oracle_originate(const char *bridgeto)
 
 	oracle_report_headers(var_event);
 
-	/* strip leading spaces (again) */
-	while (data && *data && *data == ' ') {
-		data++;
-	}
+	//@ after src/switch_ivr_originate.c switch_ivr_originate while (*data == '{') { => while (data && *data && *data == ' ') {
 
-	if (zstr(data)) {
-		failure = "No origination URL specified!";
-		status = SWITCH_STATUS_GENERR;
-		goto done;
-	}
+	//@ block src/switch_ivr_originate.c switch_ivr_originate if (zstr(data) && !dh) {
 
-	loop_data = strdup(data);
-	or_argc = switch_separate_string(loop_data, '|', pipe_names, (sizeof(pipe_names) / sizeof(pipe_names[0])));
+	//@ block src/switch_ivr_originate.c switch_ivr_originate loop_data = strdup(data);
 
-	if (or_argc <= 0) {
-		oracle_record(ORACLE_FAILURE, "Nothing to do", NULL);
-		goto done;
-	}
+	//@ after src/switch_ivr_originate.c switch_ivr_originate loop_data = strdup(data); => if (dh) {
 
-	for (r = 0; r < or_argc; r++) {
+	//@ block src/switch_ivr_originate.c switch_ivr_originate if (or_argc <= 0) {
+
+	for (r = 0; r < or_argc; ++r) {
 		char *p, *end = NULL;
 		int q = 0, alt = 0;
 
-		p = pipe_names[r];
+		//@ block src/switch_ivr_originate.c switch_ivr_originate p = pipe_names[r];
 
 		//@ block src/switch_ivr_originate.c switch_ivr_originate while (p && *p) {
 
-		and_argc = switch_separate_string(pipe_names[r], ',', peer_names, (sizeof(peer_names) / sizeof(peer_names[0])));
+		//@ block src/switch_ivr_originate.c switch_ivr_originate and_argc = switch_separate_string(pipe_names[r], ',', peer_names, (sizeof(peer_names) / sizeof(peer_names[0])));
 		oracle_record(ORACLE_GROUP, NULL, NULL);
 
-		for (i = 0; i < and_argc; i++) {
+		for (i = 0; i < and_argc; ++i) {
 			end = NULL;
 			oracle_record(ORACLE_LEG, NULL, NULL);
 
-			if (!(chan_type = peer_names[i])) {
-				failure = "Empty dial string";
-				switch_goto_status(SWITCH_STATUS_FALSE, done);
-			}
+			//@ block src/switch_ivr_originate.c switch_ivr_originate if (!(chan_type = peer_names[i])) {
 
-			/* strip leading spaces */
-			while (chan_type && *chan_type && *chan_type == ' ') {
-				chan_type++;
-			}
+			//@ after src/switch_ivr_originate.c switch_ivr_originate if (!(chan_type = peer_names[i])) { => while (chan_type && *chan_type && *chan_type == ' ') {
 
-			if (*chan_type == '[') {
-				switch_event_create_plain(&local_var_event, SWITCH_EVENT_CHANNEL_DATA);
-			}
+			//@ block src/switch_ivr_originate.c switch_ivr_originate if (*chan_type == '[') {
 
 			//@ block src/switch_ivr_originate.c switch_ivr_originate while (*chan_type == '[') {
 
-			/* strip leading spaces (again) */
-			while (chan_type && *chan_type && *chan_type == ' ') {
-				chan_type++;
-			}
+			//@ after src/switch_ivr_originate.c switch_ivr_originate while (*chan_type == '[') { => while (chan_type && *chan_type && *chan_type == ' ') {
 
 			oracle_record(ORACLE_ENDPOINT, chan_type, NULL);
 
@@ -124,75 +107,71 @@ static switch_status_t oracle_originate(const char *bridgeto)
 		}
 	}
 
+  outer_for:
   done:
 	if (status != SWITCH_STATUS_SUCCESS) {
-		oracle_record(ORACLE_FAILURE, failure, NULL);
+		oracle_record(ORACLE_FAILURE, oracle_log_line, NULL);
 	}
 	if (local_var_event) {
 		switch_event_destroy(&local_var_event);
 	}
 	oracle_clear_headers(var_event);
 	free(var_event);
-	switch_safe_free(loop_data);
-	switch_safe_free(odata);
-	return status;
+	free(loop_data);
+	free(odata);
 }
 
 /* switch_ivr_enterprise_originate up to the thread split, each thread then read as
    switch_ivr_originate reads its bridgeto. */
-static switch_status_t oracle_enterprise_originate(const char *bridgeto)
+static void oracle_enterprise_originate(const char *bridgeto)
 {
 	switch_status_t status = SWITCH_STATUS_FALSE;
 	switch_core_session_t *session = NULL;
 	switch_event_t *var_event = NULL;
+	struct {
+		int handle_idx;
+	} *hl = NULL;
+	switch_call_cause_t cause_value = SWITCH_CAUSE_NONE, *cause = &cause_value;
+	int getcause = 1;
 	char *x_argv[MAX_PEERS] = { 0 };
 	char *odata = strdup(bridgeto);
 	char *data = odata;
-	const char *failure = "Parse Error!";
 	int x_argc = 0, i;
 
 	(void) session;
+	(void) getcause;
+	oracle_log_line[0] = '\0';
 	switch_event_create_plain(&var_event, SWITCH_EVENT_CHANNEL_DATA);
 
-	/* strip leading spaces */
-	while (data && *data && *data == ' ') {
-		data++;
-	}
+	//@ before src/switch_ivr_originate.c switch_ivr_enterprise_originate while (data && *data == '<') { => while (data && *data && *data == ' ') {
 
 	//@ block src/switch_ivr_originate.c switch_ivr_enterprise_originate while (data && *data == '<') {
 
 	oracle_report_headers(var_event);
 
-	/* strip leading spaces (again) */
-	while (data && *data && *data == ' ') {
-		data++;
-	}
+	//@ after src/switch_ivr_originate.c switch_ivr_enterprise_originate while (data && *data == '<') { => while (data && *data && *data == ' ') {
 
-	if (!(x_argc = switch_separate_string_string(data, SWITCH_ENT_ORIGINATE_DELIM, x_argv, MAX_PEERS))) {
-		failure = "DESTINATION_OUT_OF_ORDER";
-		goto done;
-	}
+	//@ block src/switch_ivr_originate.c switch_ivr_enterprise_originate if (data) {
 
-	for (i = 0; i < x_argc; i++) {
+	for (i = 0; i < x_argc; ++i) {
 		oracle_record(ORACLE_THREAD, NULL, NULL);
 		oracle_originate(x_argv[i]);
 	}
 	status = SWITCH_STATUS_SUCCESS;
 
+  end:
   done:
 	if (status != SWITCH_STATUS_SUCCESS) {
-		oracle_record(ORACLE_FAILURE, failure, NULL);
+		oracle_record(ORACLE_FAILURE, oracle_log_line, NULL);
 	}
 	oracle_clear_headers(var_event);
 	free(var_event);
-	switch_safe_free(odata);
-	return status;
+	free(odata);
 }
 
 void oracle_dial(const char *bridgeto, oracle_emit_fn emit, void *ctx)
 {
-	oracle_emit = emit;
-	oracle_ctx = ctx;
+	oracle_begin(emit, ctx);
 	if (strstr(bridgeto, SWITCH_ENT_ORIGINATE_DELIM)) {
 		oracle_enterprise_originate(bridgeto);
 	} else {
