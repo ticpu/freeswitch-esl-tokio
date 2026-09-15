@@ -29,6 +29,8 @@ let cause = event.hangup_cause();       // Result<Option<HangupCause>, _>
 
 A header value that isn't valid UTF-8 after percent-decoding (e.g. a Latin-1 byte in a dialed string or caller name) is decoded lossily (U+FFFD) by default rather than failing. The affected keys, with their unparsed on-wire value, are exposed as data on `event.lossy_values()` (events) and `response.lossy_values()` (command/`connect` replies, whose channel data FreeSWITCH percent-encodes) for the caller to log or recover -- the library never logs them itself. A hard `InvalidUtf8InHeader` error instead is opt-in with `EslConnectOptions::with_strict_header_utf8(true)`.
 
+Upstream FreeSWITCH serializes a plain event, a channel dump and a `connect` reply through `switch_url_encode`, which copies a `%` opening a valid `%XX` through unescaped, so such a value arrives decoded: a header holding `a%41b` reads `aAb`. Nothing on the wire tells the two apart. Subscribe with `EventFormat::Json` where a value can carry one; the 1.10.13 fork encodes every `%` and delivers it intact in either format.
+
 ## Channel timetable
 
 Call lifecycle timestamps via `ChannelTimetable`:

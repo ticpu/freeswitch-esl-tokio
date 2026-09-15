@@ -179,6 +179,16 @@ part of a text holding `@`, and truncates the text at its last `/` when what
 follows carries a `SWITCH_URL_UNSAFE` character and no `@`, as a profile
 holding `@` or a destination with a `/` after its `@` do.
 
+A `%` in that user part is where the trees differ. Upstream `switch_url_encode`
+copies a `%` opening a valid `%XX` through, so `a%41 b` becomes `a%41%20b`,
+measured on upstream master at `b3ba603f49`. The 1.10.13 fork at
+`8bb2a39` (commit `f47ca7c`) encodes every `%`, giving `a%2541%20b`. Either
+way sofia-sip canonicalises an escaped unreserved character when it sends the
+request, so upstream's Request-URI reads `aA%20b`. `sip_destination_url` holds
+the encoded form; read it from a JSON event or `uuid_getvar`, since a plain
+event's value passes through the same `switch_url_encode`
+([events guide](guide/events.md)).
+
 In a bridge, the comma scan ahead of the leg split protects commas from a `[`
 to its matching `]` whichever leg holds either, so an endpoint whose `[` closes
 in a later leg of its group merges the legs between. `BridgeDialString`
@@ -358,9 +368,21 @@ value in the same block, and adds two rules for the `=` split:
 
 What no escaping delivers is refused on parse and config load: an empty key,
 which `switch_channel_set_variable_var_check` installs nowhere; `:_:`; a single
-quote in channel scope; a bracket of the block's own kind left unbalanced; and,
-in a `^^` block, the separator. A refusal names the variable name as the field,
-never its text.
+quote in channel scope; a bracket of the block's own kind left unbalanced; in a
+`^^` block, the separator; `[`, which `switch_event_base_add_header` reads as an
+array index, installing the value under the text before it; and a key differing
+only in ASCII case from an earlier one in the block, since the block's event
+carries `EF_UNIQ_HEADERS` and replaces a header by `strcasecmp`, so
+`{k=1,K=2}` installs `K=2` alone. A refusal names the variable name as the
+field, never its text.
+
+The channel's variables replace by `strcasecmp` too, so the same fold happens
+between scopes at install and is not refused: it is the wider-scope rule of
+[Combined example](#combined-example), with the spelling of whichever block
+installs last. `{k=g}[K=l]` leaves `k=g`, and with `local_var_clobber=true`
+leaves `K=l`. A key `_body` also sets the block event's body, which nothing
+in the originate reads, and arrives as a variable. All measured on both trees
+named in [sofia](#sofia-sip).
 
 ### A value naming a variable
 
