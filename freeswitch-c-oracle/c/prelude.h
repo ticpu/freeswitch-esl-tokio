@@ -273,7 +273,7 @@ static int switch_event_check_permission_list(switch_event_t *list, const char *
 }
 
 typedef struct switch_core_session {
-	int unused;
+	struct switch_channel *channel;
 } switch_core_session_t;
 typedef struct switch_channel {
 	switch_core_session_t *session;

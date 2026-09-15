@@ -27,6 +27,7 @@ const UNITS: &[&str] = &[
     "c/expand.c",
     "c/api_originate.c",
     "c/inline_dialplan.c",
+    "c/execute_on.c",
     "c/cause.c",
     "c/sofia.h",
     "c/protect_dest_uri.c",

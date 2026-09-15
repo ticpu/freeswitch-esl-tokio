@@ -184,6 +184,34 @@ pub enum Action {
 /// An application `inline_dialplan_hunt` added: its name, then its data, `None` without a `:`.
 pub type InlineApplication = (Vec<u8>, Option<Vec<u8>>);
 
+/// What `switch_channel_execute_on_value` handed on of an `execute_on_*` value.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ExecuteOnValue {
+    /// The application name.
+    pub app: Vec<u8>,
+    /// Its argument, `None` where the value carries none.
+    pub arg: Option<Vec<u8>>,
+    /// Queued on the session rather than run where the hook fires.
+    pub queued: bool,
+    /// Every variable name the argument's discarded expansion looked up, in order.
+    pub lookups: Vec<Vec<u8>>,
+    /// Every API function that expansion called, with its argument.
+    pub api_calls: Vec<(Vec<u8>, Option<Vec<u8>>)>,
+}
+
+/// What `switch_core_session_exec` hands an application of the argument it was given.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ExecArgument {
+    /// The argument the application receives, `None` where it receives none.
+    pub argument: Option<Vec<u8>>,
+    /// The scope variables a `%[` block set, in the order they were last set.
+    pub scope: Vec<Pair>,
+    /// Every variable name looked up, `app_disable_expand_variables` first.
+    pub lookups: Vec<Vec<u8>>,
+    /// Every API function the expansion called, with its argument.
+    pub api_calls: Vec<(Vec<u8>, Option<Vec<u8>>)>,
+}
+
 /// What `protect_dest_uri` did to a destination number.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ProtectedDestination {
@@ -880,6 +908,63 @@ impl Oracle {
             }
         }
         extension.then_some(applications)
+    }
+
+    /// `switch_channel_execute_on_value` on an `execute_on_*` value, over a channel whose variable
+    /// and API lookups answer nothing.
+    pub fn execute_on_value(self, value: &[u8]) -> ExecuteOnValue {
+        let mut hook = ExecuteOnValue::default();
+        let mut fields = Fields::default();
+        for (tag, a, b) in self.run(
+            self.abi
+                .execute_on_value,
+            value,
+        ) {
+            match tag {
+                APPLICATION => {
+                    hook.app = text(a);
+                    hook.arg = b;
+                }
+                LOOKUP => hook
+                    .lookups
+                    .push(text(a)),
+                API => hook
+                    .api_calls
+                    .push((text(a), b)),
+                FIELD => fields.push(a, b),
+                tag => panic!("the execute_on harness reported tag {tag}"),
+            }
+        }
+        hook.queued = fields
+            .take("queued")
+            .as_deref()
+            == Some(b"true");
+        hook
+    }
+
+    /// `switch_core_session_exec` on an application argument, up to the call into the application.
+    pub fn exec_argument(self, arg: &[u8]) -> ExecArgument {
+        let mut exec = ExecArgument::default();
+        for (tag, a, b) in self.run(
+            self.abi
+                .exec_argument,
+            arg,
+        ) {
+            match tag {
+                APPLICATION => exec.argument = b,
+                PAIR => exec
+                    .scope
+                    .push((text(a), text(b))),
+                LOOKUP => exec
+                    .lookups
+                    .push(text(a)),
+                API => exec
+                    .api_calls
+                    .push((text(a), b)),
+                tag => panic!("the exec harness reported tag {tag}"),
+            }
+        }
+        exec
     }
 
     /// `switch_channel_str2cause`.
