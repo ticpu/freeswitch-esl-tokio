@@ -2079,11 +2079,28 @@ mod tests {
     }
 
     #[test]
-    fn escape_argument_needs_an_argv_separator() {
+    fn escape_argument_is_none_only_at_the_dialplan_carrier() {
         assert_eq!(
-            DialStringTarget::new(DialStringCarrier::EslApi).escape_argument("a b"),
+            DialStringTarget::new(DialStringCarrier::Dialplan).escape_argument("a b"),
             None
         );
+        for (text, want) in [
+            ("a b", r"a\sb"),
+            (" a  b ", r"\sa\s\sb\s"),
+            ("x~y", "x~y"),
+            ("it's", r"it\'s"),
+            (r"a\b", r"a\\b"),
+            ("a\nb\tc\rd", r"a\nb\tc\rd"),
+            ("", ""),
+        ] {
+            assert_eq!(
+                DialStringTarget::new(DialStringCarrier::EslApi)
+                    .escape_argument(text)
+                    .as_deref(),
+                Some(want),
+                "{text:?}"
+            );
+        }
         assert!(matches!(
             tilde().escape_argument("loopback/9199/test"),
             Some(std::borrow::Cow::Borrowed("loopback/9199/test"))
@@ -2163,6 +2180,31 @@ mod tests {
                 text,
                 "escaped {escaped:?}"
             );
+        }
+    }
+
+    #[test]
+    fn escape_argument_is_undone_by_the_blank_split() {
+        let api = DialStringTarget::new(DialStringCarrier::EslApi);
+        for text in [
+            "a b",
+            "  a  b  ",
+            r"it's \'q\' ''",
+            r#"a"b\"c"#,
+            r"\\\~~\n\s",
+            "tab\tcr\rnl\n",
+            r"trailing\",
+            "é ü",
+            "'",
+            "",
+        ] {
+            let escaped = api
+                .escape_argument(text)
+                .expect("the API carrier escapes");
+            let (argument, _) = api
+                .read_argument(&escaped)
+                .unwrap_or_else(|e| panic!("{escaped:?}: {e}"));
+            assert_eq!(argument, text, "escaped {escaped:?}");
         }
     }
 

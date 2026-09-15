@@ -352,14 +352,20 @@ fn argv_separator_captures_read_as_their_channel_received_them() {
     }
 }
 
+/// The blank split and every argv separator.
+fn split_targets() -> [DialStringTarget; 3] {
+    let [tilde, pipe] = argv_targets();
+    [DialStringTarget::new(API), tilde, pipe]
+}
+
 #[test]
-fn a_spaced_capture_is_one_argument_only_at_an_argv_separator() {
+fn a_spaced_capture_is_one_argument_once_escaped() {
     for body in [fixture!("g-fp-argv-space.A"), fixture!("g-fp-argv-leg2.A")] {
         assert_eq!(
             FlattenedDialString::parse_for(body, API),
             Err(FlattenedDialStringError::ArgvSplit)
         );
-        for target in argv_targets() {
+        for target in split_targets() {
             let escaped = target
                 .escape_argument(body)
                 .expect("a separator target escapes");
@@ -401,7 +407,7 @@ fn argv_separator_captures_keep_their_legs() {
 /// What `retain` forwards is still one argument escaped for the same split.
 #[test]
 fn retain_at_an_argv_separator_forwards_the_kept_legs_escaped() {
-    for target in argv_targets() {
+    for target in split_targets() {
         for body in [
             fixture!("g-fp-argv-lastesc.A"),
             fixture!("g-fp-argv-leg2.A"),
