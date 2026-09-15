@@ -1,5 +1,5 @@
 use super::*;
-use crate::commands::variables::DialStringCarrier;
+use crate::commands::variables::{DialStringCarrier, DialStringTarget};
 use crate::variables::ChannelVariable;
 
 const API: DialStringCarrier = DialStringCarrier::EslApi;
@@ -213,6 +213,260 @@ fn a_non_ascii_argument_separator_is_not_taken() {
         FlattenedDialString::parse_for("^^é{v=a b}loopback/9199/test", API),
         Err(FlattenedDialStringError::ArgvSplit)
     );
+}
+
+struct Key(&'static str);
+
+impl VariableName for Key {
+    fn as_str(&self) -> &str {
+        self.0
+    }
+}
+
+fn argv_targets() -> [DialStringTarget; 2] {
+    [
+        DialStringTarget::new(API)
+            .with_argv_separator('~')
+            .expect("'~' separates originate's arguments"),
+        DialStringTarget::new(API).with_unchecked_argv_separator('|'),
+    ]
+}
+
+/// A capture's name, its body, and the values its first channel received.
+type Capture = (
+    &'static str,
+    &'static str,
+    &'static [(&'static str, Option<&'static str>)],
+);
+
+/// Values each capture's channel reported when originated under `^^~` and `^^|`.
+#[test]
+fn argv_separator_captures_read_as_their_channel_received_them() {
+    let cases: &[Capture] = &[
+        (
+            "apos2",
+            fixture!("g-fp-argv-apos2.A"),
+            &[("v", Some("its ok")), ("sentinel", Some("s"))],
+        ),
+        (
+            "bsbs",
+            fixture!("g-fp-argv-bsbs.A"),
+            &[("v", Some(r"a\b")), ("sentinel", Some("s"))],
+        ),
+        (
+            "bsn",
+            fixture!("g-fp-argv-bsn.A"),
+            &[("v", Some("a\nb")), ("sentinel", Some("s"))],
+        ),
+        (
+            "bsq",
+            fixture!("g-fp-argv-bsq.A"),
+            &[("v", Some("ab")), ("sentinel", Some("s"))],
+        ),
+        (
+            "bss",
+            fixture!("g-fp-argv-bss.A"),
+            &[("v", Some("a b")), ("sentinel", Some("s"))],
+        ),
+        (
+            "bstilde",
+            fixture!("g-fp-argv-bstilde.A"),
+            &[("v", Some(r"a\~b")), ("sentinel", Some("s"))],
+        ),
+        (
+            "caret",
+            fixture!("g-fp-argv-caret.A"),
+            &[
+                ("v", None),
+                ("sentinel", Some("s")),
+                ("k", Some("a")),
+                ("j", Some("b")),
+            ],
+        ),
+        (
+            "lastesc",
+            fixture!("g-fp-argv-lastesc.A"),
+            &[("v", Some(r"x\~")), ("sentinel", Some("s"))],
+        ),
+        (
+            "leg2",
+            fixture!("g-fp-argv-leg2.A"),
+            &[("v", Some(r"a b~c\d")), ("sentinel", Some("s"))],
+        ),
+        (
+            "space",
+            fixture!("g-fp-argv-space.A"),
+            &[("v", Some("a b")), ("sentinel", Some("s"))],
+        ),
+        (
+            "tilde",
+            fixture!("g-fp-argv-tilde.A"),
+            &[("v", Some("x~y")), ("sentinel", Some("s"))],
+        ),
+        (
+            "trail-last",
+            fixture!("g-fp-argv-trail-last.A"),
+            &[("v", Some(r"end\")), ("sentinel", Some("s"))],
+        ),
+        (
+            "trail-mid",
+            fixture!("g-fp-argv-trail-mid.A"),
+            &[("v", Some("end,sentinel=s")), ("sentinel", None)],
+        ),
+    ];
+    for target in argv_targets() {
+        for &(name, body, values) in cases {
+            let escaped = target
+                .escape_argument(body)
+                .expect("a separator target escapes");
+            let context = format!("{name} at {target:?}: {escaped}");
+            let list = FlattenedDialString::parse_for(&escaped, target)
+                .unwrap_or_else(|e| panic!("{context}: {e:?}"));
+            assert_eq!(
+                list.display_raw()
+                    .to_string(),
+                escaped,
+                "{context}"
+            );
+            let rendered = list
+                .display_for(target)
+                .to_string();
+            let reread = FlattenedDialString::parse_for(&rendered, target)
+                .unwrap_or_else(|e| panic!("{context} rendered {rendered}: {e:?}"));
+            for list in [&list, &reread] {
+                let leg = list
+                    .legs()
+                    .next()
+                    .expect("a capture has a leg");
+                let presence = format!("fp-argv-{name}@pbx.example.com");
+                assert_eq!(
+                    leg.variable(ChannelVariable::PresenceId),
+                    Some(presence.as_str()),
+                    "{context}"
+                );
+                for &(key, want) in values {
+                    assert_eq!(leg.variable(Key(key)), want, "{key} in {context}");
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn a_spaced_capture_is_one_argument_only_at_an_argv_separator() {
+    for body in [fixture!("g-fp-argv-space.A"), fixture!("g-fp-argv-leg2.A")] {
+        assert_eq!(
+            FlattenedDialString::parse_for(body, API),
+            Err(FlattenedDialStringError::ArgvSplit)
+        );
+        for target in argv_targets() {
+            let escaped = target
+                .escape_argument(body)
+                .expect("a separator target escapes");
+            assert!(
+                FlattenedDialString::parse_for(&escaped, target).is_ok(),
+                "{escaped} at {target:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn argv_separator_captures_keep_their_legs() {
+    for target in argv_targets() {
+        for (body, sentinels) in [
+            (fixture!("g-fp-argv-lastesc.A"), &["s", "s2"][..]),
+            (fixture!("g-fp-argv-leg2.A"), &["s", "s2"][..]),
+            (fixture!("g-fp-argv-epbs.A"), &["s"][..]),
+        ] {
+            let escaped = target
+                .escape_argument(body)
+                .expect("a separator target escapes");
+            let list = FlattenedDialString::parse_for(&escaped, target)
+                .unwrap_or_else(|e| panic!("{escaped} at {target:?}: {e:?}"));
+            assert_eq!(
+                list.legs()
+                    .map(|leg| leg.variable(Key("sentinel")))
+                    .collect::<Vec<_>>(),
+                sentinels
+                    .iter()
+                    .map(|&s| Some(s))
+                    .collect::<Vec<_>>(),
+                "{escaped} at {target:?}"
+            );
+        }
+    }
+}
+
+/// What `retain` forwards is still one argument escaped for the same split.
+#[test]
+fn retain_at_an_argv_separator_forwards_the_kept_legs_escaped() {
+    for target in argv_targets() {
+        for body in [
+            fixture!("g-fp-argv-lastesc.A"),
+            fixture!("g-fp-argv-leg2.A"),
+        ] {
+            let (first, second) = body
+                .split_once("test,")
+                .map(|(first, second)| (format!("{first}test"), second))
+                .expect("two legs");
+            let escaped = target
+                .escape_argument(body)
+                .expect("a separator target escapes");
+            for (dropped, kept) in [(1, first.as_str()), (0, second)] {
+                let mut list = FlattenedDialString::parse_for(&escaped, target)
+                    .unwrap_or_else(|e| panic!("{escaped} at {target:?}: {e:?}"));
+                let mut index = 0;
+                list.retain(|_| {
+                    index += 1;
+                    index - 1 != dropped
+                });
+                let forwarded = list
+                    .display_raw()
+                    .to_string();
+                assert_eq!(
+                    Some(forwarded.as_str()),
+                    target
+                        .escape_argument(kept)
+                        .as_deref(),
+                    "{escaped} without leg {dropped} at {target:?}"
+                );
+                let reread = FlattenedDialString::parse_for(&forwarded, target)
+                    .unwrap_or_else(|e| panic!("{forwarded} at {target:?}: {e:?}"));
+                assert_eq!(
+                    reread
+                        .legs()
+                        .count(),
+                    1
+                );
+            }
+        }
+    }
+}
+
+/// A trailing separator adds no argument; any text past one is a second.
+#[test]
+fn the_argv_separator_split_must_leave_one_argument() {
+    let [tilde, _] = argv_targets();
+    let list = FlattenedDialString::parse_for("loopback/9199/test~", tilde)
+        .expect("a trailing separator adds no argument");
+    assert_eq!(
+        list.display_raw()
+            .to_string(),
+        "loopback/9199/test~"
+    );
+    for input in [
+        "loopback/9199/a~loopback/9199/b",
+        "loopback/9199/test~~",
+        "~loopback/9199/test",
+        "[v='x~y']loopback/9199/test",
+    ] {
+        assert_eq!(
+            FlattenedDialString::parse_for(input, tilde),
+            Err(FlattenedDialStringError::ArgvSplit),
+            "{input}"
+        );
+    }
 }
 
 /// The raw render of `input` with the legs at `dropped` removed.

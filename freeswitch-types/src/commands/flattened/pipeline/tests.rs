@@ -2,7 +2,7 @@
 //! and escape depth; `tests/fixtures/flattened/README.md` names the captures.
 
 use super::*;
-use crate::commands::variables::{DialStringCarrier, Variables, VariablesType};
+use crate::commands::variables::{DialStringCarrier, DialStringTarget, Variables, VariablesType};
 
 const API: DialStringCarrier = DialStringCarrier::EslApi;
 const DIALPLAN: DialStringCarrier = DialStringCarrier::Dialplan;
@@ -374,7 +374,15 @@ fn nothing_to_dial_is_empty() {
 #[test]
 fn the_port_reads_back_every_value_the_renderer_writes() {
     let values = [
-        r"C:\path", r"a\nb", "a,b", "it's", "don't,x", "a b", "a|b", "p1:p2",
+        r"C:\path", r"a\nb", "a,b", "it's", "don't,x", "a b", "a|b", "p1:p2", "x~y",
+    ];
+    let targets = [
+        API.into(),
+        DIALPLAN.into(),
+        DialStringTarget::new(API)
+            .with_argv_separator('~')
+            .expect("'~' separates originate's arguments"),
+        DialStringTarget::new(API).with_unchecked_argv_separator('|'),
     ];
     for scope in [
         VariablesType::Default,
@@ -382,13 +390,16 @@ fn the_port_reads_back_every_value_the_renderer_writes() {
         VariablesType::Channel,
     ] {
         for separator in [None, Some('~')] {
-            for carrier in [API, DIALPLAN] {
+            for carrier in targets {
                 let mut vars = Variables::new(scope);
                 for (i, v) in values
                     .iter()
                     .enumerate()
                 {
                     if scope == VariablesType::Channel && v.contains('\'') {
+                        continue;
+                    }
+                    if separator.is_some_and(|sep| v.contains(sep)) {
                         continue;
                     }
                     vars.insert(format!("v{i}"), *v);
@@ -401,7 +412,8 @@ fn the_port_reads_back_every_value_the_renderer_writes() {
                     None => vars,
                 };
                 let dial = format!("{}null/drift", vars.display_for(carrier));
-                let list = read_at(&dial, carrier);
+                let list = read(&dial, carrier)
+                    .unwrap_or_else(|e| panic!("{dial:?} at {carrier:?}: {e:?}"));
                 for (key, want) in vars.iter() {
                     assert_eq!(value(&list, 0, key), Some(want), "{dial} at {carrier:?}");
                 }

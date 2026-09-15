@@ -441,6 +441,14 @@ impl DialStringTarget {
         Some(Cow::Owned(escaped))
     }
 
+    /// A separator [`with_argv_separator`](Self::with_argv_separator) refuses as policy, for
+    /// reading captures the switch accepts under it.
+    #[cfg(test)]
+    pub(crate) fn with_unchecked_argv_separator(mut self, sep: char) -> Self {
+        self.argument = ArgumentPass::Char(sep);
+        self
+    }
+
     /// This target inside an argument already escaped for its split.
     pub(crate) fn inner(mut self) -> Self {
         if let ArgumentPass::Char(_) = self.argument {
