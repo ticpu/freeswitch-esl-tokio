@@ -5,9 +5,106 @@ use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest::sample::select;
 
-use super::{expand_escapes, switch_true};
+use super::{expand_escapes, parse_block, switch_true, Block, PairEffect, UNQUOTED_ESC_COMMA};
 use crate::test_text::{against_the_c, text};
-use crate::tokenizer::{trace, untrace};
+use crate::tokenizer::{trace, untrace, Traced};
+
+/// The headers installing `blocks` adds, as the switch hands them to the event.
+fn installed<'a>(blocks: impl IntoIterator<Item = &'a Block>) -> Vec<Pair> {
+    blocks
+        .into_iter()
+        .flat_map(|block| &block.pairs)
+        .filter_map(|pair| {
+            let value = match &pair.effect {
+                PairEffect::Set(value) => value.as_str(),
+                PairEffect::Cleared => "",
+                PairEffect::Ignored => return None,
+            };
+            Some((
+                pair.key
+                    .clone()
+                    .into_bytes(),
+                value
+                    .as_bytes()
+                    .to_vec(),
+            ))
+        })
+        .collect()
+}
+
+fn byte_offset(text: &[Traced], input: &str, index: usize) -> usize {
+    text.get(index)
+        .map_or(input.len(), |&(_, start, _)| start)
+}
+
+const HEADS: &[&str] = &[
+    "", "", "", "^^", "^^,", "^^:", "^^~", "^^'", "^^\\", "^^=", "^^é",
+];
+
+/// Block content: text, the separators the parse reads, and brackets of any kind.
+fn content() -> impl Strategy<Value = String> {
+    let piece = prop_oneof![
+        3 => text(),
+        2 => select(&["=", ",", ":", "~", "\u{2}", "{", "}", "[", "]", "<", ">", "k=v", "'", "^^"][..])
+            .prop_map(str::to_owned),
+    ];
+    vec(piece, 0..6).prop_map(|pieces| pieces.concat())
+}
+
+/// A block of `open` and `close`, its close sometimes missing.
+fn block_text(open: char, close: char) -> impl Strategy<Value = String> {
+    (
+        select(HEADS),
+        content(),
+        prop_oneof![6 => Just(true), 1 => Just(false)],
+    )
+        .prop_map(move |(head, content, closed)| {
+            let close = if closed {
+                close.to_string()
+            } else {
+                String::new()
+            };
+            format!("{open}{head}{content}{close}")
+        })
+}
+
+#[test]
+fn blocks_match_the_switch() {
+    let kind = select(
+        &[
+            ('<', '>', ','),
+            ('{', '}', ','),
+            ('[', ']', ','),
+            ('[', ']', UNQUOTED_ESC_COMMA),
+        ][..],
+    );
+    let case = kind.prop_flat_map(|(open, close, comma)| {
+        (Just((open, close, comma)), block_text(open, close), text())
+    });
+    against_the_c(
+        file!(),
+        "blocks_match_the_switch",
+        case,
+        |c, ((open, close, comma), block, tail)| {
+            let input = format!("{block}{tail}");
+            let text = trace(&input);
+            let port = parse_block(&text, open, close, comma);
+            if port
+                .as_ref()
+                .is_some_and(|(block, _)| block.separator_unreadable())
+            {
+                return Ok(());
+            }
+            let port =
+                port.map(|(block, next)| (installed([&block]), byte_offset(&text, &input, next)));
+            let switch = c
+                .brackets(input.as_bytes(), open as u8, close as u8, comma as u8)
+                .map(|read| (read.pairs, read.rest));
+            prop_assert_eq!(port, switch, "{:?} split on {:?}", input, comma);
+            Ok(())
+        },
+    );
+}
 
 /// Text weighted toward what the dialplan carrier's expansion reads: references, escapes, `$$`.
 fn expansion_text() -> impl Strategy<Value = String> {
