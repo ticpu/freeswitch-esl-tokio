@@ -1,10 +1,5 @@
-use std::str::FromStr;
-
-use super::{
-    after_prefix, check_expression_field, check_field, parse_leg, undeliverable, EndpointFieldFault,
-};
+use super::{after_prefix, check_expression_field, check_field, undeliverable, EndpointFieldFault};
 use crate::commands::originate::OriginateError;
-use crate::commands::variables::DialStringCarrier;
 use crate::commands::variables::Variables;
 use crate::switch_passes::originate_legs::splits_into_threads;
 
@@ -292,112 +287,30 @@ impl SofiaContact {
     }
 }
 
-impl FromStr for SofiaEndpoint {
-    type Err = OriginateError;
+impl_endpoint_parse!(from_str: SofiaEndpoint, SofiaGateway, SofiaContact);
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (variables, ep) = parse_leg(s, DialStringCarrier::EslApi.into(), Self::parse_bare)?;
-        Ok(Self { variables, ..ep })
+impl_endpoint_parse!(config:
+    SofiaEndpoint {
+        profile: String,
+        destination: String,
+        ;
+        variables: Option<Variables>,
     }
-}
-
-impl FromStr for SofiaGateway {
-    type Err = OriginateError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (variables, ep) = parse_leg(s, DialStringCarrier::EslApi.into(), Self::parse_bare)?;
-        Ok(Self { variables, ..ep })
+    SofiaContact {
+        user: String,
+        domain: String,
+        ;
+        profile: Option<String>,
+        variables: Option<Variables>,
     }
-}
-
-impl FromStr for SofiaContact {
-    type Err = OriginateError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (variables, ep) = parse_leg(s, DialStringCarrier::EslApi.into(), Self::parse_bare)?;
-        Ok(Self { variables, ..ep })
+    SofiaGateway {
+        gateway: String,
+        destination: String,
+        ;
+        profile: Option<String>,
+        variables: Option<Variables>,
     }
-}
-
-#[cfg(feature = "serde")]
-mod config {
-    use crate::commands::variables::Variables;
-
-    #[derive(serde::Deserialize)]
-    pub(super) struct SofiaEndpoint {
-        pub(super) profile: String,
-        pub(super) destination: String,
-        #[serde(default)]
-        pub(super) variables: Option<Variables>,
-    }
-
-    #[derive(serde::Deserialize)]
-    pub(super) struct SofiaContact {
-        pub(super) user: String,
-        pub(super) domain: String,
-        #[serde(default)]
-        pub(super) profile: Option<String>,
-        #[serde(default)]
-        pub(super) variables: Option<Variables>,
-    }
-
-    #[derive(serde::Deserialize)]
-    pub(super) struct SofiaGateway {
-        pub(super) gateway: String,
-        pub(super) destination: String,
-        #[serde(default)]
-        pub(super) profile: Option<String>,
-        #[serde(default)]
-        pub(super) variables: Option<Variables>,
-    }
-}
-
-#[cfg(feature = "serde")]
-impl TryFrom<config::SofiaEndpoint> for SofiaEndpoint {
-    type Error = OriginateError;
-
-    fn try_from(config: config::SofiaEndpoint) -> Result<Self, Self::Error> {
-        let ep = Self {
-            profile: config.profile,
-            destination: config.destination,
-            variables: config.variables,
-        };
-        ep.check_deliverable()?;
-        Ok(ep)
-    }
-}
-
-#[cfg(feature = "serde")]
-impl TryFrom<config::SofiaGateway> for SofiaGateway {
-    type Error = OriginateError;
-
-    fn try_from(config: config::SofiaGateway) -> Result<Self, Self::Error> {
-        let ep = Self {
-            gateway: config.gateway,
-            destination: config.destination,
-            profile: config.profile,
-            variables: config.variables,
-        };
-        ep.check_deliverable()?;
-        Ok(ep)
-    }
-}
-
-#[cfg(feature = "serde")]
-impl TryFrom<config::SofiaContact> for SofiaContact {
-    type Error = OriginateError;
-
-    fn try_from(config: config::SofiaContact) -> Result<Self, Self::Error> {
-        let ep = Self {
-            user: config.user,
-            domain: config.domain,
-            profile: config.profile,
-            variables: config.variables,
-        };
-        ep.check_deliverable()?;
-        Ok(ep)
-    }
-}
+);
 
 #[cfg(test)]
 mod tests {

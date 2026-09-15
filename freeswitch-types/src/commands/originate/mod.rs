@@ -12,9 +12,7 @@ use crate::switch_passes::api_argument::{
 use crate::switch_passes::inline_hunt::{
     check_inline_delimiter, render_inline, split_inline_prefix, DEFAULT_INLINE_DELIMITER,
 };
-use crate::switch_passes::originate_function::{
-    check_target_readable, parse_originate_target, Slots, UNDEF,
-};
+use crate::switch_passes::originate_function::{parse_originate_target, Slots, UNDEF};
 
 mod application;
 mod error;

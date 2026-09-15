@@ -110,32 +110,13 @@ impl AudioEndpoint {
 
 impl_dial_string_with_variables!(AudioEndpoint);
 
-#[cfg(feature = "serde")]
-mod config {
-    use crate::commands::variables::Variables;
-
-    #[derive(serde::Deserialize)]
-    pub(super) struct AudioEndpoint {
-        #[serde(default)]
-        pub(super) destination: Option<String>,
-        #[serde(default)]
-        pub(super) variables: Option<Variables>,
+impl_endpoint_parse!(config:
+    AudioEndpoint {
+        ;
+        destination: Option<String>,
+        variables: Option<Variables>,
     }
-}
-
-#[cfg(feature = "serde")]
-impl TryFrom<config::AudioEndpoint> for AudioEndpoint {
-    type Error = OriginateError;
-
-    fn try_from(config: config::AudioEndpoint) -> Result<Self, Self::Error> {
-        let ep = Self {
-            destination: config.destination,
-            variables: config.variables,
-        };
-        ep.check_deliverable()?;
-        Ok(ep)
-    }
-}
+);
 
 /// **Warning:** This `Display` impl exists only to satisfy the `DialString: Display`
 /// trait bound. The `"audio"` prefix is not a valid FreeSWITCH endpoint.

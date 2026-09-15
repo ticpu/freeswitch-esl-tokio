@@ -1,4 +1,5 @@
 use super::*;
+use crate::switch_passes::originate_function::check_target_readable;
 
 /// A config's dialplan: a [`DialplanType`] spelled as its serde form, or any other name.
 #[derive(serde::Serialize, serde::Deserialize)]

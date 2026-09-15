@@ -1,8 +1,5 @@
-use std::str::FromStr;
-
-use super::{check_expression_field, parse_leg};
+use super::check_expression_field;
 use crate::commands::originate::OriginateError;
-use crate::commands::variables::DialStringCarrier;
 use crate::commands::variables::Variables;
 
 wire_enum! {
@@ -68,14 +65,7 @@ impl_dial_string_with_variables!(GroupCall, write_expression, |this| match &this
     None => format!("${{group_call({}@{})}}", this.group, this.domain),
 });
 
-impl FromStr for GroupCall {
-    type Err = OriginateError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (variables, ep) = parse_leg(s, DialStringCarrier::EslApi.into(), Self::parse_bare)?;
-        Ok(Self { variables, ..ep })
-    }
-}
+impl_endpoint_parse!(from_str: GroupCall);
 
 impl GroupCall {
     /// Refuse what `group_call_function` splits, the order at its first `+` and then the domain
@@ -116,37 +106,15 @@ impl GroupCall {
     }
 }
 
-#[cfg(feature = "serde")]
-mod config {
-    use super::GroupCallOrder;
-    use crate::commands::variables::Variables;
-
-    #[derive(serde::Deserialize)]
-    pub(super) struct GroupCall {
-        pub(super) group: String,
-        pub(super) domain: String,
-        #[serde(default)]
-        pub(super) order: Option<GroupCallOrder>,
-        #[serde(default)]
-        pub(super) variables: Option<Variables>,
+impl_endpoint_parse!(config:
+    GroupCall {
+        group: String,
+        domain: String,
+        ;
+        order: Option<GroupCallOrder>,
+        variables: Option<Variables>,
     }
-}
-
-#[cfg(feature = "serde")]
-impl TryFrom<config::GroupCall> for GroupCall {
-    type Error = OriginateError;
-
-    fn try_from(config: config::GroupCall) -> Result<Self, Self::Error> {
-        let ep = Self {
-            group: config.group,
-            domain: config.domain,
-            order: config.order,
-            variables: config.variables,
-        };
-        ep.check_deliverable()?;
-        Ok(ep)
-    }
-}
+);
 
 #[cfg(test)]
 mod tests {

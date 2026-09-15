@@ -1,8 +1,5 @@
-use std::str::FromStr;
-
-use super::{after_prefix, check_field, parse_leg};
+use super::{after_prefix, check_field};
 use crate::commands::originate::OriginateError;
-use crate::commands::variables::DialStringCarrier;
 use crate::commands::variables::Variables;
 
 /// Directory-based endpoint: `user/{name}[@{domain}]`.
@@ -70,43 +67,16 @@ impl UserEndpoint {
     }
 }
 
-impl FromStr for UserEndpoint {
-    type Err = OriginateError;
+impl_endpoint_parse!(from_str: UserEndpoint);
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (variables, ep) = parse_leg(s, DialStringCarrier::EslApi.into(), Self::parse_bare)?;
-        Ok(Self { variables, ..ep })
+impl_endpoint_parse!(config:
+    UserEndpoint {
+        name: String,
+        ;
+        domain: Option<String>,
+        variables: Option<Variables>,
     }
-}
-
-#[cfg(feature = "serde")]
-mod config {
-    use crate::commands::variables::Variables;
-
-    #[derive(serde::Deserialize)]
-    pub(super) struct UserEndpoint {
-        pub(super) name: String,
-        #[serde(default)]
-        pub(super) domain: Option<String>,
-        #[serde(default)]
-        pub(super) variables: Option<Variables>,
-    }
-}
-
-#[cfg(feature = "serde")]
-impl TryFrom<config::UserEndpoint> for UserEndpoint {
-    type Error = OriginateError;
-
-    fn try_from(config: config::UserEndpoint) -> Result<Self, Self::Error> {
-        let ep = Self {
-            name: config.name,
-            domain: config.domain,
-            variables: config.variables,
-        };
-        ep.check_deliverable()?;
-        Ok(ep)
-    }
-}
+);
 
 #[cfg(test)]
 mod tests {
