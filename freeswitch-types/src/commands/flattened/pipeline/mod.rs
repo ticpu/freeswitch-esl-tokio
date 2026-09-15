@@ -7,10 +7,10 @@ use std::ops::Range;
 use super::CauseReading;
 use crate::channel::HangupCause;
 use crate::commands::variables::{BlockParse, DialStringCarrier, DialStringTarget};
-use crate::tokenizer::{
-    byte_range, extent, find, find_end_paren, separate_string_string, skip_spaces, trace, untrace,
-    ArgvCut, CBuffer, Traced,
+use crate::switch_passes::separate::{
+    find, find_end_paren, separate_string_string, skip_spaces, ArgvCut, CBuffer,
 };
+use crate::switch_passes::{byte_range, extent, trace, untrace, Traced};
 
 #[cfg(test)]
 mod c_oracle;

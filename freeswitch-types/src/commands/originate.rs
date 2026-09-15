@@ -13,7 +13,8 @@ use super::variables::{
 };
 use super::{clean_argument, originate_quote, originate_split, STRIPPED_WHITESPACE};
 use crate::channel::ParseHangupCauseError;
-use crate::tokenizer::{delimiter_override, trace};
+use crate::switch_passes::separate::delimiter_override;
+use crate::switch_passes::trace;
 
 pub use super::variables::{Variables, VariablesType};
 

@@ -108,7 +108,8 @@ use super::variables::{
     escape_text, unbalanced, DialStringCarrier, DialStringTarget, EscapedField, Variables,
     VariablesType,
 };
-use crate::tokenizer::{find_end_paren, trace};
+use crate::switch_passes::separate::find_end_paren;
+use crate::switch_passes::trace;
 
 type PrefixParser = fn(&str) -> Result<Endpoint, OriginateError>;
 

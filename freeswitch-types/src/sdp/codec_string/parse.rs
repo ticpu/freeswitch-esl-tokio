@@ -5,7 +5,7 @@
 
 use crate::sdp::error::{CodecStringError, SdpWarning};
 use crate::sdp::num::atoi_prefix;
-use crate::tokenizer::separate_string_char_delim;
+use crate::switch_passes::separate::separate_string_char_delim;
 
 use super::entry::CodecStringEntry;
 use super::CodecString;

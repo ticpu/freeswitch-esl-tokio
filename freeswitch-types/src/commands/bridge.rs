@@ -10,7 +10,8 @@ use super::endpoint::{extract_scoped_variables, read_error, DialString, Endpoint
 use super::flattened::pipeline;
 use super::originate::OriginateError;
 use super::variables::{BlockParse, DialStringCarrier, DialStringTarget, Variables, VariablesType};
-use crate::tokenizer::{separate, trace};
+use crate::switch_passes::separate::separate;
+use crate::switch_passes::trace;
 
 /// A bridge dial string is the argument of a dialplan application, which
 /// receives it whole, so it renders and parses one escaping level shallower

@@ -20,8 +20,9 @@ use super::{
     STRIPPED_WHITESPACE,
 };
 use crate::channel::HangupCause;
+use crate::switch_passes::separate::separate;
+use crate::switch_passes::{trace, untrace};
 use crate::test_text::{against_the_c, config, opens_with_a_non_ascii_head, text};
-use crate::tokenizer::{separate, trace, untrace};
 use crate::variables::VariableName;
 
 fn scope() -> impl Strategy<Value = VariablesType> {

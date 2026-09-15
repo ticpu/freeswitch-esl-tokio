@@ -43,6 +43,32 @@ pub(crate) fn text() -> impl Strategy<Value = String> {
     ]
 }
 
+/// Quotes, escapes and separators whose tokens a split must lay end to end over the input.
+#[cfg(feature = "esl")]
+pub(crate) const TILING_INPUTS: &[&str] = &[
+    "a,'b c',error/X",
+    "'b c',a",
+    "  a b  ",
+    " 'x y' ",
+    "a '' b",
+    "''",
+    "'",
+    "x'y",
+    r"a\,b,c",
+    r"a\'b",
+    r"'a\'b'",
+    r"\\",
+    r"trailing\",
+    r"\s\n\t",
+    r"a\',b",
+    r"\'lead,x",
+    r"\$${x}\$y",
+    "${a}b,$${c}",
+    "'é,ü' ,ß",
+    "[v='x,y']loopback/9199/a,error/USER_BUSY",
+    "a|'b|c' |d",
+];
+
 /// `switch_separate_string` takes the first byte after `^^` whatever it is; the port takes no
 /// head naming a non-ASCII separator, which no char split mirrors.
 pub(crate) fn opens_with_a_non_ascii_head(input: &str) -> bool {

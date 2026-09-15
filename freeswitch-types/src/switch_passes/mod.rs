@@ -1,0 +1,56 @@
+//! Ports of the switch's own string passes, one module per pass, each held to the switch's C.
+//!
+//! Every pass runs over traced text: each char paired with the byte range in the
+//! original input it came from, so a cleaned token still points back at its source.
+
+#[cfg(feature = "esl")]
+use std::ops::Range;
+
+pub(crate) mod separate;
+
+/// A char and the start and end of the input bytes it stands for; an unescaped char
+/// spans its whole escape.
+pub(crate) type Traced = (char, usize, usize);
+
+pub(crate) fn trace(s: &str) -> Vec<Traced> {
+    s.char_indices()
+        .map(|(at, c)| (c, at, at + c.len_utf8()))
+        .collect()
+}
+
+pub(crate) fn untrace(text: &[Traced]) -> String {
+    text.iter()
+        .map(|&(c, ..)| c)
+        .collect()
+}
+
+/// The bytes of `extent` token `span` of `text` covers, from the end of the char before it to the
+/// start of the char after it, so chars a pass dropped beside the token belong to it.
+#[cfg(feature = "esl")]
+pub(crate) fn byte_range(
+    text: &[Traced],
+    extent: Range<usize>,
+    span: Range<usize>,
+) -> Range<usize> {
+    let start = span
+        .start
+        .checked_sub(1)
+        .and_then(|before| text.get(before))
+        .map_or(extent.start, |&(.., end)| end);
+    let end = text
+        .get(span.end)
+        .map_or(extent.end, |&(_, start, _)| start);
+    start..end
+}
+
+/// The input bytes an untouched trace covers.
+#[cfg(feature = "esl")]
+pub(crate) fn extent(text: &[Traced]) -> Range<usize> {
+    let start = text
+        .first()
+        .map_or(0, |&(_, start, _)| start);
+    let end = text
+        .last()
+        .map_or(start, |&(.., end)| end);
+    start..end
+}

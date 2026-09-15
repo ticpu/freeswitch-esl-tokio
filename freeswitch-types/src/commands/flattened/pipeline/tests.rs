@@ -447,7 +447,7 @@ fn legs_and_threads_meet_only_at_their_separators() {
                 .chars()
                 .all(|c| matches!(c, ',' | '|'))
     };
-    for input in crate::tokenizer::TILING_INPUTS
+    for input in crate::test_text::TILING_INPUTS
         .iter()
         .copied()
         .chain([

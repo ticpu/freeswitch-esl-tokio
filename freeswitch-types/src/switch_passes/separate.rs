@@ -1,57 +1,11 @@
 //! Port of the switch's own string separators in `switch_utils.c`, for every reader
 //! of text the switch tokenizes that way.
-//!
-//! Every pass runs over traced text: each char paired with the byte range in the
-//! original input it came from, so a cleaned token still points back at its source.
 
 use std::ops::Range;
 
-/// A char and the start and end of the input bytes it stands for; an unescaped char
-/// spans its whole escape.
-pub(crate) type Traced = (char, usize, usize);
-
-pub(crate) fn trace(s: &str) -> Vec<Traced> {
-    s.char_indices()
-        .map(|(at, c)| (c, at, at + c.len_utf8()))
-        .collect()
-}
-
-pub(crate) fn untrace(text: &[Traced]) -> String {
-    text.iter()
-        .map(|&(c, ..)| c)
-        .collect()
-}
-
-/// The bytes of `extent` token `span` of `text` covers, from the end of the char before it to the
-/// start of the char after it, so chars a pass dropped beside the token belong to it.
 #[cfg(feature = "esl")]
-pub(crate) fn byte_range(
-    text: &[Traced],
-    extent: Range<usize>,
-    span: Range<usize>,
-) -> Range<usize> {
-    let start = span
-        .start
-        .checked_sub(1)
-        .and_then(|before| text.get(before))
-        .map_or(extent.start, |&(.., end)| end);
-    let end = text
-        .get(span.end)
-        .map_or(extent.end, |&(_, start, _)| start);
-    start..end
-}
-
-/// The input bytes an untouched trace covers.
-#[cfg(feature = "esl")]
-pub(crate) fn extent(text: &[Traced]) -> Range<usize> {
-    let start = text
-        .first()
-        .map_or(0, |&(_, start, _)| start);
-    let end = text
-        .last()
-        .map_or(start, |&(.., end)| end);
-    start..end
-}
+use super::{byte_range, extent};
+use super::{trace, untrace, Traced};
 
 /// Raw token spans one split cuts, as index ranges into the text it split.
 pub(crate) struct Cut {
@@ -613,33 +567,9 @@ pub(crate) fn blank_delim_spans<'s>(s: &'s str, text: &[Traced]) -> (Vec<&'s str
 mod c_oracle;
 
 #[cfg(all(test, feature = "esl"))]
-pub(crate) const TILING_INPUTS: &[&str] = &[
-    "a,'b c',error/X",
-    "'b c',a",
-    "  a b  ",
-    " 'x y' ",
-    "a '' b",
-    "''",
-    "'",
-    "x'y",
-    r"a\,b,c",
-    r"a\'b",
-    r"'a\'b'",
-    r"\\",
-    r"trailing\",
-    r"\s\n\t",
-    r"a\',b",
-    r"\'lead,x",
-    r"\$${x}\$y",
-    "${a}b,$${c}",
-    "'é,ü' ,ß",
-    "[v='x,y']loopback/9199/a,error/USER_BUSY",
-    "a|'b|c' |d",
-];
-
-#[cfg(all(test, feature = "esl"))]
 mod tiling {
     use super::*;
+    use crate::test_text::TILING_INPUTS;
 
     #[test]
     fn tokens_meet_only_at_their_delimiters() {

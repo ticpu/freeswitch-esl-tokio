@@ -12,7 +12,8 @@ use std::str::FromStr;
 use super::flattened::pipeline::{names_a_variable, splits_into_threads, ENTERPRISE_DELIM};
 use super::originate::OriginateError;
 use super::STRIPPED_WHITESPACE;
-use crate::tokenizer::{sole_argument, trace, untrace, ArgvCut, Token, Traced};
+use crate::switch_passes::separate::{sole_argument, ArgvCut, Token};
+use crate::switch_passes::{trace, untrace, Traced};
 use crate::version::FreeswitchVersion;
 
 /// Scope for channel variables in an originate command.
@@ -2600,7 +2601,7 @@ mod tests {
     /// `originate` splits it, and no escape letter names one.
     #[test]
     fn a_vertical_tab_at_an_edge_survives_the_line_strip() {
-        use crate::tokenizer::{separate, trace, untrace};
+        use crate::switch_passes::separate::separate;
 
         for text in ["\u{b}", "\u{b}a", "a\u{b}", "\u{b} \u{b}"] {
             for target in [DialStringTarget::new(DialStringCarrier::EslApi), tilde()] {
@@ -2631,7 +2632,7 @@ mod tests {
     /// split's separator when it opened the line.
     #[test]
     fn an_empty_or_caret_led_text_stays_one_argument_in_any_position() {
-        use crate::tokenizer::{separate, trace, untrace};
+        use crate::switch_passes::separate::separate;
 
         for text in ["", "^^", "^^~a", "^^ y"] {
             for target in [DialStringTarget::new(DialStringCarrier::EslApi), tilde()] {
@@ -2663,7 +2664,7 @@ mod tests {
 
     #[test]
     fn escape_argument_is_undone_by_the_split_cleanup() {
-        use crate::tokenizer::{cleanup, trace, untrace};
+        use crate::switch_passes::separate::cleanup;
 
         for text in [
             "a b",

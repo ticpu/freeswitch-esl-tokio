@@ -49,9 +49,10 @@ pub use variables::{
     UnvouchedVersion, VariablesDisplay,
 };
 
-use crate::tokenizer::{
-    blank_delim_spans, char_delim_spans, cleanup, delimiter_override, separate, trace, untrace,
+use crate::switch_passes::separate::{
+    blank_delim_spans, char_delim_spans, cleanup, delimiter_override, separate,
 };
+use crate::switch_passes::{trace, untrace};
 use originate::{check_inline_delimiter, check_target_readable, DEFAULT_INLINE_DELIMITER};
 
 /// What `switch_strip_whitespace` strips from both edges of an API command's argument line.

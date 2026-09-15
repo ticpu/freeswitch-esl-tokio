@@ -10,8 +10,9 @@ use super::{
     dial_list, expand_escapes, install, parse_block, switch_true, Block, DialList, PairEffect,
     PipelineError, UNQUOTED_ESC_COMMA,
 };
+use crate::switch_passes::separate::CBuffer;
+use crate::switch_passes::{trace, untrace, Traced};
 use crate::test_text::{against_the_c, text};
-use crate::tokenizer::{trace, untrace, CBuffer, Traced};
 
 /// The headers installing `blocks` adds, as the switch hands them to the event.
 fn installed<'a>(blocks: impl IntoIterator<Item = &'a Block>) -> Vec<Pair> {
