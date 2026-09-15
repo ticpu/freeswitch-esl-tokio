@@ -586,17 +586,8 @@ impl From<DialStringCarrier> for DialStringTarget {
     }
 }
 
-/// Reject a value the wire cannot carry, whatever escaping is applied to it.
-///
-/// An empty value is discarded by the switch under every
-/// encoding, and the block's own parse reports nothing when it happens. A value
-/// carrying an unbalanced bracket ends the block early, because the switch finds
-/// the block's end by counting depth and does not honour escapes while doing so;
-/// a balanced pair such as `${var}` is fine and common. A single quote in a
-/// channel-scope value pairs with the next quote anywhere before the peer split,
-/// escaped or not, and the pair between them is swallowed into the first value.
-/// A `:_:` anywhere in the dial string sends `switch_ivr_originate` down the
-/// enterprise path, whose split honours no quote or escape.
+/// Reject a value no escaping carries: `:_:`, a quote in channel scope, an empty value or an
+/// unbalanced bracket. Each error names why the switch loses it.
 fn check_representable(
     key: &str,
     value: &str,
@@ -2129,10 +2120,9 @@ mod tests {
         ));
     }
 
-    /// fs-acd's `escape()` for `^^~`, which this replaces; the last case is a capture
-    /// originated that way.
+    /// The last case is a capture originated under `^^~`.
     #[test]
-    fn escape_argument_matches_fs_acd() {
+    fn escape_argument_escapes_for_the_separator_split() {
         for (text, want) in [
             ("a b", "a b"),
             ("x~y", r"x\~y"),

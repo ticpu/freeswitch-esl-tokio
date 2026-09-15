@@ -22,10 +22,8 @@ pub(crate) fn untrace(text: &[Traced]) -> String {
         .collect()
 }
 
-/// The input bytes token `span` of `text` covers, `text` covering `extent`: from the end of
-/// the char before it, or the start of `extent`, to the start of the char after it, or its end.
-///
-/// Chars a pass dropped between a token and its delimiters thereby belong to the token.
+/// The bytes of `extent` token `span` of `text` covers, from the end of the char before it to the
+/// start of the char after it, so chars a pass dropped beside the token belong to it.
 #[cfg(feature = "esl")]
 pub(crate) fn byte_range(
     text: &[Traced],
