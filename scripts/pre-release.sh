@@ -3,7 +3,8 @@
 #
 # Usage: ./pre-release.sh
 #
-# Requires a live FreeSWITCH ESL listener for the live_freeswitch suite, the
+# Requires a live FreeSWITCH ESL listener on at least one of LIVE_ESL_PORTS
+# (default 8022) for the live suites, the
 # x86_64-pc-windows-msvc target for the cross-check, rustup for the MSRV
 # toolchain, cargo-semver-checks, and gh with HEAD pushed and scanned by CodeQL.
 # Traced (set -x) so a failure names the gate that stopped it.
@@ -49,9 +50,24 @@ run_concurrently() {
 	fi
 }
 
+# One live run per switch listening on LIVE_ESL_PORTS, so two FreeSWITCH trees are
+# measured side by side; a port with nothing on it is skipped, all of them failing.
+live_gates=()
+for port in ${LIVE_ESL_PORTS:-8022}; do
+	if [ -n "$(ss -Htln "sport = :$port")" ]; then
+		live_gates+=("live-$port" "ESL_PORT=$port cargo test --release --test 'live_*' -- --ignored")
+	else
+		echo "no ESL listener on port $port, its live run is skipped" >&2
+	fi
+done
+if [ "${#live_gates[@]}" -eq 0 ]; then
+	echo "no ESL listener on any of: ${LIVE_ESL_PORTS:-8022}" >&2
+	exit 1
+fi
+
 run_concurrently \
 	tests "cargo test --workspace --release --all-features" \
-	live "cargo test --test 'live_*' -- --ignored" \
+	"${live_gates[@]}" \
 	codeql "$SCRIPT_DIR/check-codeql.sh" \
 	actions "$SCRIPT_DIR/check-actions.sh"
 
