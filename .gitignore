@@ -28,6 +28,9 @@ Thumbs.db
 # Cached FreeSWITCH source for hook checks
 .freeswitch-src/
 
+# Local gitleaks rules naming operator identifiers
+/.gitleaks.local.toml
+
 # Code review transcripts (not for publishing)
 review/
 

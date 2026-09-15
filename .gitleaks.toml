@@ -34,6 +34,9 @@ regexes = [
   '''\(555\)''',
 ]
 
+# Local identifier rules live in `.gitleaks.local.toml` (gitignored), which
+# extends this file; the pre-commit hook picks it when it exists.
+
 [allowlist]
 description = "Global allowlist"
 paths = [

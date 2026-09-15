@@ -16,6 +16,18 @@ if git diff --cached --name-only --diff-filter=AM | grep -qx 'Cargo.lock'; then
     fi
 fi
 
+# Prefer .gitleaks.local.toml when present — it extends the committed
+# .gitleaks.toml with operator identifiers we do not commit. --staged scans
+# the diff about to land; a history scan would miss it.
+gitleaks_config=".gitleaks.toml"
+if [ -f ".gitleaks.local.toml" ]; then
+    gitleaks_config=".gitleaks.local.toml"
+fi
+if ! gitleaks git --staged --config "$gitleaks_config" --no-banner -v --log-level error; then
+    echo "❌ gitleaks found secrets in staged changes. Fix them before committing."
+    exit 1
+fi
+
 if ! cargo fmt --all -- --check; then
     echo "❌ Code is not formatted. Run 'cargo fmt --all' to fix."
     exit 1
