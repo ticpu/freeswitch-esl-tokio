@@ -10,9 +10,9 @@ use super::endpoint::ParseGroupCallOrderError;
 use super::variables::{
     write_escaped, BlockParse, DialStringCarrier, DialStringTarget, InvalidArgvSeparator,
 };
-use super::{originate_quote, originate_split};
+use super::{clean_argument, originate_quote, originate_split};
 use crate::channel::ParseHangupCauseError;
-use crate::tokenizer::{cleanup, delimiter_override, trace, untrace};
+use crate::tokenizer::{delimiter_override, trace};
 
 pub use super::variables::{Variables, VariablesType};
 
@@ -87,11 +87,47 @@ pub enum DialplanType {
     Xml,
 }
 
+impl DialplanType {
+    fn wire_name(&self) -> &'static str {
+        match self {
+            Self::Inline => "inline",
+            Self::Xml => "XML",
+        }
+    }
+}
+
 impl fmt::Display for DialplanType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.wire_name())
+    }
+}
+
+/// The dialplan slot: a [`DialplanType`], or the name of a dialplan module it does not cover.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Dialplan {
+    Typed(DialplanType),
+    Named(String),
+}
+
+impl Dialplan {
+    fn from_name(name: String) -> Self {
+        match name.parse() {
+            Ok(dp) => Self::Typed(dp),
+            Err(_) => Self::Named(name),
+        }
+    }
+
+    fn name(&self) -> &str {
         match self {
-            Self::Inline => f.write_str("inline"),
-            Self::Xml => f.write_str("XML"),
+            Self::Typed(dp) => dp.wire_name(),
+            Self::Named(name) => name,
+        }
+    }
+
+    fn typed(&self) -> Option<&DialplanType> {
+        match self {
+            Self::Typed(dp) => Some(dp),
+            Self::Named(_) => None,
         }
     }
 }
@@ -252,7 +288,7 @@ impl From<Vec<Application>> for OriginateTarget {
 pub struct Originate {
     endpoint: Endpoint,
     target: OriginateTarget,
-    dialplan: Option<DialplanType>,
+    dialplan: Option<Dialplan>,
     context: Option<String>,
     cid_name: Option<String>,
     cid_num: Option<String>,
@@ -268,6 +304,14 @@ pub struct Originate {
 mod serde_support {
     use super::*;
 
+    /// A config's dialplan: a [`DialplanType`] spelled as its serde form, or any other name.
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[serde(untagged)]
+    pub(super) enum DialplanField {
+        Typed(DialplanType),
+        Named(String),
+    }
+
     /// Intermediate type for serde, mirroring the old public-field layout.
     #[derive(serde::Serialize, serde::Deserialize)]
     pub(super) struct OriginateRaw {
@@ -275,7 +319,7 @@ mod serde_support {
         #[serde(flatten)]
         pub target: OriginateTarget,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        pub dialplan: Option<DialplanType>,
+        pub dialplan: Option<DialplanField>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub context: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -292,10 +336,25 @@ mod serde_support {
         type Error = OriginateError;
 
         fn try_from(raw: OriginateRaw) -> Result<Self, Self::Error> {
+            let dialplan = raw
+                .dialplan
+                .map(|field| match field {
+                    DialplanField::Typed(dp) => Dialplan::Typed(dp),
+                    DialplanField::Named(name) => Dialplan::from_name(name),
+                });
             if matches!(raw.target, OriginateTarget::Extension(_))
-                && matches!(raw.dialplan, Some(DialplanType::Inline))
+                && matches!(dialplan, Some(Dialplan::Typed(DialplanType::Inline)))
             {
                 return Err(OriginateError::ExtensionWithInlineDialplan);
+            }
+            if dialplan
+                .as_ref()
+                .is_some_and(|dp| {
+                    dp.name()
+                        .eq_ignore_ascii_case(UNDEF)
+                })
+            {
+                return Err(OriginateError::UndefPositional("dialplan"));
             }
             if let OriginateTarget::InlineApplications(ref apps) = raw.target {
                 if apps.is_empty() {
@@ -317,7 +376,7 @@ mod serde_support {
             let originate = Self {
                 endpoint: raw.endpoint,
                 target: raw.target,
-                dialplan: raw.dialplan,
+                dialplan,
                 context: raw.context,
                 cid_name: raw.cid_name,
                 cid_num: raw.cid_num,
@@ -346,7 +405,12 @@ mod serde_support {
             Self {
                 endpoint: o.endpoint,
                 target: o.target,
-                dialplan: o.dialplan,
+                dialplan: o
+                    .dialplan
+                    .map(|dp| match dp {
+                        Dialplan::Typed(dp) => DialplanField::Typed(dp),
+                        Dialplan::Named(name) => DialplanField::Named(name),
+                    }),
                 context: o.context,
                 cid_name: o.cid_name,
                 cid_num: o.cid_num,
@@ -556,8 +620,23 @@ impl Originate {
         if matches!(self.target, OriginateTarget::Extension(_)) && dp == DialplanType::Inline {
             return Err(OriginateError::ExtensionWithInlineDialplan);
         }
-        self.dialplan = Some(dp);
+        self.dialplan = Some(Dialplan::Typed(dp));
         Ok(self)
+    }
+
+    /// Name the dialplan module, for one [`DialplanType`] does not cover. The switch looks the
+    /// name up when the channel is transferred, so a name no module registers hangs it up.
+    ///
+    /// A name reading as a [`DialplanType`] in any case sets that type through
+    /// [`dialplan`](Self::dialplan), which refuses `inline` on an `Extension` target.
+    pub fn dialplan_raw(self, name: impl Into<String>) -> Result<Self, OriginateError> {
+        match Dialplan::from_name(name.into()) {
+            Dialplan::Typed(dp) => self.dialplan(dp),
+            named => Ok(Self {
+                dialplan: Some(named),
+                ..self
+            }),
+        }
     }
 
     /// Set the dialplan context. `undef` in any case reads as absent on the switch.
@@ -605,10 +684,19 @@ impl Originate {
         &mut self.target
     }
 
-    /// The dialplan type, if explicitly set.
+    /// The dialplan type, if explicitly set. `None` as well for a dialplan set by name; see
+    /// [`dialplan_name`](Self::dialplan_name).
     pub fn dialplan_type(&self) -> Option<&DialplanType> {
         self.dialplan
             .as_ref()
+            .and_then(Dialplan::typed)
+    }
+
+    /// The dialplan as the switch receives it, typed or named, if set.
+    pub fn dialplan_name(&self) -> Option<&str> {
+        self.dialplan
+            .as_ref()
+            .map(Dialplan::name)
     }
 
     /// The dialplan context, if set.
@@ -642,7 +730,7 @@ impl Originate {
 
     /// Override the dialplan type after construction.
     pub fn set_dialplan(&mut self, dp: Option<DialplanType>) {
-        self.dialplan = dp;
+        self.dialplan = dp.map(Dialplan::Typed);
     }
 
     /// Override the dialplan context after construction. `undef` in any case reads as absent
@@ -671,15 +759,16 @@ impl Originate {
     /// Dialplan, context, cid_name, cid_num and timeout through the last one set. FreeSWITCH
     /// reads them by position, so an absent slot before that is `None` rather than skipped.
     fn positional_tail(&self) -> Vec<Option<String>> {
-        let dialplan = match &self.target {
-            OriginateTarget::InlineApplications(_) => Some(
-                self.dialplan
-                    .unwrap_or(DialplanType::Inline),
-            ),
-            _ => self.dialplan,
+        let dialplan = match (&self.target, &self.dialplan) {
+            (OriginateTarget::InlineApplications(_), None) => {
+                Some(DialplanType::Inline.wire_name())
+            }
+            (_, dialplan) => dialplan
+                .as_ref()
+                .map(Dialplan::name),
         };
         let slots = [
-            dialplan.map(|dp| dp.to_string()),
+            dialplan.map(str::to_string),
             self.context
                 .clone(),
             self.cid_name
@@ -702,25 +791,17 @@ impl Originate {
             .collect()
     }
 
-    /// The target and positionals after the endpoint. On a separator each is escaped once and
-    /// an absent slot is `undef`; on blanks each is quoted and an absent dialplan or context is
-    /// the value the switch falls back to.
+    /// The target and positionals after the endpoint, an absent slot a later one forces written
+    /// `undef`. On blanks each goes through [`originate_quote`]; on a separator each is escaped
+    /// once.
     fn write_arguments(&self, f: &mut fmt::Formatter<'_>, target: &str) -> fmt::Result {
-        let fillers = match self.argv_separator {
-            None => ["XML", DEFAULT_CONTEXT, UNDEF, UNDEF, UNDEF],
-            Some(_) => [UNDEF; 5],
-        };
         let tail = self.positional_tail();
-        let arguments = std::iter::once(Some(target))
-            .chain(
-                tail.iter()
-                    .map(Option::as_deref),
-            )
-            .zip(std::iter::once(UNDEF).chain(fillers));
-        for (at, (argument, filler)) in arguments.enumerate() {
-            match (self.argv_separator, argument.unwrap_or(filler)) {
-                // A run of blanks is one split, so only quotes keep an empty argument.
-                (None, "") => f.write_str(" ''")?,
+        let arguments = std::iter::once(Some(target)).chain(
+            tail.iter()
+                .map(Option::as_deref),
+        );
+        for (at, argument) in arguments.enumerate() {
+            match (self.argv_separator, argument.unwrap_or(UNDEF)) {
                 (None, text) => write!(f, " {}", originate_quote(text))?,
                 // A trailing separator adds no argument; quotes keep a final empty one.
                 (Some(sep), "") if at == tail.len() => write!(f, "{sep}''")?,
@@ -848,7 +929,12 @@ impl Originate {
             timeout,
         } = Slots::read(args.map(|token| clean_argument(&token, sep)))?;
 
-        let target = super::parse_originate_target(&target_str, dialplan.as_ref())?;
+        let target = super::parse_originate_target(
+            &target_str,
+            dialplan
+                .as_ref()
+                .and_then(Dialplan::typed),
+        )?;
 
         let timeout = match timeout {
             None => None,
@@ -882,7 +968,7 @@ impl Originate {
 /// An originate's arguments after the endpoint, as the switch reads them.
 struct Slots {
     target: String,
-    dialplan: Option<DialplanType>,
+    dialplan: Option<Dialplan>,
     context: Option<String>,
     cid_name: Option<String>,
     cid_num: Option<String>,
@@ -903,21 +989,10 @@ impl Slots {
             Some(None) => return Err(OriginateError::UndefPositional("target")),
             Some(Some(target)) => target,
         };
-        let dialplan = match args
+        let dialplan = args
             .next()
             .flatten()
-        {
-            None => None,
-            Some(token) => Some(
-                token
-                    .parse::<DialplanType>()
-                    .map_err(|_| {
-                        OriginateError::ParseError(
-                            "the dialplan argument names no dialplan type".into(),
-                        )
-                    })?,
-            ),
-        };
+            .map(Dialplan::from_name);
         let mut next = || {
             args.next()
                 .flatten()
@@ -940,11 +1015,6 @@ impl Slots {
             timeout,
         })
     }
-}
-
-/// What the switch's cleanup after splitting on `sep`, or on blanks, leaves of `token`.
-fn clean_argument(token: &str, sep: Option<char>) -> String {
-    untrace(&cleanup(&trace(token), sep))
 }
 
 /// FreeSWITCH's `undef` placeholder, in any case, read as the absent value it stands for.
@@ -2357,15 +2427,14 @@ mod tests {
         );
     }
 
-    /// `originate_function` answers usage past seven arguments, and reads its third
-    /// strictly as the dialplan.
+    /// `originate_function` answers usage past seven arguments.
     #[test]
     fn argv_separator_parse_refuses_what_the_switch_refuses() {
-        for line in ["originate ^^~loopback/9199/test~&park()~XML~default~a~b~30~extra"] {
-            assert!(line
+        assert!(
+            "originate ^^~loopback/9199/test~&park()~XML~default~a~b~30~extra"
                 .parse::<Originate>()
-                .is_err());
-        }
+                .is_err()
+        );
     }
 
     #[test]
@@ -2507,7 +2576,7 @@ mod tests {
                     .context("test")
                     .cid_name("Alice")
                     .cid_num(""),
-                "originate loopback/9199/test 1000 XML test Alice ''",
+                "originate loopback/9199/test 1000 undef test Alice ''",
             ),
         ];
         for (cmd, wire) in cases {

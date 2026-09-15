@@ -46,7 +46,9 @@ pub use variables::{
     UnvouchedVersion, VariablesDisplay,
 };
 
-use crate::tokenizer::{blank_delim_spans, char_delim_spans, delimiter_override, trace};
+use crate::tokenizer::{
+    blank_delim_spans, char_delim_spans, cleanup, delimiter_override, trace, untrace,
+};
 use originate::DEFAULT_INLINE_DELIMITER;
 
 /// Find the index of the closing bracket matching the opener at position 0.
@@ -70,14 +72,12 @@ pub(crate) fn find_matching_bracket(s: &str, open: char, close: char) -> Option<
 
 /// Wrap a token in single quotes for originate command strings.
 ///
-/// A token carrying a single quote is wrapped as [`quote_for_uuid_setvar`] does, which the
-/// same blank split reads back; one carrying only spaces is wrapped in `'...'`; any other is
-/// returned as-is.
+/// A token that is empty or carries a space, single quote or backslash is escaped and wrapped
+/// as [`quote_for_uuid_setvar`] does, since that command splits on the same blank tokenizer;
+/// any other token is returned as-is.
 pub fn originate_quote(token: &str) -> String {
-    if token.contains('\'') {
+    if token.is_empty() || token.contains([' ', '\'', '\\']) {
         quote_for_uuid_setvar(token)
-    } else if token.contains(' ') {
-        format!("'{token}'")
     } else {
         token.to_string()
     }
@@ -104,18 +104,15 @@ pub fn quote_for_uuid_setvar(value: &str) -> String {
     out
 }
 
-/// Strip single-quote wrapping added by [`originate_quote`].
-///
-/// If the token starts and ends with `'`, the outer quotes are removed
-/// and `\'` sequences are unescaped back to `'`.
+/// What the switch delivers of one token of the blank split: its quotes stripped and its
+/// escapes read, the exact inverse of [`originate_quote`].
 pub fn originate_unquote(token: &str) -> String {
-    match token
-        .strip_prefix('\'')
-        .and_then(|s| s.strip_suffix('\''))
-    {
-        Some(inner) => inner.replace("\\'", "'"),
-        None => token.to_string(),
-    }
+    clean_argument(token, None)
+}
+
+/// What the switch's cleanup after splitting on `sep`, or on blanks, leaves of `token`.
+pub(crate) fn clean_argument(token: &str, sep: Option<char>) -> String {
+    untrace(&cleanup(&trace(token), sep))
 }
 
 /// Split a command line the way the `originate` API splits its arguments.
