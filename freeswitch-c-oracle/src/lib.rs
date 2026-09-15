@@ -3,7 +3,7 @@
 //!
 //! Every call works on bytes, and the C reads its input up to the first NUL.
 
-use std::ffi::{c_char, c_uint, CStr};
+use std::ffi::{c_char, c_int, c_uint, CStr};
 
 /// One FreeSWITCH tree the build compiles: the pin, or an entry of `trees` in the index.
 #[derive(Debug)]
@@ -59,6 +59,11 @@ struct Abi {
     separate_string_string:
         unsafe extern "C" fn(*mut c_char, *mut c_char, *mut *mut c_char, c_uint) -> c_uint,
     find_end_paren: unsafe extern "C" fn(*const c_char, c_char, c_char) -> *mut c_char,
+    url_encode_opt: unsafe extern "C" fn(*const c_char, *mut c_char, usize, c_int) -> *mut c_char,
+    url_encode: unsafe extern "C" fn(*const c_char, *mut c_char, usize) -> *mut c_char,
+    needs_url_encode: unsafe extern "C" fn(*const c_char) -> c_int,
+    core_url_encode_opt: unsafe extern "C" fn(*const c_char, c_int, *mut c_char, usize) -> usize,
+    url_unsafe: unsafe extern "C" fn() -> *const c_char,
 }
 
 /// Link one tree's prefixed symbols into a module holding its `ABI`.
@@ -66,7 +71,7 @@ struct Abi {
 macro_rules! tree_abi {
     ($tree:ident, $prefix:literal) => {
         mod $tree {
-            use std::ffi::{c_char, c_uint};
+            use std::ffi::{c_char, c_int, c_uint};
 
             extern "C" {
                 #[link_name = concat!($prefix, "oracle_cleanup")]
@@ -100,6 +105,26 @@ macro_rules! tree_abi {
                 ) -> c_uint;
                 #[link_name = concat!($prefix, "switch_find_end_paren")]
                 fn find_end_paren(s: *const c_char, open: c_char, close: c_char) -> *mut c_char;
+                #[link_name = concat!($prefix, "switch_url_encode_opt")]
+                fn url_encode_opt(
+                    url: *const c_char,
+                    buf: *mut c_char,
+                    len: usize,
+                    double_encode: c_int,
+                ) -> *mut c_char;
+                #[link_name = concat!($prefix, "switch_url_encode")]
+                fn url_encode(url: *const c_char, buf: *mut c_char, len: usize) -> *mut c_char;
+                #[link_name = concat!($prefix, "oracle_needs_url_encode")]
+                fn needs_url_encode(s: *const c_char) -> c_int;
+                #[link_name = concat!($prefix, "oracle_core_url_encode_opt")]
+                fn core_url_encode_opt(
+                    url: *const c_char,
+                    double_encode: c_int,
+                    out: *mut c_char,
+                    outlen: usize,
+                ) -> usize;
+                #[link_name = concat!($prefix, "oracle_url_unsafe")]
+                fn url_unsafe() -> *const c_char;
             }
 
             pub(super) static ABI: super::Abi = super::Abi {
@@ -109,6 +134,11 @@ macro_rules! tree_abi {
                 separate_string,
                 separate_string_string,
                 find_end_paren,
+                url_encode_opt,
+                url_encode,
+                needs_url_encode,
+                core_url_encode_opt,
+                url_unsafe,
             };
         }
     };
@@ -256,4 +286,104 @@ impl Oracle {
                 )
         } as usize)
     }
+
+    /// `switch_url_encode_opt` into a buffer of `len` bytes, terminator included.
+    pub fn url_encode_opt(self, url: &[u8], len: usize, double_encode: bool) -> Vec<u8> {
+        encode_into(url, len, |url, buf| {
+            // SAFETY: `url` is NUL-terminated and `buf` holds `len` bytes, at least one.
+            unsafe {
+                (self
+                    .abi
+                    .url_encode_opt)(url, buf, len, c_int::from(double_encode))
+            }
+        })
+    }
+
+    /// `switch_url_encode` into a buffer of `len` bytes, terminator included.
+    pub fn url_encode(self, url: &[u8], len: usize) -> Vec<u8> {
+        encode_into(url, len, |url, buf| {
+            // SAFETY: `url` is NUL-terminated and `buf` holds `len` bytes, at least one.
+            unsafe {
+                (self
+                    .abi
+                    .url_encode)(url, buf, len)
+            }
+        })
+    }
+
+    /// `switch_needs_url_encode`, the check `protect_dest_uri` in mod_sofia runs first.
+    pub fn needs_url_encode(self, s: &[u8]) -> bool {
+        let buffer = buffer(s);
+        // SAFETY: the buffer is NUL-terminated and the C only reads it.
+        let needs = unsafe {
+            (self
+                .abi
+                .needs_url_encode)(
+                buffer
+                    .as_ptr()
+                    .cast(),
+            )
+        };
+        needs != 0
+    }
+
+    /// `switch_core_url_encode_opt`, which sizes its own buffer from a memory pool.
+    pub fn core_url_encode_opt(self, url: &[u8], double_encode: bool) -> Vec<u8> {
+        let input = buffer(url);
+        let mut out = vec![0u8; url.len() * 3 + 1];
+        // SAFETY: `input` is NUL-terminated and `out` holds the length passed.
+        let len = unsafe {
+            (self
+                .abi
+                .core_url_encode_opt)(
+                input
+                    .as_ptr()
+                    .cast(),
+                c_int::from(double_encode),
+                out.as_mut_ptr()
+                    .cast(),
+                out.len(),
+            )
+        };
+        assert!(
+            len != usize::MAX,
+            "an encoding longer than three bytes per input byte"
+        );
+        out.truncate(len);
+        out
+    }
+
+    /// `SWITCH_URL_UNSAFE`.
+    pub fn url_unsafe(self) -> &'static [u8] {
+        // SAFETY: the C returns a string literal.
+        unsafe {
+            CStr::from_ptr((self
+                .abi
+                .url_unsafe)())
+        }
+        .to_bytes()
+    }
+}
+
+/// Run a C encoder over a NUL-terminated copy of `url` into a zeroed buffer of `len` bytes.
+fn encode_into(
+    url: &[u8],
+    len: usize,
+    call: impl FnOnce(*const c_char, *mut c_char) -> *mut c_char,
+) -> Vec<u8> {
+    assert!(len > 0, "the C writes a terminator into the last byte");
+    let input = buffer(url);
+    let mut buf = vec![0u8; len];
+    let written = call(
+        input
+            .as_ptr()
+            .cast(),
+        buf.as_mut_ptr()
+            .cast(),
+    );
+    assert!(!written.is_null(), "the encoder was given a buffer");
+    // SAFETY: the C terminated what it wrote inside `buf`.
+    unsafe { CStr::from_ptr(written) }
+        .to_bytes()
+        .to_vec()
 }

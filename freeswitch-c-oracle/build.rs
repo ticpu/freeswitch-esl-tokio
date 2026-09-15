@@ -12,6 +12,7 @@ use std::process::Command;
 use serde::Deserialize;
 
 const UTILS: &str = "src/switch_utils.c";
+const UTILS_H: &str = "src/include/switch_utils.h";
 
 const TOKENIZER: &[&str] = &[
     "unescape_char",
@@ -23,10 +24,83 @@ const TOKENIZER: &[&str] = &[
     "switch_find_end_paren",
 ];
 
-/// Harness symbols Rust links against, renamed per tree like every extracted function.
-const EXPORTS: &[&str] = &["oracle_cleanup", "oracle_char_delim", "oracle_blank_delim"];
+const URL_ENCODE: &[&str] = &[
+    "switch_url_encode_opt",
+    "switch_url_encode",
+    "switch_core_url_encode_opt",
+];
 
-const PRELUDE: &str = "#include <string.h>\n#define SWITCH_DECLARE(type) type\n";
+const HEADER_FUNCTIONS: &[&str] = &["switch_needs_url_encode"];
+
+/// Harness symbols Rust links against, renamed per tree like every extracted function.
+const EXPORTS: &[&str] = &[
+    "oracle_cleanup",
+    "oracle_char_delim",
+    "oracle_blank_delim",
+    "oracle_needs_url_encode",
+    "oracle_core_url_encode_opt",
+    "oracle_url_unsafe",
+];
+
+/// What the extracted code needs of the switch's types and memory pools.
+const PRELUDE: &str = r"#include <stdlib.h>
+#include <string.h>
+#define SWITCH_DECLARE(type) type
+typedef int switch_bool_t;
+#define SWITCH_FALSE 0
+#define SWITCH_TRUE 1
+typedef size_t switch_size_t;
+
+typedef struct switch_memory_pool {
+	void *allocs[4];
+	int count;
+} switch_memory_pool_t;
+
+static void *oracle_pool_alloc(switch_memory_pool_t *pool, size_t size)
+{
+	if (pool->count == sizeof(pool->allocs) / sizeof(pool->allocs[0])) {
+		abort();
+	}
+	return pool->allocs[pool->count++] = calloc(1, size);
+}
+
+static char *oracle_pool_strdup(switch_memory_pool_t *pool, const char *s)
+{
+	return strcpy(oracle_pool_alloc(pool, strlen(s) + 1), s);
+}
+
+#define switch_core_alloc(_pool, _mem) oracle_pool_alloc(_pool, _mem)
+#define switch_core_strdup(_pool, _todup) oracle_pool_strdup(_pool, _todup)
+";
+
+const URL_WRAPPERS: &str = r"
+int oracle_needs_url_encode(const char *s)
+{
+	return switch_needs_url_encode(s);
+}
+
+const char *oracle_url_unsafe(void)
+{
+	return SWITCH_URL_UNSAFE;
+}
+
+size_t oracle_core_url_encode_opt(const char *url, switch_bool_t double_encode, char *out, size_t outlen)
+{
+	switch_memory_pool_t pool = { { 0 }, 0 };
+	char *encoded = switch_core_url_encode_opt(&pool, url, double_encode);
+	size_t len = strlen(encoded);
+
+	if (len < outlen) {
+		memcpy(out, encoded, len + 1);
+	} else {
+		len = (size_t) -1;
+	}
+	while (pool.count) {
+		free(pool.allocs[--pool.count]);
+	}
+	return len;
+}
+";
 
 const WRAPPERS: &str = r"
 char *oracle_cleanup(char *str, char delim)
@@ -223,20 +297,29 @@ impl<'r> Source<'r> {
             })
     }
 
-    /// The `#define` line naming `name`; a tree that moved it breaks the build rather than the oracle.
+    /// The `#define` naming `name`, continuation lines included; a tree that moved it breaks the
+    /// build rather than the oracle.
     fn define(&mut self, path: &'static str, name: &str) -> String {
         let commit = self
             .commit
             .clone();
-        self.file(path)
+        let lines: Vec<&str> = self
+            .file(path)
             .lines()
-            .find(|line| {
+            .collect();
+        let start = lines
+            .iter()
+            .position(|line| {
                 line.strip_prefix("#define ")
                     .and_then(|rest| rest.strip_prefix(name))
-                    .is_some_and(|rest| rest.starts_with([' ', '\t']))
+                    .is_some_and(|rest| rest.starts_with([' ', '\t', '(']))
             })
-            .map(|line| format!("{line}\n"))
-            .unwrap_or_else(|| panic!("{path} at {commit} defines no {name}"))
+            .unwrap_or_else(|| panic!("{path} at {commit} defines no {name}"));
+        let end = lines[start..]
+            .iter()
+            .position(|line| !line.ends_with('\\'))
+            .map_or(lines.len() - 1, |at| start + at);
+        format!("{}\n", lines[start..=end].join("\n"))
     }
 
     /// A function's definition, from its signature at column 0 to the brace closing it there.
@@ -282,18 +365,31 @@ fn compile(tree: &Tree, source: &mut Source<'_>, out: &Path) {
     let mut unit = String::from(PRELUDE);
     for symbol in TOKENIZER
         .iter()
+        .chain(URL_ENCODE)
+        .chain(HEADER_FUNCTIONS)
         .chain(EXPORTS)
     {
         writeln!(unit, "#define {symbol} {}_{symbol}", tree.name).expect("String write");
     }
     unit.push_str(&source.define(UTILS, "ESCAPE_META"));
-    for name in TOKENIZER {
+    unit.push_str(&source.define(UTILS_H, "end_of_p"));
+    unit.push_str(&source.define(UTILS_H, "SWITCH_URL_UNSAFE"));
+    for name in HEADER_FUNCTIONS {
+        unit.push_str(&source.function(UTILS_H, name));
+    }
+    for name in TOKENIZER
+        .iter()
+        .chain(URL_ENCODE)
+    {
         unit.push_str(&source.function(UTILS, name));
     }
     unit.push_str(WRAPPERS);
+    unit.push_str(URL_WRAPPERS);
     let file = out.join(format!("{}.c", tree.name));
     fs::write(&file, unit).unwrap_or_else(|e| panic!("writing {}: {e}", file.display()));
+    // The unit is the switch's code as each tree ships it, so its warnings are not ours to fix.
     cc::Build::new()
+        .warnings(false)
         .file(&file)
         .compile(&format!("freeswitch_{}", tree.name));
 }
