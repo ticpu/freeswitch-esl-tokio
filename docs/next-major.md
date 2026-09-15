@@ -47,7 +47,8 @@ fifth: any occurrence in a dial string sends the originate down the enterprise
 split, whatever the quoting. A key is the sixth: an empty one is installed
 nowhere, and one carrying `:_:`, an unbalanced bracket, a quote in channel
 scope or the block's `^^` separator is split or paired before the switch
-installs it.
+installs it. One carrying `[` is read as an array index and installed under the
+text before it, and two differing only in case install as one.
 Refusing them is the only correct handling,
 and it cannot live at render time — `Display` is infallible and `ToString`
 panics on a `fmt::Error`, which would put a panic in a library. Until these

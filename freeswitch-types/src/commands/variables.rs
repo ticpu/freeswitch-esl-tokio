@@ -2855,6 +2855,70 @@ mod tests {
         assert!(serde_json::from_str::<Variables>(r#"{"a=b, c":"v"}"#).is_ok());
     }
 
+    /// `switch_event_base_add_header` reads a name carrying `[` as an array index and installs the
+    /// value under the text before it, in every scope.
+    #[test]
+    fn a_key_carrying_an_array_index_is_refused_at_parse_and_config_load() {
+        for block in [
+            "{SECRET[1]=v,after=sentinel}",
+            "<SECRET[x=v>",
+            "[SECRET[1]=v]",
+            r"{^^;SECRET[0]=v;after=a,b}",
+        ] {
+            let msg = Variables::parse_for(block, DialStringCarrier::Dialplan)
+                .expect_err(block)
+                .to_string();
+            assert!(!msg.contains("SECRET"), "{block}: {msg}");
+        }
+        for json in [
+            r#"{"SECRET[1]":"v"}"#,
+            r#"{"scope":"channel","vars":{"SECRET[0]":"v"}}"#,
+        ] {
+            let msg = serde_json::from_str::<Variables>(json)
+                .expect_err(json)
+                .to_string();
+            assert!(!msg.contains("SECRET"), "{json}: {msg}");
+        }
+        assert!(serde_json::from_str::<Variables>(r#"{"SECRET]":"v"}"#).is_ok());
+    }
+
+    /// A block's variables land in one `EF_UNIQ_HEADERS` event, whose add deletes every header of
+    /// the name by `strcasecmp`, so two names differing only in case install as one.
+    #[test]
+    fn two_keys_differing_only_in_case_are_refused_at_parse_and_config_load() {
+        for block in [
+            "{Secret=1,SECRET=2}",
+            "<secret=1,after=a,SECRET=2>",
+            "[SeCrEt=1,secret=2]",
+            "{^^;secret=1;SECRET=a,b}",
+        ] {
+            let msg = Variables::parse_for(block, DialStringCarrier::EslApi)
+                .expect_err(block)
+                .to_string();
+            assert!(
+                !msg.to_ascii_lowercase()
+                    .contains("secret"),
+                "{block}: {msg}"
+            );
+        }
+        for json in [
+            r#"{"Secret":"1","SECRET":"2"}"#,
+            r#"{"scope":"enterprise","vars":{"secret":"1","Secret":"2"}}"#,
+        ] {
+            let msg = serde_json::from_str::<Variables>(json)
+                .expect_err(json)
+                .to_string();
+            assert!(
+                !msg.to_ascii_lowercase()
+                    .contains("secret"),
+                "{json}: {msg}"
+            );
+        }
+        let same = Variables::parse_for("{k=1,k=2}", DialStringCarrier::EslApi)
+            .expect("a repeated name is the last one written, on the switch and here");
+        assert_eq!(same.get("k"), Some("2"));
+    }
+
     /// The caller has to decide what to name instead, so the refusal says what
     /// would have been accepted.
     #[test]
