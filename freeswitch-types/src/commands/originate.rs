@@ -623,12 +623,6 @@ impl Originate {
         self.argv_separator
     }
 
-    /// Always `Ok`: every inline argument is escaped for the splits that read it, so none is
-    /// undeliverable.
-    pub fn validate_inline(&self) -> Result<(), OriginateError> {
-        Ok(())
-    }
-
     /// Set the dialplan type.
     ///
     /// Returns `Err` if setting `Inline` on an `Extension` target, or anything but `Inline` on
@@ -1076,12 +1070,6 @@ pub enum OriginateError {
     UnknownEndpointType(String),
     /// An inline separator the hunt's split breaks on, or `:`. Carries it.
     InvalidInlineDelimiter(char),
-    /// An inline argument the switch cannot deliver. Not returned: every inline argument is
-    /// escaped for the splits that read it.
-    UndeliverableArgument {
-        /// The application whose arguments cannot be delivered.
-        application: String,
-    },
     /// A `^^` argument separator [`DialStringTarget::with_argv_separator`] refuses.
     InvalidArgvSeparator(InvalidArgvSeparator),
     /// A positional argument reads `undef`, which the switch takes as absent. Names the field.
@@ -1146,10 +1134,6 @@ impl std::fmt::Display for OriginateError {
             Self::InvalidInlineDelimiter(_) => {
                 f.write_str("the named separator cannot separate an inline action list")
             }
-            Self::UndeliverableArgument { application } => write!(
-                f,
-                "the {application} argument cannot be delivered in an inline action list"
-            ),
             Self::UnknownEndpointType(s) => {
                 write!(f, "unknown endpoint type ({} bytes)", s.len())
             }
@@ -1197,7 +1181,6 @@ impl std::error::Error for OriginateError {
             | Self::VariablesNotSupported(_)
             | Self::UnknownEndpointType(_)
             | Self::InvalidInlineDelimiter(_)
-            | Self::UndeliverableArgument { .. }
             | Self::UndefPositional(_)
             | Self::ExtensionReadsAsApplication
             | Self::ParenthesisInApplication { .. }
@@ -2298,7 +2281,6 @@ mod tests {
             ),
         ];
         for (cmd, wire) in cases {
-            assert_eq!(cmd.validate_inline(), Ok(()));
             assert_eq!(cmd.to_string(), wire);
             let parsed: Originate = wire
                 .parse()
