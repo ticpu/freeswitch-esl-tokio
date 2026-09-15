@@ -10,3 +10,4 @@ cc aeedd9193c9a0f8e70e8d0c40cba27effe56b24d45acced11d77fdea05ce6f67 # shrinks to
 cc 02edc0d9ba9f6c329609bb9fd7a5e661766ac6464cb945b7a2b31ed0c03645af # shrinks to (SofiaContact(SofiaContact { user: "", domain: "a", profile: None, variables: None }), None)
 cc 37b6ba9155e709c5db2bf833958f1aea6f130307bdca4aa16c88e3e01c8895ea # shrinks to (Channel, Some(','), [(None, "\\"), (None, " ")])
 cc 7a580fca4ceec240af0691e3a13a6632e2536993078a4bb9560e32dba1b6b8ed # shrinks to (Channel, Some(','), [(None, "\\"), (None, "\"")])
+cc 9f77ab6080e1defc772012c7618f606f85d24530f86cba6a2c356b06845b5d12 # shrinks to BridgeSpec { global: None, groups: [[(User(UserEndpoint { name: "['", domain: None, variables: None }), None), (SofiaGateway(SofiaGateway { gateway: "", destination: "]", profile: Some(" "), variables: None }), None)]] }

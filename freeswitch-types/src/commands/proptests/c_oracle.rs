@@ -152,3 +152,89 @@ fn endpoints_arrive_through_the_c_passes() {
         },
     );
 }
+
+/// A bridge dial string read by the switch's C: the dialplan expansion of the application's
+/// argument, then the originate passes, one leg per endpoint.
+#[test]
+fn bridges_dial_through_the_c_passes() {
+    type LegRead = (Vec<freeswitch_c_oracle::Pair>, Option<Vec<u8>>);
+    let bytes = |vars: Option<&Variables>| -> Vec<freeswitch_c_oracle::Pair> {
+        vars.map(pairs)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(key, value)| (key.into_bytes(), value.into_bytes()))
+            .collect()
+    };
+    against_the_c(
+        file!(),
+        "bridges_dial_through_the_c_passes",
+        bridge_spec(),
+        |c, spec| {
+            let Some(bridge) = build_bridge(&spec) else {
+                return Ok(());
+            };
+            // The expansion substitutes an expression, which the stub answers with nothing.
+            let expression = bridge
+                .groups()
+                .iter()
+                .flatten()
+                .any(|endpoint| {
+                    matches!(endpoint, Endpoint::SofiaContact(_) | Endpoint::GroupCall(_))
+                });
+            if expression || config_refuses_bridge(&bridge) {
+                return Ok(());
+            }
+            let rendered = bridge.to_string();
+            let dial = c.dial(
+                &c.expand(rendered.as_bytes())
+                    .text,
+            );
+            let want: Vec<Vec<LegRead>> = bridge
+                .groups()
+                .iter()
+                .map(|group| {
+                    group
+                        .iter()
+                        .map(|endpoint| {
+                            (
+                                bytes(endpoint.variables()),
+                                Some(
+                                    endpoint
+                                        .module_text()
+                                        .into_bytes(),
+                                ),
+                            )
+                        })
+                        .collect()
+                })
+                .collect();
+            let [thread] = &dial.threads[..] else {
+                return Err(TestCaseError::fail(format!("{rendered:?} dials {dial:?}")));
+            };
+            let got: Vec<Vec<LegRead>> = thread
+                .groups
+                .iter()
+                .map(|group| {
+                    group
+                        .iter()
+                        .map(|leg| {
+                            (
+                                leg.pairs
+                                    .clone(),
+                                leg.endpoint
+                                    .clone(),
+                            )
+                        })
+                        .collect()
+                })
+                .collect();
+            prop_assert_eq!(
+                (&thread.failure, &thread.pairs, &got),
+                (&None, &bytes(bridge.variables()), &want),
+                "{:?}",
+                rendered
+            );
+            Ok(())
+        },
+    );
+}

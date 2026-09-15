@@ -211,3 +211,25 @@ proptest! {
         prop_assert!(!split.open_quote, "{line:?}");
     }
 }
+
+proptest! {
+    #![proptest_config(config())]
+
+    #[test]
+    fn a_bridge_parses_back_as_built_or_is_refused(spec in bridge_spec()) {
+        let Some(bridge) = build_bridge(&spec) else {
+            return Ok(());
+        };
+        if config_refuses_bridge(&bridge) {
+            return Ok(());
+        }
+        let rendered = bridge.to_string();
+        let parsed = rendered.parse::<BridgeDialString>();
+        prop_assert_eq!(
+            parsed.as_ref().map(bridge_view),
+            Ok(bridge_view(&bridge)),
+            "rendered {:?}",
+            rendered
+        );
+    }
+}

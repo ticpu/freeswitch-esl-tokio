@@ -10,6 +10,7 @@ use proptest::option;
 use proptest::prelude::*;
 use proptest::sample::select;
 
+use super::bridge::BridgeDialString;
 use super::{
     originate_quote, originate_unquote, AudioEndpoint, BlockParse, DialString, DialStringCarrier,
     DialStringTarget, Endpoint, ErrorEndpoint, FlattenedDialString, FlattenedLeg, GroupCall,
@@ -435,4 +436,79 @@ fn views(list: &FlattenedDialString, keys: &[LegView]) -> Vec<LegView> {
         .zip(keys)
         .map(|(leg, keys)| view(leg, keys))
         .collect()
+}
+
+/// A block's separator and entries, before `build_vars` names its scope.
+type BlockSpec = (Option<char>, Vec<Entry>);
+
+#[derive(Debug, Clone)]
+struct BridgeSpec {
+    global: Option<BlockSpec>,
+    groups: Vec<Vec<(Endpoint, Option<BlockSpec>)>>,
+}
+
+fn bridge_spec() -> impl Strategy<Value = BridgeSpec> {
+    let block = || (block_separator(), entries(1..3));
+    let endpoint = (bare_endpoint(), option::of(block()));
+    (option::of(block()), vec(vec(endpoint, 1..3), 1..3))
+        .prop_map(|(global, groups)| BridgeSpec { global, groups })
+}
+
+/// The bridge the spec describes, or `None` where the builder refuses a separator or a field is
+/// left to the switch's expansion.
+fn build_bridge(spec: &BridgeSpec) -> Option<BridgeDialString> {
+    let block = |scope, (sep, values): &BlockSpec| {
+        build_vars(scope, "v", values, *sep).filter(|vars| !left_to_the_switch(vars))
+    };
+    let mut groups = Vec::new();
+    for group in &spec.groups {
+        let mut endpoints = Vec::new();
+        for (bare, vars) in group {
+            if fields_name_a_variable(bare) {
+                return None;
+            }
+            let mut endpoint = bare.clone();
+            if let Some(vars) = vars {
+                endpoint.set_variables(Some(block(VariablesType::Channel, vars)?));
+            }
+            endpoints.push(endpoint);
+        }
+        groups.push(endpoints);
+    }
+    let bridge = BridgeDialString::new(groups);
+    Some(match &spec.global {
+        Some(vars) => bridge.with_variables(block(VariablesType::Default, vars)?),
+        None => bridge,
+    })
+}
+
+fn config_refuses_bridge(bridge: &BridgeDialString) -> bool {
+    serde_json::to_value(bridge)
+        .and_then(serde_json::from_value::<BridgeDialString>)
+        .is_err()
+}
+
+type ScopedPairs = Option<(VariablesType, Vec<(String, String)>)>;
+
+/// What a bridge dials: its own block's pairs, and each endpoint with the pairs of its block.
+fn bridge_view(bridge: &BridgeDialString) -> (ScopedPairs, Vec<Vec<(Endpoint, ScopedPairs)>>) {
+    let scoped = |vars: Option<&Variables>| {
+        vars.filter(|vars| !vars.is_empty())
+            .map(|vars| (vars.scope(), pairs(vars)))
+    };
+    let groups = bridge
+        .groups()
+        .iter()
+        .map(|group| {
+            group
+                .iter()
+                .map(|endpoint| {
+                    let mut bare = canonical(endpoint);
+                    bare.set_variables(None);
+                    (bare, scoped(endpoint.variables()))
+                })
+                .collect()
+        })
+        .collect();
+    (scoped(bridge.variables()), groups)
 }
