@@ -299,7 +299,7 @@ impl fmt::Display for InvalidArgvSeparator {
 impl std::error::Error for InvalidArgvSeparator {}
 
 /// Space, controls, non-ASCII, `\`, `'` and lowercase `n r t s` break the switch's split or its
-/// escapes; the dial-string grammar's characters and other alphanumerics are refused as policy.
+/// escapes; as policy, what reads as dial-string grammar, quoting, an escape letter or a word.
 fn usable_argv_separator(sep: char) -> bool {
     sep.is_ascii_graphic()
         && !sep.is_ascii_alphanumeric()
@@ -403,8 +403,9 @@ impl DialStringTarget {
     /// split's cleanup; parsed, that cleanup runs first and a second argument is refused.
     ///
     /// Refused: separators the switch splits or unescapes wrongly (space, `\`, `'`, lowercase
-    /// `n r t s`, controls, non-ASCII) and, as policy, `^ " , | [ ] { } < > = :` and every other
-    /// letter or digit. A `'` separator pairs with the next one as quotes.
+    /// `n r t s`, controls, non-ASCII) and, as policy, `^ " , | [ ] { } < > = :`, which read as
+    /// dial-string grammar or quoting, and every other letter or digit, which reads as part of a word.
+    /// A `'` separator pairs with the next one as quotes.
     pub fn with_argv_separator(mut self, sep: char) -> Result<Self, InvalidArgvSeparator> {
         match self.carrier {
             DialStringCarrier::EslApi => {}
@@ -2074,7 +2075,7 @@ mod tests {
     }
 
     /// Space, `\`, `'`, lowercase `n r t s`, controls and non-ASCII break the switch's split
-    /// or its escapes; the rest collide with the dial-string grammar.
+    /// or its escapes; the rest read as grammar, quoting, an escape letter or a word.
     #[test]
     fn unusable_argv_separators_are_refused() {
         for sep in [
