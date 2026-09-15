@@ -324,6 +324,26 @@ three scopes over `originate`, `bridge` and an `originate ^^~` line:
   but the originate is still split into threads. `Variables` refuses such a
   value wherever it is parsed or loaded.
 
+### Variable names
+
+A key meets every pass its value meets: the carrier's, the leg splits in `[]`,
+the separator split, and then the `=` split, which keeps its first field whole
+as the key and the rest as the value. `Variables` escapes a key as it escapes a
+value in the same block, and adds two rules for the `=` split:
+
+- `=` is written `\=`. The split skips the byte after a backslash, and its
+  cleanup reads `\=` as `=`; every earlier pass leaves `\=` alone.
+- A key opening `^^` follows an empty `''`, escaped to reach the `=` split bare.
+  `switch_separate_string` reads a token opening `^^` and a byte as naming its
+  own separator, so such a key would pick the `=` split's delimiter, and as the
+  block's first key the block's separator.
+
+What no escaping delivers is refused on parse and config load: an empty key,
+which `switch_channel_set_variable_var_check` installs nowhere; `:_:`; a single
+quote in channel scope; a bracket of the block's own kind left unbalanced; and,
+in a `^^` block, the separator. A refusal names the variable name as the field,
+never its text.
+
 ### A value naming a variable
 
 `Variables` writes a `${…}` reference as it stands and leaves it to the switch.

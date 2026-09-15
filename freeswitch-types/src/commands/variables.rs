@@ -65,12 +65,20 @@ pub(crate) enum EscapedField {
     },
     /// A leg's text after its blocks, which the leg splits read and the endpoint module parses.
     Endpoint,
+    /// A pair's key, which meets the value's passes and ends the `=` split.
+    Key {
+        scope: VariablesType,
+        commas_separate: bool,
+    },
 }
 
 impl EscapedField {
     fn escapes_comma(self) -> bool {
         match self {
             Self::Value {
+                commas_separate, ..
+            }
+            | Self::Key {
                 commas_separate, ..
             } => commas_separate,
             Self::Endpoint => true,
@@ -79,7 +87,7 @@ impl EscapedField {
 
     fn escapes_pipe(self) -> bool {
         match self {
-            Self::Value { scope, .. } => scope == VariablesType::Channel,
+            Self::Value { scope, .. } | Self::Key { scope, .. } => scope == VariablesType::Channel,
             Self::Endpoint => true,
         }
     }
@@ -93,6 +101,9 @@ impl EscapedField {
 /// spaces is wrapped in single quotes. This form round-trips through [`FromStr`];
 /// what the switch itself decodes depends on which command carries the block
 /// and which parser revision reads it, documented in `docs/dial-string-format.md`.
+///
+/// A key meets the same passes and is escaped the same way, with `\=` for the `=` split and an
+/// empty `''` ahead of one opening `^^`.
 ///
 /// A value naming a variable (`${…}`) is left to the switch, which expands it or
 /// drops it at install unless `origination_nested_vars` is true.
@@ -603,7 +614,7 @@ impl DialStringTarget {
     fn passes(self, field: EscapedField) -> u32 {
         self.argument_passes()
             + match field {
-                EscapedField::Value { scope, .. } => {
+                EscapedField::Value { scope, .. } | EscapedField::Key { scope, .. } => {
                     self.block_parse
                         .cleanup_passes()
                         + scope.leg_split_passes()
@@ -648,6 +659,13 @@ impl DialStringTarget {
         self.quote_bare_after(self.argument_passes() + 1)
             .repeat(2)
     }
+
+    /// An empty `''` reaching the `=` split bare ahead of a key opening `^^`, which would otherwise
+    /// name that split's separator, or the block's when the key is first.
+    fn caret_guard(self, field: EscapedField) -> String {
+        self.quote_bare_after(self.passes(field) - 1)
+            .repeat(2)
+    }
 }
 
 struct RenderedAt<'r, R> {
@@ -670,13 +688,59 @@ impl From<DialStringCarrier> for DialStringTarget {
     }
 }
 
-/// Reject a value no escaping carries: `:_:`, a quote in channel scope, an empty value or an
-/// unbalanced bracket. Each error names why the switch loses it.
+/// Why the scope's brackets in `text` move the end the switch counts its way to.
+fn unbalanced(text: &str, vars_type: VariablesType) -> Option<String> {
+    let (open, close) = vars_type.delimiters();
+    let mut depth = 0i32;
+    for ch in text.chars() {
+        if ch == open {
+            depth += 1;
+        } else if ch == close {
+            depth -= 1;
+            if depth < 0 {
+                return Some(format!(
+                    "closes a '{open}' it never opened, ending the block early"
+                ));
+            }
+        }
+    }
+    (depth != 0).then(|| format!("opens a '{open}' it never closes, swallowing the block's end"))
+}
+
+/// Reject a key no escaping carries: empty, `:_:`, a quote in channel scope or an unbalanced
+/// bracket. The key is the offending text, so no error quotes it.
+fn check_key(key: &str, vars_type: VariablesType) -> Result<(), OriginateError> {
+    let fault = if key.is_empty() {
+        Some("is empty, which the switch installs under no name".to_owned())
+    } else if key.contains(ENTERPRISE_DELIM) {
+        Some(format!(
+            "carries the enterprise separator {ENTERPRISE_DELIM}, on which the switch splits \
+             the dial string into threads whatever quoting or escaping surrounds it"
+        ))
+    } else if vars_type == VariablesType::Channel && key.contains('\'') {
+        Some(
+            "carries a single quote in channel scope, which the switch pairs with the next \
+             quote in the dial string before it parses the block"
+                .to_owned(),
+        )
+    } else {
+        unbalanced(key, vars_type)
+    };
+    fault.map_or(Ok(()), |fault| {
+        Err(OriginateError::ParseError(format!(
+            "a variable name {fault}"
+        )))
+    })
+}
+
+/// Reject a pair no escaping carries: a key [`check_key`] refuses, or a value carrying `:_:`, a
+/// quote in channel scope, nothing or an unbalanced bracket. Each error names why the switch loses it.
 fn check_representable(
     key: &str,
     value: &str,
     vars_type: VariablesType,
 ) -> Result<(), OriginateError> {
+    check_key(key, vars_type)?;
     if value.contains(ENTERPRISE_DELIM) {
         return Err(OriginateError::ParseError(format!(
             "variable {key} carries the enterprise separator {ENTERPRISE_DELIM}, on which \
@@ -701,26 +765,11 @@ fn check_representable(
         )));
     }
 
-    let (open, close) = vars_type.delimiters();
-    let mut depth = 0i32;
-    for ch in value.chars() {
-        if ch == open {
-            depth += 1;
-        } else if ch == close {
-            depth -= 1;
-            if depth < 0 {
-                return Err(OriginateError::ParseError(format!(
-                    "variable {key} closes a '{open}' it never opened, ending the block early"
-                )));
-            }
-        }
-    }
-    if depth != 0 {
-        return Err(OriginateError::ParseError(format!(
-            "variable {key} opens a '{open}' it never closes, swallowing the block's end"
-        )));
-    }
-    Ok(())
+    unbalanced(value, vars_type).map_or(Ok(()), |fault| {
+        Err(OriginateError::ParseError(format!(
+            "variable {key} {fault}"
+        )))
+    })
 }
 
 /// Reject a separator that cannot delimit the block it was chosen for.
@@ -791,11 +840,24 @@ pub(crate) fn escape_text(text: &str, target: DialStringTarget, field: EscapedFi
         escaped
     };
     let escaped = match field {
+        EscapedField::Key { .. } => escaped.replace('=', "\\="),
+        EscapedField::Value { .. } | EscapedField::Endpoint => escaped,
+    };
+    let escaped = match field {
         EscapedField::Value {
             scope: VariablesType::Channel,
             commas_separate,
-        } => guard_channel_commas(escaped, value, target, commas_separate),
-        EscapedField::Value { .. } | EscapedField::Endpoint => escaped,
+        } => guard_channel_commas(
+            escaped,
+            commas_separate && value.ends_with('\\'),
+            target,
+            commas_separate,
+        ),
+        EscapedField::Key {
+            scope: VariablesType::Channel,
+            commas_separate,
+        } => guard_channel_commas(escaped, false, target, commas_separate),
+        EscapedField::Value { .. } | EscapedField::Key { .. } | EscapedField::Endpoint => escaped,
     };
     let space = target.space_escape(field);
     let escaped = match escaped.strip_prefix(' ') {
@@ -805,6 +867,12 @@ pub(crate) fn escape_text(text: &str, target: DialStringTarget, field: EscapedFi
     let escaped = match escaped.strip_suffix(' ') {
         Some(rest) => format!("{rest}{space}"),
         None => escaped,
+    };
+    let escaped = match field {
+        EscapedField::Key { .. } if value.starts_with("^^") => {
+            format!("{}{escaped}", target.caret_guard(field))
+        }
+        EscapedField::Value { .. } | EscapedField::Key { .. } | EscapedField::Endpoint => escaped,
     };
     let escaped = if dollars {
         format!("\\'{escaped}")
@@ -818,11 +886,12 @@ pub(crate) fn escape_text(text: &str, target: DialStringTarget, field: EscapedFi
     }
 }
 
-/// Put the guard between a backslash and the comma after it in a `[]` value: the separator after
-/// a value ending in one, or a literal comma in a `^^` block. Channel scope refuses a quote.
+/// Put the guard between a backslash and the comma after it in a `[]` field: the separator after
+/// a value ending in one (`separator_follows`), or a literal comma in a `^^` block. Channel scope
+/// refuses a quote.
 fn guard_channel_commas(
     escaped: String,
-    value: &str,
+    separator_follows: bool,
     target: DialStringTarget,
     commas_separate: bool,
 ) -> String {
@@ -833,7 +902,7 @@ fn guard_channel_commas(
             commas_separate,
         });
         escaped.replace(&format!("{backslash},"), &format!("{backslash}{guard},"))
-    } else if value.ends_with('\\') {
+    } else if separator_follows {
         escaped + &guard
     } else {
         escaped
@@ -848,23 +917,43 @@ fn protects_dollars(value: &str, target: DialStringTarget, field: EscapedField) 
         .carrier()
         .expands()
         && match field {
-            EscapedField::Value { .. } => value.contains("$$") && !names_a_variable(value),
+            EscapedField::Value { .. } | EscapedField::Key { .. } => {
+                value.contains("$$") && !names_a_variable(value)
+            }
             EscapedField::Endpoint => value.contains("$$") || names_a_variable(value),
         }
 }
 
-/// Inverts [`escape_value`], undoing each substitution in the reverse order it
-/// was applied so an escape introduced by a later rule is not read as input to
-/// an earlier one.
+/// Inverts [`escape_value`].
 fn unescape_value(
     value: &str,
     target: DialStringTarget,
     commas_separate: bool,
     vars_type: VariablesType,
 ) -> String {
-    let field = EscapedField::Value {
-        scope: vars_type,
-        commas_separate,
+    unescape_field(
+        value,
+        target,
+        EscapedField::Value {
+            scope: vars_type,
+            commas_separate,
+        },
+    )
+}
+
+/// Inverts [`escape_text`] for a key or value, undoing each substitution in the reverse order it
+/// was applied so an escape introduced by a later rule is not read as input to an earlier one.
+fn unescape_field(value: &str, target: DialStringTarget, field: EscapedField) -> String {
+    let (vars_type, commas_separate, key) = match field {
+        EscapedField::Value {
+            scope,
+            commas_separate,
+        } => (scope, commas_separate, false),
+        EscapedField::Key {
+            scope,
+            commas_separate,
+        } => (scope, commas_separate, true),
+        EscapedField::Endpoint => (VariablesType::Default, true, false),
     };
     let s = value
         .strip_prefix('\'')
@@ -880,6 +969,11 @@ fn unescape_value(
             (true, rest)
         }
         _ => (false, s),
+    };
+    let caret_guard = target.caret_guard(field);
+    let s = match s.strip_prefix(caret_guard.as_str()) {
+        Some(rest) if key && rest.starts_with("^^") => rest,
+        _ => s,
     };
     let space = target.space_escape(field);
     let (lead, s) = match s.strip_prefix(space.as_str()) {
@@ -902,7 +996,7 @@ fn unescape_value(
     };
     let guard = target.channel_comma_guard();
     let s: Cow<'_, str> = match (vars_type, commas_separate) {
-        (VariablesType::Channel, true) => Cow::Borrowed(
+        (VariablesType::Channel, true) if !key => Cow::Borrowed(
             s.strip_suffix(guard.as_str())
                 .unwrap_or(s),
         ),
@@ -915,6 +1009,7 @@ fn unescape_value(
     } else {
         s.to_string()
     };
+    let s = if key { s.replace("\\=", "=") } else { s };
     let s = if commas_separate {
         s.replace("\\,", ",")
     } else {
@@ -971,10 +1066,19 @@ impl Variables {
     /// which dialplan expansion reads as a reference across a pair boundary; `|` in a `[]` block.
     pub fn with_separator(mut self, sep: char) -> Result<Self, OriginateError> {
         check_separator(sep, self.vars_type)?;
+        if self
+            .inner
+            .keys()
+            .any(|k| k.contains(sep))
+        {
+            return Err(OriginateError::ParseError(format!(
+                "a variable name contains the chosen '{sep}' separator"
+            )));
+        }
         if let Some((key, _)) = self
             .inner
             .iter()
-            .find(|(k, v)| k.contains(sep) || v.contains(sep))
+            .find(|(_, v)| v.contains(sep))
         {
             return Err(OriginateError::ParseError(format!(
                 "variable {key} contains the chosen '{sep}' separator"
@@ -1176,6 +1280,14 @@ impl Variables {
             if i > 0 {
                 write!(f, "{sep}")?;
             }
+            let key = escape_text(
+                key,
+                target,
+                EscapedField::Key {
+                    scope: self.vars_type,
+                    commas_separate,
+                },
+            );
             let value = escape_value(value, target, commas_separate, self.vars_type);
             write!(f, "{}={}", key, value)?;
         }
@@ -1246,12 +1358,21 @@ impl Variables {
                 .into_iter()
                 .enumerate()
             {
-                let (key, value) = part
-                    .split_once('=')
+                let at = unescaped_at(part, '=')
+                    .next()
                     .ok_or_else(|| {
                         OriginateError::ParseError(format!("missing = in variable {i}"))
                     })?;
-                let value = unescape_value(value, target, commas_separate, vars_type);
+                let key = unescape_field(
+                    &part[..at],
+                    target,
+                    EscapedField::Key {
+                        scope: vars_type,
+                        commas_separate,
+                    },
+                );
+                let key = key.as_str();
+                let value = unescape_value(&part[at + 1..], target, commas_separate, vars_type);
                 check_representable(key, &value, vars_type)?;
                 if !commas_separate && (key.contains(sep) || value.contains(sep)) {
                     return Err(OriginateError::ParseError(format!(
@@ -1278,24 +1399,28 @@ impl Variables {
 fn split_unescaped(s: &str, sep: char) -> Vec<&str> {
     let mut parts = Vec::new();
     let mut start = 0;
-    let bytes = s.as_bytes();
-
-    for (i, ch) in s.char_indices() {
-        if ch == sep {
-            let mut backslashes = 0;
-            let mut j = i;
-            while j > 0 && bytes[j - 1] == b'\\' {
-                backslashes += 1;
-                j -= 1;
-            }
-            if backslashes % 2 == 0 {
-                parts.push(&s[start..i]);
-                start = i + ch.len_utf8();
-            }
-        }
+    for i in unescaped_at(s, sep) {
+        parts.push(&s[start..i]);
+        start = i + sep.len_utf8();
     }
     parts.push(&s[start..]);
     parts
+}
+
+/// The byte offset of every `sep` behind an even run of backslashes.
+fn unescaped_at(s: &str, sep: char) -> impl Iterator<Item = usize> + '_ {
+    s.char_indices()
+        .filter(move |&(i, ch)| {
+            ch == sep
+                && s.as_bytes()[..i]
+                    .iter()
+                    .rev()
+                    .take_while(|&&b| b == b'\\')
+                    .count()
+                    % 2
+                    == 0
+        })
+        .map(|(i, _)| i)
 }
 
 #[cfg(test)]
