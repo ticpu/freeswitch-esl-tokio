@@ -437,10 +437,10 @@ impl Variables {
             write!(f, "^^{sep}")?;
         }
         // A chosen separator carries the values that a comma would have needed
-        // escaping for, so only the comma form escapes them.
+        // escaping for, so only a block splitting on commas escapes them.
         let commas_separate = self
             .separator
-            .is_none();
+            .is_none_or(|sep| sep == ',');
         let sep = self
             .separator
             .unwrap_or(',');

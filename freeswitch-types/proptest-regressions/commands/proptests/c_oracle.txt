@@ -8,3 +8,5 @@ cc d020c53acbbd132c0e9970054edff7b44d84ce7099459a4180b15f03001f4f84 # shrinks to
 cc 9fea4a17fb35a72555a247d327f8736add71e7b27e013b9118994ead748a939c # shrinks to (Sofia(SofiaEndpoint { profile: "", destination: "", variables: None }), Some((Default, Some('\''), [" "])))
 cc aeedd9193c9a0f8e70e8d0c40cba27effe56b24d45acced11d77fdea05ce6f67 # shrinks to (Loopback(LoopbackEndpoint { extension: "", context: None, dialplan: None, variables: None }), Some((Default, None, [(Some(" "), " ")])))
 cc 02edc0d9ba9f6c329609bb9fd7a5e661766ac6464cb945b7a2b31ed0c03645af # shrinks to (SofiaContact(SofiaContact { user: "", domain: "a", profile: None, variables: None }), None)
+cc 37b6ba9155e709c5db2bf833958f1aea6f130307bdca4aa16c88e3e01c8895ea # shrinks to (Channel, Some(','), [(None, "\\"), (None, " ")])
+cc 7a580fca4ceec240af0691e3a13a6632e2536993078a4bb9560e32dba1b6b8ed # shrinks to (Channel, Some(','), [(None, "\\"), (None, "\"")])
