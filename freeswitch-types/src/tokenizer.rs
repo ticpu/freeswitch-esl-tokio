@@ -321,11 +321,23 @@ pub(crate) fn separate_on(body: &[Traced], delim: char, limit: usize) -> Separat
 #[cfg(feature = "esl")]
 pub(crate) struct ArgvCut;
 
-/// The one token [`separate_on`] leaves of `text` on `delim`, or `None` for an empty text.
+/// The one token `originate`'s split on `delim` leaves of `text`, or `None` for an empty text.
+/// On a space that split is [`separate`], where a quote may hold a space but not stay open.
 #[cfg(feature = "esl")]
 pub(crate) fn sole_argument(text: &[Traced], delim: char) -> Result<Option<Token>, ArgvCut> {
-    let separated = separate_on(text, delim, usize::MAX);
-    if separated.held_delimiter
+    let (separated, quote_cuts) = match delim {
+        ' ' => {
+            let separated = separate(text, ' ', usize::MAX);
+            let open = separated.open_quote;
+            (separated, open)
+        }
+        delim => {
+            let separated = separate_on(text, delim, usize::MAX);
+            let held = separated.held_delimiter;
+            (separated, held)
+        }
+    };
+    if quote_cuts
         || separated
             .tokens
             .len()

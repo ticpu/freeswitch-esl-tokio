@@ -11,7 +11,7 @@ use std::str::FromStr;
 
 use super::flattened::pipeline::ENTERPRISE_DELIM;
 use super::originate::OriginateError;
-use crate::tokenizer::{sole_argument, trace, untrace, ArgvCut};
+use crate::tokenizer::{sole_argument, trace, untrace, ArgvCut, Token, Traced};
 use crate::version::FreeswitchVersion;
 
 /// Scope for channel variables in an originate command.
@@ -451,13 +451,29 @@ impl DialStringTarget {
         self
     }
 
-    pub(crate) fn argument(&self) -> ArgumentPass {
-        self.argument
+    /// The delimiter of `originate`'s argument split still ahead of this target, if any.
+    fn split_delimiter(self) -> Option<char> {
+        match (self.carrier, self.argument) {
+            (DialStringCarrier::EslApi, ArgumentPass::Blank) => Some(' '),
+            (_, ArgumentPass::Char(sep)) => Some(sep),
+            (DialStringCarrier::Dialplan, ArgumentPass::Blank) | (_, ArgumentPass::Consumed) => {
+                None
+            }
+        }
     }
 
-    /// This target inside an argument already escaped for its split.
+    /// The one argument `originate`'s split leaves of `text`, or `None` where no split reads it.
+    pub(crate) fn split_argument(self, text: &[Traced]) -> Option<Result<Option<Token>, ArgvCut>> {
+        self.split_delimiter()
+            .map(|delim| sole_argument(text, delim))
+    }
+
+    /// This target inside an argument its split already read.
     pub(crate) fn inner(mut self) -> Self {
-        if let ArgumentPass::Char(_) = self.argument {
+        if self
+            .split_delimiter()
+            .is_some()
+        {
             self.argument = ArgumentPass::Consumed;
         }
         self
@@ -465,13 +481,11 @@ impl DialStringTarget {
 
     /// What this target's argument split leaves of `s`, and the target reading that.
     pub(crate) fn read_argument(self, s: &str) -> Result<(Cow<'_, str>, Self), OriginateError> {
-        let Some(sep) = self.argv_separator() else {
+        let Some(token) = self.split_argument(&trace(s)) else {
             return Ok((Cow::Borrowed(s), self));
         };
-        let token = sole_argument(&trace(s), sep).map_err(|ArgvCut| {
-            OriginateError::ParseError(format!(
-                "the {sep:?} argument separator cuts the dial string"
-            ))
+        let token = token.map_err(|ArgvCut| {
+            OriginateError::ParseError("originate's argument split cuts the dial string".into())
         })?;
         let argument = token.map_or_else(String::new, |token| untrace(&token.text));
         Ok((Cow::Owned(argument), self.inner()))
