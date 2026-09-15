@@ -749,7 +749,10 @@ separator inside quotes.
 split skips the character after a backslash and its cleanup reads `\s` as a space,
 so on blanks every space is written `\s`, with `\`, `'`, newline, CR and tab
 escaped as under a separator. Each character carries its own escape, so a leg
-sliced out of the escaped text by `retain` is still one argument.
+sliced out of the escaped text by `retain` is still one argument. An empty text
+is written `''`, since neither split keeps an empty argument at the end of a
+line nor the blank split anywhere. On blanks a text opening `^^` follows a
+leading `''`, or opening the line it would name the split's separator.
 `escape_argument` is `None` at `DialStringCarrier::Dialplan`, which takes no
 separator either, because an application's argument is never split.
 

@@ -430,15 +430,26 @@ impl DialStringTarget {
 
     /// `text` escaped as one argument of `originate`'s split, on blanks or on the
     /// [`argv_separator`](Self::argv_separator), or `None` at the dialplan carrier, which splits none.
+    ///
+    /// An empty text is written `''`, which the split keeps as an argument. On blanks a text
+    /// opening `^^` is written after `''`, since a line opening `^^` names its own separator.
     pub fn escape_argument<'a>(&self, text: &'a str) -> Option<Cow<'a, str>> {
         let sep = self.split_delimiter()?;
-        let plain = !text.starts_with(' ')
+        if text.is_empty() {
+            return Some(Cow::Borrowed("''"));
+        }
+        let guarded = sep == ' ' && text.starts_with("^^");
+        let plain = !guarded
+            && !text.starts_with(' ')
             && !text.ends_with(' ')
             && !text.contains(['\\', '\'', '\n', '\r', '\t', sep]);
         if plain {
             return Some(Cow::Borrowed(text));
         }
         let mut escaped = String::with_capacity(text.len() + 8);
+        if guarded {
+            escaped.push_str("''");
+        }
         // Writing to a String cannot fail.
         write_escaped(&mut escaped, sep, text).ok()?;
         Some(Cow::Owned(escaped))
@@ -2104,7 +2115,8 @@ mod tests {
             ("it's", r"it\'s"),
             (r"a\b", r"a\\b"),
             ("a\nb\tc\rd", r"a\nb\tc\rd"),
-            ("", ""),
+            ("", "''"),
+            ("^^~a b", r"''^^~a\sb"),
         ] {
             assert_eq!(
                 DialStringTarget::new(DialStringCarrier::EslApi)
@@ -2156,7 +2168,8 @@ mod tests {
             ("  a", r"\s a"),
             (" ", r"\s"),
             ("  ", r"\s\s"),
-            ("", ""),
+            ("", "''"),
+            ("^^~", "^^\\~"),
         ] {
             assert_eq!(
                 tilde()
@@ -2165,6 +2178,40 @@ mod tests {
                 Some(want),
                 "{text:?}"
             );
+        }
+    }
+
+    /// An empty argument vanished from either split and a text opening `^^` renamed the blank
+    /// split's separator when it opened the line.
+    #[test]
+    fn an_empty_or_caret_led_text_stays_one_argument_in_any_position() {
+        use crate::tokenizer::{separate, trace, untrace};
+
+        for text in ["", "^^", "^^~a", "^^ y"] {
+            for target in [DialStringTarget::new(DialStringCarrier::EslApi), tilde()] {
+                let escaped = target
+                    .escape_argument(text)
+                    .expect("an API target escapes");
+                let (prefix, sep) = match target.argv_separator() {
+                    Some(sep) => (format!("^^{sep}"), sep),
+                    None => (String::new(), ' '),
+                };
+                for (line, want) in [
+                    (format!("{prefix}{escaped}{sep}y"), vec![text, "y"]),
+                    (
+                        format!("{prefix}x{sep}{escaped}{sep}y"),
+                        vec!["x", text, "y"],
+                    ),
+                    (format!("{prefix}x{sep}{escaped}"), vec!["x", text]),
+                ] {
+                    let tokens: Vec<String> = separate(&trace(&line), ' ', usize::MAX)
+                        .tokens
+                        .iter()
+                        .map(|token| untrace(&token.text))
+                        .collect();
+                    assert_eq!(tokens, want, "{line:?}");
+                }
+            }
         }
     }
 
