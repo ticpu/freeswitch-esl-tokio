@@ -54,7 +54,8 @@ impl VariablesType {
 /// Ordered set of channel variables with FreeSWITCH escaping.
 ///
 /// A comma is escaped with `\,`, a backslash and a single quote with as many
-/// backslashes as the [`DialStringTarget`]'s passes consume, and a value with
+/// backslashes as the [`DialStringTarget`]'s passes consume, a space at either
+/// edge of a value as a `\s` escaped for the same passes, and a value with other
 /// spaces is wrapped in single quotes. This form round-trips through [`FromStr`];
 /// what the switch itself decodes depends on which command carries the block
 /// and which parser revision reads it, documented in `docs/dial-string-format.md`.
@@ -509,6 +510,12 @@ impl DialStringTarget {
         "\\".repeat(1 << self.passes(scope))
     }
 
+    /// The last pass, the `=` split, trims a value's edges, so an edge space must read `\s`
+    /// entering it.
+    fn space_escape(self, scope: VariablesType) -> String {
+        format!("{}s", "\\".repeat(1 << (self.passes(scope) - 1)))
+    }
+
     /// A quote must still read `\'` entering the last pass, or bare after a
     /// carrier pass that deletes `\'`.
     fn quote_escape(self, scope: VariablesType) -> String {
@@ -645,6 +652,15 @@ fn escape_value(
     } else {
         escaped
     };
+    let space = target.space_escape(vars_type);
+    let escaped = match escaped.strip_prefix(' ') {
+        Some(rest) => format!("{space}{rest}"),
+        None => escaped,
+    };
+    let escaped = match escaped.strip_suffix(' ') {
+        Some(rest) => format!("{rest}{space}"),
+        None => escaped,
+    };
     if escaped.contains(' ') {
         format!("'{}'", escaped)
     } else {
@@ -665,6 +681,25 @@ fn unescape_value(
         .strip_prefix('\'')
         .and_then(|s| s.strip_suffix('\''))
         .unwrap_or(value);
+    let space = target.space_escape(vars_type);
+    let (lead, s) = match s.strip_prefix(space.as_str()) {
+        Some(rest) => (" ", rest),
+        None => ("", s),
+    };
+    // A literal backslash before a final `s` also ends in the escape's run, but whole levels deep.
+    let run = s
+        .strip_suffix('s')
+        .map_or(0, |body| {
+            body.len()
+                - body
+                    .trim_end_matches('\\')
+                    .len()
+        });
+    let (trail, s) = if run % (1 << target.passes(vars_type)) == space.len() - 1 {
+        (" ", &s[..s.len() - space.len()])
+    } else {
+        ("", s)
+    };
 
     let s = if vars_type == VariablesType::Channel {
         s.replace("\\|", "|")
@@ -676,8 +711,10 @@ fn unescape_value(
     } else {
         s
     };
-    s.replace(&target.quote_escape(vars_type), "'")
-        .replace(&target.backslash_escape(vars_type), "\\")
+    let s = s
+        .replace(&target.quote_escape(vars_type), "'")
+        .replace(&target.backslash_escape(vars_type), "\\");
+    format!("{lead}{s}{trail}")
 }
 
 impl Variables {
