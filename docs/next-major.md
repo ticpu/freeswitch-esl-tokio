@@ -44,7 +44,10 @@ called, and an `insert` after it splits into a pair nobody wrote. A single quote
 in a channel-scope value is the fourth: the switch pairs it with the next quote
 before it parses the block, at any escaping depth. A value carrying `:_:` is the
 fifth: any occurrence in a dial string sends the originate down the enterprise
-split, whatever the quoting.
+split, whatever the quoting. A key is the sixth: an empty one is installed
+nowhere, and one carrying `:_:`, an unbalanced bracket, a quote in channel
+scope or the block's `^^` separator is split or paired before the switch
+installs it.
 Refusing them is the only correct handling,
 and it cannot live at render time — `Display` is infallible and `ToString`
 panics on a `fmt::Error`, which would put a panic in a library. Until these
@@ -59,8 +62,10 @@ but not the programmatic path.
 A sofia profile carrying `/` or `^` or reading `gateway`, a gateway key whose
 `::` reads at another place, a loopback extension or context carrying `/`, an
 empty loopback context or dialplan or either after an `app=` extension, a user
-name carrying `@`, and `:_:` in any field build and render, then reach the
-module as something else. Parse and config load refuse them
+name carrying `@`, an empty audio destination, a `sofia_contact` or `group_call`
+field carrying its function's separator or what a pass reads ahead of the
+expansion, an empty `sofia_contact` domain or profile, and `:_:` in any field
+build and render, then reach the module or function as something else. Parse and config load refuse them
 (`OriginateError::UndeliverableEndpointField`); the constructors, the `with_*`
 builders and the public fields cannot until those fields sit behind fallible
 setters. `BridgeDialString::new` and `groups_mut` accept a group whose bracket
@@ -88,7 +93,9 @@ refuse them; the constructors, `target_mut`, `Application::new` and
 
 `originate_function` hands the target to the inline hunt only under the `inline`
 dialplan, so an extension under `inline` and inline applications under any other
-dialplan misfire. `dialplan`, `dialplan_raw` and config load refuse both;
+dialplan misfire: an inline action list set under `XML` is transferred as an
+extension, no application runs, and the originate still answers `+OK` on the
+wire. `dialplan`, `dialplan_raw` and config load refuse both;
 `set_dialplan` and a target swapped through `target_mut` cannot until they
 return `Result`.
 
