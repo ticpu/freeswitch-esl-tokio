@@ -1,4 +1,5 @@
 use super::*;
+use crate::commands::originate::{Application, Originate};
 use crate::commands::variables::VariablesType;
 
 /// `switch_find_end_paren` counts depth, so a balanced bracket in a value leaves the block
@@ -56,19 +57,64 @@ fn endpoint_from_str_user() {
 }
 
 #[test]
-fn endpoint_from_str_sofia_contact() {
-    let ep: Endpoint = "${sofia_contact(1000@example.com)}"
-        .parse()
-        .unwrap();
+fn endpoint_parse_for_dialplan_sofia_contact() {
+    let ep = Endpoint::parse_for(
+        "${sofia_contact(1000@example.com)}",
+        DialStringCarrier::Dialplan,
+    )
+    .unwrap();
     assert!(matches!(ep, Endpoint::SofiaContact(_)));
 }
 
 #[test]
-fn endpoint_from_str_group_call() {
-    let ep: Endpoint = "${group_call(support@example.com+A)}"
-        .parse()
-        .unwrap();
+fn endpoint_parse_for_dialplan_group_call() {
+    let ep = Endpoint::parse_for(
+        "${group_call(support@example.com+A)}",
+        DialStringCarrier::Dialplan,
+    )
+    .unwrap();
     assert!(matches!(ep, Endpoint::GroupCall(_)));
+}
+
+/// `originate` over the API expands nothing, so an expression there dials as an unknown endpoint.
+#[test]
+fn an_expression_is_refused_where_nothing_expands_it() {
+    let unexpanded = |kind| OriginateError::UnexpandedExpression { endpoint: kind };
+    for (text, kind) in [
+        ("${sofia_contact(SECRET@example.com)}", "sofia_contact"),
+        ("${group_call(SECRET@example.com+A)}", "group_call"),
+    ] {
+        for target in [DialStringTarget::new(DialStringCarrier::EslApi), tilde()] {
+            let refused = Endpoint::parse_for(text, target);
+            assert_eq!(refused, Err(unexpanded(kind)), "{text} at {target:?}");
+        }
+        assert_eq!(text.parse::<Endpoint>(), Err(unexpanded(kind)), "{text}");
+        let msg = unexpanded(kind).to_string();
+        assert!(msg.contains(kind) && !msg.contains("SECRET"), "{msg}");
+        let line = format!("originate {text} &park()");
+        assert_eq!(line.parse::<Originate>(), Err(unexpanded(kind)), "{line}");
+    }
+    assert_eq!(
+        "${sofia_contact(1000@example.com)}".parse::<SofiaContact>(),
+        Err(unexpanded("sofia_contact"))
+    );
+    assert_eq!(
+        "${group_call(support@example.com)}".parse::<GroupCall>(),
+        Err(unexpanded("group_call"))
+    );
+    let config = r#"{"endpoint":{"group_call":{"group":"support","domain":"example.com"}},"application":{"name":"park"}}"#;
+    let refused = serde_json::from_str::<Originate>(config)
+        .expect_err("an Originate config dials over the API")
+        .to_string();
+    assert!(refused.contains("group_call"), "{refused}");
+    let built = Originate::application(
+        GroupCall::new("support", "example.com").into(),
+        Application::simple("park"),
+    );
+    assert_eq!(
+        built.to_string(),
+        "originate ${group_call(support@example.com)} &park()"
+    );
 }
 
 #[test]
@@ -493,8 +539,15 @@ fn every_endpoint_type_round_trips_at_an_argv_separator() {
         let rendered = ep
             .display_for(target)
             .to_string();
-        let back = Endpoint::parse_for(&rendered, target)
-            .unwrap_or_else(|e| panic!("{rendered} failed to parse: {e}"));
+        let back = Endpoint::parse_for(&rendered, target);
+        if matches!(ep, Endpoint::SofiaContact(_) | Endpoint::GroupCall(_)) {
+            assert!(
+                matches!(back, Err(OriginateError::UnexpandedExpression { .. })),
+                "rendered {rendered}: {back:?}"
+            );
+            continue;
+        }
+        let back = back.unwrap_or_else(|e| panic!("{rendered} failed to parse: {e}"));
         assert_eq!(back, ep, "rendered {rendered}");
     }
 }
@@ -893,9 +946,16 @@ fn empty_fields_the_module_reads_as_written_round_trip() {
             let rendered = ep
                 .display_for(target)
                 .to_string();
+            let parsed = Endpoint::parse_for(&rendered, target);
+            if ep
+                .check_expanded(target.carrier())
+                .is_err()
+            {
+                assert!(parsed.is_err(), "{rendered:?} at {target:?}");
+                continue;
+            }
             assert_eq!(
-                Endpoint::parse_for(&rendered, target)
-                    .unwrap_or_else(|e| panic!("{rendered:?} at {target:?}: {e}")),
+                parsed.unwrap_or_else(|e| panic!("{rendered:?} at {target:?}: {e}")),
                 ep,
                 "{rendered:?} at {target:?}"
             );
@@ -913,9 +973,7 @@ fn empty_fields_the_module_reads_as_written_round_trip() {
 /// `sofia_contact_function` reads a `/` after the profile's as part of the user.
 #[test]
 fn expression_fields_split_where_the_functions_split() {
-    let group: GroupCall = "${group_call(g@d@e+F)}"
-        .parse()
-        .unwrap();
+    let group = GroupCall::parse_bare("${group_call(g@d@e+F)}").unwrap();
     assert_eq!(
         (
             group
@@ -930,10 +988,7 @@ fn expression_fields_split_where_the_functions_split() {
     );
     let contact = SofiaContact::new("u/x", "example.com").with_profile("p");
     assert_eq!(
-        contact
-            .to_string()
-            .parse::<SofiaContact>()
-            .unwrap(),
+        SofiaContact::parse_bare(&contact.to_string()).unwrap(),
         contact
     );
     assert!(serde_json::from_str::<Endpoint>(

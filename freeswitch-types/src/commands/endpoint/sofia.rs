@@ -49,8 +49,8 @@ pub struct SofiaGateway {
 /// Runtime expression resolving registered SIP contacts:
 /// `${sofia_contact([profile/]user@domain)}`.
 ///
-/// The library produces the expression string; FreeSWITCH evaluates it
-/// at call time.
+/// The library produces the expression string; a dialplan application or the
+/// `expand` API evaluates it, and `originate` over the API never does.
 ///
 /// The special profile `"*"` makes FreeSWITCH iterate over every loaded
 /// SIP profile to find the user's registration, instead of searching a
@@ -287,7 +287,8 @@ impl SofiaContact {
     }
 }
 
-impl_endpoint_parse!(from_str: SofiaEndpoint, SofiaGateway, SofiaContact);
+impl_endpoint_parse!(from_str: SofiaEndpoint, SofiaGateway);
+impl_endpoint_parse!(expression_from_str: SofiaContact => "sofia_contact");
 
 impl_endpoint_parse!(config:
     SofiaEndpoint {
@@ -577,9 +578,7 @@ mod tests {
 
     #[test]
     fn sofia_contact_from_str() {
-        let ep: SofiaContact = "${sofia_contact(1000@example.com)}"
-            .parse()
-            .unwrap();
+        let ep = SofiaContact::parse_bare("${sofia_contact(1000@example.com)}").unwrap();
         assert_eq!(ep.user, "1000");
         assert_eq!(ep.domain, "example.com");
         assert!(ep
@@ -589,9 +588,7 @@ mod tests {
 
     #[test]
     fn sofia_contact_from_str_with_profile() {
-        let ep: SofiaContact = "${sofia_contact(internal/1000@example.com)}"
-            .parse()
-            .unwrap();
+        let ep = SofiaContact::parse_bare("${sofia_contact(internal/1000@example.com)}").unwrap();
         assert_eq!(ep.user, "1000");
         assert_eq!(ep.domain, "example.com");
         assert_eq!(
@@ -610,9 +607,7 @@ mod tests {
             variables: None,
         };
         let s = ep.to_string();
-        let parsed: SofiaContact = s
-            .parse()
-            .unwrap();
+        let parsed = SofiaContact::parse_bare(&s).unwrap();
         assert_eq!(parsed, ep);
     }
 
@@ -623,9 +618,7 @@ mod tests {
         assert_eq!(s, "${sofia_contact(user@realm/1000@example.com)}");
         // Round-trip: the first @ is in profile, the parser splits on / first
         // then finds @ in the user_at_domain part
-        let parsed: SofiaContact = s
-            .parse()
-            .unwrap();
+        let parsed = SofiaContact::parse_bare(&s).unwrap();
         assert_eq!(
             parsed
                 .profile

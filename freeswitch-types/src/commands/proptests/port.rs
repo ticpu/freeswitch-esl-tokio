@@ -75,11 +75,16 @@ proptest! {
                 delivered || refused,
                 "{endpoint:?} at {target:?}: rendered {rendered:?}, port read {got:?}"
             );
+            let unexpanded = endpoint.check_expanded(target.carrier()).is_err();
             prop_assert!(
-                parsed.is_ok() || refused,
+                !unexpanded || refused || matches!(parsed, Err(crate::commands::originate::OriginateError::UnexpandedExpression { .. })),
+                "{endpoint:?} at {target:?}: rendered {rendered:?}, parse {parsed:?}"
+            );
+            prop_assert!(
+                parsed.is_ok() || refused || unexpanded,
                 "{endpoint:?} at {target:?}: rendered {rendered:?} loads from config, parse {parsed:?}"
             );
-            if delivered && !refused {
+            if delivered && !refused && !unexpanded {
                 let parsed = parsed.map(|mut parsed| {
                     let vars = parsed.variables().map(|vars| (vars.scope(), pairs(vars)));
                     parsed.set_variables(None);

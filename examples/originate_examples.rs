@@ -15,8 +15,8 @@
 
 use freeswitch_esl_tokio::commands::endpoint::GroupCallOrder;
 use freeswitch_esl_tokio::commands::{
-    AudioEndpoint, BlockParse, ErrorEndpoint, GroupCall, LoopbackEndpoint, SofiaContact,
-    SofiaEndpoint, SofiaGateway, UserEndpoint,
+    AudioEndpoint, BlockParse, BridgeDialString, ErrorEndpoint, GroupCall, LoopbackEndpoint,
+    SofiaContact, SofiaEndpoint, SofiaGateway, UserEndpoint,
 };
 use std::env::VarError;
 use std::time::Duration;
@@ -119,34 +119,31 @@ fn print_endpoint_examples() {
     println!("{}", cmd);
 
     // -----------------------------------------------------------------------
-    // sofia_contact -- FreeSWITCH runtime expression, resolved at call time
+    // sofia_contact -- runtime expression a dialplan application expands; `originate`
+    // over the API never expands it, so it goes into a bridge dial string
     // -----------------------------------------------------------------------
 
     println!("\n-- SofiaContact: ${{sofia_contact([profile/]user@domain)}} --");
 
-    let cmd = Originate::application(
+    let cmd = BridgeDialString::new(vec![vec![
         // "*" searches all profiles; use a profile name to limit the lookup
         Endpoint::SofiaContact(SofiaContact::new("bob", "pbx.example.com").with_profile("*")),
-        Application::simple("park"),
-    )
-    .timeout(Duration::from_secs(20));
-    // originate ${sofia_contact(*/bob@pbx.example.com)} &park() undef undef undef undef 20
+    ]]);
+    // ${sofia_contact(*/bob@pbx.example.com)}
     println!("{}", cmd);
 
     // -----------------------------------------------------------------------
-    // group_call -- FreeSWITCH runtime expression, resolves directory group
+    // group_call -- runtime expression resolving a directory group, expanded by a
+    // dialplan application or the `expand` API
     // -----------------------------------------------------------------------
 
     println!("\n-- GroupCall: ${{group_call(group@domain[+order])}} --");
 
-    let cmd = Originate::application(
+    let cmd = BridgeDialString::new(vec![vec![Endpoint::GroupCall(
         // A=all members simultaneously, F=first registered, E=enterprise
-        Endpoint::GroupCall(
-            GroupCall::new("support", "pbx.example.com").with_order(GroupCallOrder::All),
-        ),
-        Application::simple("park"),
-    );
-    // originate ${group_call(support@pbx.example.com+A)} &park()
+        GroupCall::new("support", "pbx.example.com").with_order(GroupCallOrder::All),
+    )]]);
+    // ${group_call(support@pbx.example.com+A)}
     println!("{}", cmd);
 
     // -----------------------------------------------------------------------

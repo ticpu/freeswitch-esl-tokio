@@ -78,6 +78,12 @@ pub enum OriginateError {
         /// Index of the group.
         group: usize,
     },
+    /// A `sofia_contact` or `group_call` expression at the API carrier, where nothing expands it:
+    /// the switch dials the text as an unknown endpoint.
+    UnexpandedExpression {
+        /// The endpoint type.
+        endpoint: &'static str,
+    },
 }
 
 impl std::fmt::Display for OriginateError {
@@ -141,6 +147,11 @@ impl std::fmt::Display for OriginateError {
                 f,
                 "a bracket in group {group} closes in a later leg, which the switch reads as one leg"
             ),
+            Self::UnexpandedExpression { endpoint } => write!(
+                f,
+                "a {endpoint} expression reaches originate unexpanded at the API carrier; \
+                 only a dialplan application or the expand API expands it"
+            ),
         }
     }
 }
@@ -164,7 +175,8 @@ impl std::error::Error for OriginateError {
             | Self::ParenthesisInApplication { .. }
             | Self::InlineApplicationsWithDialplan
             | Self::UndeliverableEndpointField { .. }
-            | Self::BracketSpansLegs { .. } => None,
+            | Self::BracketSpansLegs { .. }
+            | Self::UnexpandedExpression { .. } => None,
         }
     }
 }

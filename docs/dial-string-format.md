@@ -136,8 +136,11 @@ dialplan application the expansion substitutes it before the leg splits, so
 `sofia/gateway/gw/${destination_number}` dials the executing channel's number. A
 text holding `$$` and no reference has every `$` written `\$` behind a leading
 `\'`, as a value does, so the module receives `$$` whole. `sofia_contact` and
-`group_call` expressions are written as they stand, for the carrier's expansion
-to read.
+`group_call` expressions are written as they stand. Only a dialplan application
+or the `expand` API expands them: `originate` over the API dials the text as
+an unknown endpoint and answers `CHAN_NOT_IMPLEMENTED` (measured), so parse at
+the API carrier and `Originate` config load refuse them
+(`OriginateError::UnexpandedExpression`).
 
 What no escaping delivers is refused on parse and config load, and built
 unchecked:

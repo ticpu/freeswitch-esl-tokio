@@ -125,7 +125,8 @@ Real endpoints:
 - `LoopbackEndpoint` — `{vars}loopback/extension/context`
 - `UserEndpoint` — `{vars}user/name[@domain]`
 
-Expression endpoints (produce FS runtime expressions, not expanded by library):
+Expression endpoints (FS runtime expressions, expanded only by a dialplan
+application or the `expand` API, so parsed at the dialplan carrier alone):
 
 - `SofiaContact` — `{vars}${sofia_contact([profile/]user@domain)}`
 - `GroupCall` — `{vars}${group_call(group@domain[+order])}`

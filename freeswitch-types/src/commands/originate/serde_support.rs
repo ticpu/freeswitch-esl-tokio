@@ -39,6 +39,8 @@ impl TryFrom<OriginateRaw> for Originate {
                 DialplanField::Typed(dp) => Dialplan::Typed(dp),
                 DialplanField::Named(name) => Dialplan::from_name(name),
             });
+        raw.endpoint
+            .check_expanded(DialStringCarrier::EslApi)?;
         check_dialplan_fits(&raw.target, dialplan.as_ref())?;
         if dialplan
             .as_ref()

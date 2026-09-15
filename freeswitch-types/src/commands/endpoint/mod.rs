@@ -104,6 +104,25 @@ macro_rules! impl_endpoint_parse {
             }
         )*
     };
+    (expression_from_str: $($ty:ident => $kind:literal),* $(,)?) => {
+        $(
+            impl ::std::str::FromStr for $ty {
+                type Err = $crate::commands::originate::OriginateError;
+
+                /// Refused once parsed: `FromStr` reads the API carrier, which never expands it.
+                fn from_str(s: &str) -> Result<Self, Self::Err> {
+                    $crate::commands::endpoint::parse_leg(
+                        s,
+                        $crate::commands::variables::DialStringCarrier::EslApi.into(),
+                        Self::parse_bare,
+                    )?;
+                    Err($crate::commands::originate::OriginateError::UnexpandedExpression {
+                        endpoint: $kind,
+                    })
+                }
+            }
+        )*
+    };
     (config: $($ty:ident { $($required:ident: $rty:ty,)* ; $($optional:ident: $oty:ty,)* })*) => {
         #[cfg(feature = "serde")]
         mod config {
@@ -462,8 +481,12 @@ impl Endpoint {
     /// Parse a dial string written for a named carrier or [`DialStringTarget`],
     /// mirroring [`display_for`](Self::display_for). [`FromStr`] uses the
     /// [`DialStringCarrier::EslApi`] default.
+    ///
+    /// A `sofia_contact` or `group_call` expression parses at the dialplan carrier only.
     pub fn parse_for(s: &str, target: impl Into<DialStringTarget>) -> Result<Self, OriginateError> {
-        let (variables, mut endpoint) = parse_leg(s, target.into(), Self::parse_bare)?;
+        let target = target.into();
+        let (variables, mut endpoint) = parse_leg(s, target, Self::parse_bare)?;
+        endpoint.check_expanded(target.carrier())?;
         if variables.is_some() {
             endpoint.set_variables(variables);
             if endpoint
@@ -474,6 +497,18 @@ impl Endpoint {
             }
         }
         Ok(endpoint)
+    }
+
+    /// Refuse an expression at a carrier that never expands it.
+    pub(crate) fn check_expanded(&self, carrier: DialStringCarrier) -> Result<(), OriginateError> {
+        match (self, carrier) {
+            (Self::SofiaContact(_) | Self::GroupCall(_), DialStringCarrier::EslApi) => {
+                Err(OriginateError::UnexpandedExpression {
+                    endpoint: self.kind(),
+                })
+            }
+            _ => Ok(()),
+        }
     }
 
     /// The module name this variant renders, for diagnostics.

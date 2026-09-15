@@ -8,7 +8,7 @@
 mod live_common;
 
 use freeswitch_esl_tokio::commands::originate::{Variables, VariablesType};
-use freeswitch_esl_tokio::commands::LoopbackEndpoint;
+use freeswitch_esl_tokio::commands::{GroupCall, LoopbackEndpoint};
 use freeswitch_esl_tokio::connection::AuthMethod;
 use freeswitch_esl_tokio::{
     parse_api_body, Application, ConnectionStatus, DisconnectReason, Endpoint, EslClient,
@@ -31,6 +31,48 @@ async fn wait_disconnected(client: &EslClient) {
         !client.is_connected(),
         "still connected after disconnect(): {:?}",
         client.status()
+    );
+}
+
+/// `originate` over the API expands nothing, so the expression `GroupCall` renders dials as an
+/// unknown endpoint type, while `eval` expands the same text.
+#[tokio::test]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
+async fn live_api_originate_leaves_an_expression_unexpanded() {
+    let (client, _events, _permit) = connect().await;
+    let group = GroupCall::new("nosuchgroup", "example.com");
+    let originate = Originate::application(
+        group
+            .clone()
+            .into(),
+        Application::simple("park"),
+    );
+    let line = originate.to_string();
+    assert_eq!(
+        line,
+        "originate ${group_call(nosuchgroup@example.com)} &park()"
+    );
+    let dialed = client
+        .api(&line)
+        .await
+        .unwrap();
+    let body = dialed
+        .body()
+        .unwrap_or_default();
+    assert!(
+        body.contains("CHAN_NOT_IMPLEMENTED"),
+        "port {}: originate answered {body:?}",
+        esl_env().port
+    );
+    let expanded = client
+        .api(&format!("eval {group}"))
+        .await
+        .unwrap();
+    assert_eq!(
+        expanded.body(),
+        Some("error/NO_ROUTE_DESTINATION"),
+        "port {}",
+        esl_env().port
     );
 }
 

@@ -71,7 +71,10 @@ build and render, then reach the module or function as something else. Parse and
 builders and the public fields cannot until those fields sit behind fallible
 setters. `BridgeDialString::new` and `groups_mut` accept a group whose bracket
 spans legs, which parse and config load refuse as
-`OriginateError::BracketSpansLegs`.
+`OriginateError::BracketSpansLegs`. `Originate::application`, `extension`,
+`inline` and `endpoint_mut` accept a `SofiaContact` or `GroupCall`, which
+`originate` over the API never expands; parse at the API carrier and
+`Originate` config load refuse it as `OriginateError::UnexpandedExpression`.
 
 ### `Originate` setters need to refuse `undef`
 

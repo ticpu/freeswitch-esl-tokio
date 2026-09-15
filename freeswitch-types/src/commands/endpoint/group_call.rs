@@ -65,7 +65,7 @@ impl_dial_string_with_variables!(GroupCall, write_expression, |this| match &this
     None => format!("${{group_call({}@{})}}", this.group, this.domain),
 });
 
-impl_endpoint_parse!(from_str: GroupCall);
+impl_endpoint_parse!(expression_from_str: GroupCall => "group_call");
 
 impl GroupCall {
     /// Refuse what `group_call_function` splits, the order at its first `+` and then the domain
@@ -134,9 +134,7 @@ mod tests {
 
     #[test]
     fn group_call_from_str() {
-        let ep: GroupCall = "${group_call(support@example.com)}"
-            .parse()
-            .unwrap();
+        let ep = GroupCall::parse_bare("${group_call(support@example.com)}").unwrap();
         assert_eq!(ep.group, "support");
         assert_eq!(ep.domain, "example.com");
         assert!(ep
@@ -146,9 +144,7 @@ mod tests {
 
     #[test]
     fn group_call_from_str_with_order() {
-        let ep: GroupCall = "${group_call(support@example.com+A)}"
-            .parse()
-            .unwrap();
+        let ep = GroupCall::parse_bare("${group_call(support@example.com+A)}").unwrap();
         assert_eq!(ep.group, "support");
         assert_eq!(ep.domain, "example.com");
         assert_eq!(ep.order, Some(GroupCallOrder::All));
@@ -158,9 +154,7 @@ mod tests {
     fn group_call_round_trip() {
         let ep = GroupCall::new("calltakers", "example.com").with_order(GroupCallOrder::Enterprise);
         let s = ep.to_string();
-        let parsed: GroupCall = s
-            .parse()
-            .unwrap();
+        let parsed = GroupCall::parse_bare(&s).unwrap();
         assert_eq!(parsed, ep);
     }
 
