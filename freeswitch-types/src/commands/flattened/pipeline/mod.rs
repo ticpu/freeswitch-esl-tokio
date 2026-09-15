@@ -469,8 +469,8 @@ pub(crate) fn resolve<'a>(
         .next_back()
 }
 
-/// The headers of an originate event, which has no `EF_UNIQ_HEADERS`: a set
-/// appends, an empty value deletes every header of that name.
+/// The headers of an originate event, which carries `EF_UNIQ_HEADERS`: a set replaces every header
+/// of that name ignoring case, an empty value deletes them.
 fn install<'a>(blocks: impl IntoIterator<Item = &'a Block>) -> Vec<(&'a str, &'a str)> {
     let mut headers: Vec<(&str, &str)> = Vec::new();
     for pair in blocks
@@ -478,7 +478,10 @@ fn install<'a>(blocks: impl IntoIterator<Item = &'a Block>) -> Vec<(&'a str, &'a
         .flat_map(|block| &block.pairs)
     {
         match &pair.effect {
-            PairEffect::Set(value) => headers.push((&pair.key, value)),
+            PairEffect::Set(value) => {
+                headers.retain(|(name, _)| !name.eq_ignore_ascii_case(&pair.key));
+                headers.push((&pair.key, value))
+            }
             PairEffect::Cleared => {
                 headers.retain(|(name, _)| !name.eq_ignore_ascii_case(&pair.key))
             }

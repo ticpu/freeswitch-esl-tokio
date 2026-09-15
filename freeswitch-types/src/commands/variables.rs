@@ -706,11 +706,17 @@ pub(super) fn unbalanced(text: &str, (open, close): (char, char)) -> Option<Stri
     (depth != 0).then(|| format!("opens a '{open}' it never closes, swallowing the block's end"))
 }
 
-/// Reject a key no escaping carries: empty, `:_:`, a quote in channel scope or an unbalanced
+/// Reject a key no escaping carries: empty, `:_:`, `[`, a quote in channel scope or an unbalanced
 /// bracket. The key is the offending text, so no error quotes it.
 fn check_key(key: &str, vars_type: VariablesType) -> Result<(), OriginateError> {
     let fault = if key.is_empty() {
         Some("is empty, which the switch installs under no name".to_owned())
+    } else if key.contains('[') {
+        Some(
+            "carries '[', which the switch reads as an array index, installing the value \
+             under the text before it"
+                .to_owned(),
+        )
     } else if key.contains(ENTERPRISE_DELIM) {
         Some(format!(
             "carries the enterprise separator {ENTERPRISE_DELIM}, on which the switch splits \
@@ -769,6 +775,25 @@ fn check_representable(
             "variable {key} {fault}"
         )))
     })
+}
+
+/// Reject a key naming, but for ASCII case, one of `earlier`: the block's event replaces a header
+/// by `strcasecmp`, so the two install as one variable. Position `at` names it, never its text.
+fn check_case_collision<'a>(
+    earlier: impl IntoIterator<Item = &'a String>,
+    key: &str,
+    at: usize,
+) -> Result<(), OriginateError> {
+    let collides = earlier
+        .into_iter()
+        .any(|name| name != key && name.eq_ignore_ascii_case(key));
+    match collides {
+        true => Err(OriginateError::ParseError(format!(
+            "variable {at} differs only in case from an earlier name, which the switch \
+             installs as the same variable"
+        ))),
+        false => Ok(()),
+    }
 }
 
 /// Reject a separator that cannot delimit the block it was chosen for.
@@ -1202,8 +1227,21 @@ impl<'de> serde::Deserialize<'de> for Variables {
         };
         // A config naming a value the wire cannot carry fails at load rather
         // than on the call it was loaded for.
-        for (key, value) in &inner {
-            check_representable(key, value, vars_type).map_err(serde::de::Error::custom)?;
+        for (at, (key, value)) in inner
+            .iter()
+            .enumerate()
+        {
+            check_representable(key, value, vars_type)
+                .and_then(|()| {
+                    check_case_collision(
+                        inner
+                            .keys()
+                            .take(at),
+                        key,
+                        at,
+                    )
+                })
+                .map_err(serde::de::Error::custom)?;
         }
         let vars = Self {
             vars_type,
@@ -1369,6 +1407,7 @@ impl Variables {
                 let key = key.as_str();
                 let value = unescape_value(&part[at + 1..], target, commas_separate, vars_type);
                 check_representable(key, &value, vars_type)?;
+                check_case_collision(inner.keys(), key, i)?;
                 if !commas_separate && (key.contains(sep) || value.contains(sep)) {
                     return Err(OriginateError::ParseError(format!(
                         "variable {i} contains the block's ^^ separator"
