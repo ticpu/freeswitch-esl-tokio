@@ -70,12 +70,14 @@ pub(crate) fn find_matching_bracket(s: &str, open: char, close: char) -> Option<
 
 /// Wrap a token in single quotes for originate command strings.
 ///
-/// If `token` contains spaces, it is wrapped in `'...'` with any inner
-/// single quotes escaped as `\'`.  Tokens without spaces are returned as-is.
+/// A token carrying a single quote is wrapped as [`quote_for_uuid_setvar`] does, which the
+/// same blank split reads back; one carrying only spaces is wrapped in `'...'`; any other is
+/// returned as-is.
 pub fn originate_quote(token: &str) -> String {
-    if token.contains(' ') {
-        let escaped = token.replace('\'', "\\'");
-        format!("'{}'", escaped)
+    if token.contains('\'') {
+        quote_for_uuid_setvar(token)
+    } else if token.contains(' ') {
+        format!("'{token}'")
     } else {
         token.to_string()
     }

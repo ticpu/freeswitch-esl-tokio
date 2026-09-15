@@ -10,7 +10,7 @@ use super::endpoint::ParseGroupCallOrderError;
 use super::variables::{
     write_escaped, BlockParse, DialStringCarrier, DialStringTarget, InvalidArgvSeparator,
 };
-use super::{originate_quote, originate_split, originate_unquote};
+use super::{originate_quote, originate_split};
 use crate::channel::ParseHangupCauseError;
 use crate::tokenizer::{cleanup, delimiter_override, trace, untrace};
 
@@ -846,10 +846,7 @@ impl Originate {
             cid_name,
             cid_num,
             timeout,
-        } = Slots::read(args.map(|token| match sep {
-            Some(sep) => clean_argument(&token, sep),
-            None => originate_unquote(&token),
-        }))?;
+        } = Slots::read(args.map(|token| clean_argument(&token, sep)))?;
 
         let target = super::parse_originate_target(&target_str, dialplan.as_ref())?;
 
@@ -945,9 +942,9 @@ impl Slots {
     }
 }
 
-/// What the switch's cleanup after splitting on `sep` leaves of `token`.
-fn clean_argument(token: &str, sep: char) -> String {
-    untrace(&cleanup(&trace(token), Some(sep)))
+/// What the switch's cleanup after splitting on `sep`, or on blanks, leaves of `token`.
+fn clean_argument(token: &str, sep: Option<char>) -> String {
+    untrace(&cleanup(&trace(token), sep))
 }
 
 /// FreeSWITCH's `undef` placeholder, in any case, read as the absent value it stands for.
@@ -2541,6 +2538,9 @@ mod tests {
         let cases = [
             (
                 Originate::application(test_endpoint(), Application::simple("park"))
+                    .dialplan(DialplanType::Xml)
+                    .unwrap()
+                    .context("default")
                     .cid_name("it's"),
                 r"originate loopback/9199/test &park() XML default 'it\'s'",
             ),
@@ -2553,6 +2553,8 @@ mod tests {
             ),
             (
                 Originate::inline(null_endpoint(), [Application::new("set", Some("a=it's,b"))])
+                    .unwrap()
+                    .dialplan(DialplanType::Inline)
                     .unwrap(),
                 r"originate loopback/9199 'set:a=it\'s\\,b' inline",
             ),
