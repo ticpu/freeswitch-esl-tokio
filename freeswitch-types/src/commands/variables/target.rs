@@ -100,7 +100,7 @@ impl BlockParse {
 
 const VOUCHED_PAIR_SPLIT_CLEANS: (FreeswitchVersion, FreeswitchVersion) = (
     FreeswitchVersion::new(1, 10, 0),
-    FreeswitchVersion::new(1, 10, 12),
+    FreeswitchVersion::new(1, 11, 3),
 );
 
 /// A FreeSWITCH version [`BlockParse::for_version`] cannot vouch for.

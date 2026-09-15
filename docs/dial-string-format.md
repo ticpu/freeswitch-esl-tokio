@@ -574,10 +574,12 @@ Every count above belongs to one revision of the block parser,
 runs, so the application names the FreeSWITCH version it targets and
 `BlockParse::for_version` answers:
 
-- Releases 1.10.0 through 1.10.12 map to `PairSplitCleans`. The block parse,
-  both carrier passes and the leg splits are unchanged in meaning across the
-  1.10.0 to 1.11.1 source, and the live escaping suite passes on a 1.10 build.
-- A 1.11 release is refused until that suite has run on a 1.11 build.
+- Releases 1.10.0 through 1.11.3 map to `PairSplitCleans`. The block parse,
+  both carrier passes and the leg splits are unchanged in meaning across that
+  source — from 1.10.11 on, `switch_event_create_brackets`, the tokenizer it
+  splits with, `switch_channel_expand_variables_check` and the originate leg
+  loops are byte-identical at every release tag — and the live escaping suite
+  passes on a 1.10 and a 1.11 build.
 - Every `-dev` build is refused: it reports the same version before and after
   an upstream commit.
 
