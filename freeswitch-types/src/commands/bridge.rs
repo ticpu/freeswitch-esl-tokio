@@ -11,6 +11,7 @@ use super::originate::OriginateError;
 use super::variables::{
     installed_variables, read_error, BlockParse, DialStringCarrier, DialStringTarget, Variables,
 };
+use crate::switch_passes::expansion::expand_escapes;
 use crate::switch_passes::originate_legs::{scan_group, split_groups};
 use crate::switch_passes::separate::CBuffer;
 use crate::switch_passes::{pipeline, trace};
@@ -243,8 +244,9 @@ impl BridgeDialString {
     }
 }
 
-/// Whether `switch_ivr_originate`'s comma scan, run over the group its `|` split leaves, rewrites a
-/// separator between two legs, as a bracket range spanning them does.
+/// Whether `switch_ivr_originate`'s comma scan, run over the group its `|` split leaves of the
+/// application's expanded argument, rewrites a separator between two legs, as a bracket range
+/// spanning them does.
 fn separator_merged(group: &[Endpoint], target: DialStringTarget) -> bool {
     let mut text = String::new();
     let mut separators = Vec::new();
@@ -262,7 +264,8 @@ fn separator_merged(group: &[Endpoint], target: DialStringTarget) -> bool {
                 .to_string(),
         );
     }
-    let mut buffer = CBuffer::new(&trace(&text));
+    let (expanded, _) = expand_escapes(&trace(&text));
+    let mut buffer = CBuffer::new(&expanded);
     let split = split_groups(&mut buffer);
     let [group] = &split.tokens[..] else {
         return false;
@@ -308,6 +311,25 @@ mod tests {
         DialString, ErrorEndpoint, LoopbackEndpoint, SofiaEndpoint, SofiaGateway,
     };
     use crate::commands::variables::{BlockParse, VariablesType};
+
+    /// The comma scan runs after the application's argument is expanded, which here unescapes the
+    /// quote that kept the `[` and `]` apart, so the switch dials both endpoints as one leg.
+    #[cfg(feature = "serde")]
+    #[test]
+    fn a_bracket_spanning_legs_after_expansion_is_refused() {
+        let bridge = BridgeDialString::new(vec![vec![
+            crate::commands::endpoint::UserEndpoint::new("['").into(),
+            SofiaGateway::new("", "]")
+                .with_profile(" ")
+                .into(),
+        ]]);
+        let json = serde_json::to_value(&bridge).unwrap();
+        assert!(matches!(
+            serde_json::from_value::<BridgeDialString>(json)
+                .map_err(|e| e.to_string()),
+            Err(e) if e.contains("group 0")
+        ));
+    }
 
     // === Display ===
 
