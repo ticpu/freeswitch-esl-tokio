@@ -1,9 +1,11 @@
 //! FreeSWITCH's C that `freeswitch-types` ports, compiled from every tree `hooks/source-refs.yaml`
 //! names, for differential tests of the port against each.
 //!
-//! Every call works on bytes, and the C reads its input up to the first NUL.
+//! Every call works on bytes, and the C reads its input up to the first NUL. Passes that install
+//! channel variables or call into the core run against stubs that report each call and store
+//! nothing: a variable lookup or API call answers nothing.
 
-use std::ffi::{c_char, c_int, c_uint, CStr};
+use std::ffi::{c_char, c_int, c_long, c_uint, c_void, CStr};
 
 /// One FreeSWITCH tree the build compiles: the pin, or an entry of `trees` in the index.
 #[derive(Debug)]
@@ -49,6 +51,8 @@ pub struct Oracle {
 }
 
 type Split = unsafe extern "C" fn(*mut c_char, c_char, *mut *mut c_char, c_uint) -> c_uint;
+type Emit = unsafe extern "C" fn(*mut c_void, c_int, *const c_char, *const c_char);
+type Recorded = unsafe extern "C" fn(*const c_char, Emit, *mut c_void);
 
 #[derive(Debug)]
 struct Abi {
@@ -64,6 +68,12 @@ struct Abi {
     needs_url_encode: unsafe extern "C" fn(*const c_char) -> c_int,
     core_url_encode_opt: unsafe extern "C" fn(*const c_char, c_int, *mut c_char, usize) -> usize,
     url_unsafe: unsafe extern "C" fn() -> *const c_char,
+    brackets:
+        unsafe extern "C" fn(*mut c_char, c_char, c_char, c_char, Emit, *mut c_void) -> c_long,
+    dial: Recorded,
+    expand: Recorded,
+    api_originate: Recorded,
+    switch_true: unsafe extern "C" fn(*const c_char) -> c_int,
 }
 
 /// Link one tree's prefixed symbols into a module holding its `ABI`.
@@ -71,7 +81,9 @@ struct Abi {
 macro_rules! tree_abi {
     ($tree:ident, $prefix:literal) => {
         mod $tree {
-            use std::ffi::{c_char, c_int, c_uint};
+            use std::ffi::{c_char, c_int, c_long, c_uint, c_void};
+
+            use super::Emit;
 
             extern "C" {
                 #[link_name = concat!($prefix, "oracle_cleanup")]
@@ -125,6 +137,23 @@ macro_rules! tree_abi {
                 ) -> usize;
                 #[link_name = concat!($prefix, "oracle_url_unsafe")]
                 fn url_unsafe() -> *const c_char;
+                #[link_name = concat!($prefix, "oracle_brackets")]
+                fn brackets(
+                    data: *mut c_char,
+                    a: c_char,
+                    b: c_char,
+                    c: c_char,
+                    emit: Emit,
+                    ctx: *mut c_void,
+                ) -> c_long;
+                #[link_name = concat!($prefix, "oracle_dial")]
+                fn dial(bridgeto: *const c_char, emit: Emit, ctx: *mut c_void);
+                #[link_name = concat!($prefix, "oracle_expand")]
+                fn expand(input: *const c_char, emit: Emit, ctx: *mut c_void);
+                #[link_name = concat!($prefix, "oracle_api_originate")]
+                fn api_originate(arg: *const c_char, emit: Emit, ctx: *mut c_void);
+                #[link_name = concat!($prefix, "oracle_switch_true")]
+                fn switch_true(expr: *const c_char) -> c_int;
             }
 
             pub(super) static ABI: super::Abi = super::Abi {
@@ -139,12 +168,147 @@ macro_rules! tree_abi {
                 needs_url_encode,
                 core_url_encode_opt,
                 url_unsafe,
+                brackets,
+                dial,
+                expand,
+                api_originate,
+                switch_true,
             };
         }
     };
 }
 
 include!(concat!(env!("OUT_DIR"), "/trees.rs"));
+
+/// A header an extracted pass installed: its name, then its value.
+pub type Pair = (Vec<u8>, Vec<u8>);
+
+/// What `switch_event_create_brackets` read of the block opening its data.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Brackets {
+    /// Every header installed, in order.
+    pub pairs: Vec<Pair>,
+    /// The offset of the data after the block.
+    pub rest: usize,
+}
+
+/// What `switch_ivr_originate` and `switch_ivr_enterprise_originate` read of a dial string, up to
+/// each leg's endpoint.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Dial {
+    /// `<>` headers ahead of an enterprise split.
+    pub enterprise: Vec<Pair>,
+    /// One per `:_:` thread, or the whole dial string when there is none.
+    pub threads: Vec<Thread>,
+    /// Why the enterprise originate stopped before its threads.
+    pub failure: Option<Vec<u8>>,
+}
+
+/// One thread of a [`Dial`].
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Thread {
+    /// `switch_stristr` found `origination_nested_vars=true` in the thread's text.
+    pub nested_vars: bool,
+    /// `<>` and `{}` headers.
+    pub pairs: Vec<Pair>,
+    /// The `|` groups, each its `,` legs.
+    pub groups: Vec<Vec<Leg>>,
+    /// Why the thread's originate stopped.
+    pub failure: Option<Vec<u8>>,
+}
+
+/// One leg of a [`Thread`].
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Leg {
+    /// `[]` headers.
+    pub pairs: Vec<Pair>,
+    /// The text after the leg's blocks, `None` where the originate stopped first.
+    pub endpoint: Option<Vec<u8>>,
+}
+
+/// What `switch_channel_expand_variables_check` made of its input.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Expansion {
+    /// The output, every reference substituted with nothing.
+    pub text: Vec<u8>,
+    /// Every variable name looked up, in order.
+    pub lookups: Vec<Vec<u8>>,
+    /// Every API function called, with its argument.
+    pub api_calls: Vec<(Vec<u8>, Option<Vec<u8>>)>,
+}
+
+/// What `originate_function` did with an API argument line.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ApiOriginate {
+    /// Every line written to the API stream.
+    pub output: Vec<Vec<u8>>,
+    /// The call to `switch_ivr_originate`, absent when the arguments were refused.
+    pub originated: Option<Originated>,
+    /// The `switch_assert` expression that failed, which aborts the switch.
+    pub assertion: Option<Vec<u8>>,
+}
+
+/// The arguments `originate_function` handed on.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Originated {
+    /// The dial string, `None` for `undef`.
+    pub aleg: Option<Vec<u8>>,
+    /// Seconds.
+    pub timeout: u32,
+    /// The caller id name, `None` when absent or `undef`.
+    pub cid_name: Option<Vec<u8>>,
+    /// The caller id number, `None` when absent or `undef`.
+    pub cid_num: Option<Vec<u8>>,
+    /// What the new channel runs.
+    pub action: Option<Action>,
+}
+
+/// What the originated channel runs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Action {
+    /// `&name(arg)`.
+    Application {
+        /// Up to the first `(`.
+        name: Vec<u8>,
+        /// Between the first `(` and the first `)`, `None` without a `(`.
+        arg: Option<Vec<u8>>,
+    },
+    /// `switch_ivr_session_transfer`.
+    Transfer {
+        /// The extension argument.
+        extension: Vec<u8>,
+        /// The dialplan, `XML` when absent.
+        dialplan: Vec<u8>,
+        /// The context, `default` when absent.
+        context: Vec<u8>,
+    },
+}
+
+type Record = (c_int, Option<Vec<u8>>, Option<Vec<u8>>);
+
+/// # Safety
+///
+/// `ctx` is the `Vec<Record>` [`recorded`] passed, and each non-null string is NUL-terminated.
+unsafe extern "C" fn record(ctx: *mut c_void, tag: c_int, a: *const c_char, b: *const c_char) {
+    let owned = |s: *const c_char| {
+        // SAFETY: the caller guarantees a non-null `s` is NUL-terminated.
+        (!s.is_null()).then(|| {
+            unsafe { CStr::from_ptr(s) }
+                .to_bytes()
+                .to_vec()
+        })
+    };
+    // SAFETY: the caller guarantees `ctx` is the records vector, borrowed for this call only.
+    let records = unsafe { &mut *ctx.cast::<Vec<Record>>() };
+    records.push((tag, owned(a), owned(b)));
+}
+
+/// What the harness reported while `call` ran it with [`record`].
+fn recorded(call: impl FnOnce(Emit, *mut c_void)) -> Vec<Record> {
+    let mut records: Vec<Record> = Vec::new();
+    call(record, std::ptr::from_mut(&mut records).cast());
+    records
+}
 
 /// `input` and its terminator. After a trailing backslash the C steps over the terminator and
 /// reads the next byte, so a second NUL keeps that read inside the buffer and ends the split.
@@ -184,6 +348,33 @@ fn split(
         limit,
     );
     tokens(&array[..count as usize])
+}
+
+/// Run a C encoder over a NUL-terminated copy of `url` into a zeroed buffer of `len` bytes.
+fn encode_into(
+    url: &[u8],
+    len: usize,
+    call: impl FnOnce(*const c_char, *mut c_char) -> *mut c_char,
+) -> Vec<u8> {
+    assert!(len > 0, "the C writes a terminator into the last byte");
+    let input = buffer(url);
+    let mut buf = vec![0u8; len];
+    let written = call(
+        input
+            .as_ptr()
+            .cast(),
+        buf.as_mut_ptr()
+            .cast(),
+    );
+    assert!(!written.is_null(), "the encoder was given a buffer");
+    // SAFETY: the C terminated what it wrote inside `buf`.
+    unsafe { CStr::from_ptr(written) }
+        .to_bytes()
+        .to_vec()
+}
+
+fn text(field: Option<Vec<u8>>) -> Vec<u8> {
+    field.unwrap_or_default()
 }
 
 impl Oracle {
@@ -363,27 +554,209 @@ impl Oracle {
         }
         .to_bytes()
     }
-}
 
-/// Run a C encoder over a NUL-terminated copy of `url` into a zeroed buffer of `len` bytes.
-fn encode_into(
-    url: &[u8],
-    len: usize,
-    call: impl FnOnce(*const c_char, *mut c_char) -> *mut c_char,
-) -> Vec<u8> {
-    assert!(len > 0, "the C writes a terminator into the last byte");
-    let input = buffer(url);
-    let mut buf = vec![0u8; len];
-    let written = call(
-        input
-            .as_ptr()
-            .cast(),
-        buf.as_mut_ptr()
-            .cast(),
-    );
-    assert!(!written.is_null(), "the encoder was given a buffer");
-    // SAFETY: the C terminated what it wrote inside `buf`.
-    unsafe { CStr::from_ptr(written) }
-        .to_bytes()
-        .to_vec()
+    /// `switch_event_create_brackets` on the block opening `data` between `open` and `close`,
+    /// splitting pairs on `comma` without a `^^` head, or `None` where the call fails.
+    pub fn brackets(self, data: &[u8], open: u8, close: u8, comma: u8) -> Option<Brackets> {
+        let mut buffer = buffer(data);
+        let mut rest = -1;
+        let records = recorded(|emit, ctx| {
+            // SAFETY: the buffer is NUL-terminated, and `emit` and `ctx` outlive the call.
+            rest = unsafe {
+                (self
+                    .abi
+                    .brackets)(
+                    buffer
+                        .as_mut_ptr()
+                        .cast(),
+                    open as c_char,
+                    close as c_char,
+                    comma as c_char,
+                    emit,
+                    ctx,
+                )
+            };
+        });
+        let rest = usize::try_from(rest).ok()?;
+        let pairs = records
+            .into_iter()
+            .map(|(tag, name, value)| {
+                assert_eq!(tag, PAIR, "the bracket parse reports only pairs");
+                (text(name), text(value))
+            })
+            .collect();
+        Some(Brackets { pairs, rest })
+    }
+
+    /// The passes of `switch_ivr_originate`, through its enterprise split, that read `bridgeto`
+    /// up to each leg's endpoint.
+    pub fn dial(self, bridgeto: &[u8]) -> Dial {
+        let mut dial = Dial::default();
+        for (tag, a, b) in self.run(
+            self.abi
+                .dial,
+            bridgeto,
+        ) {
+            if tag == THREAD {
+                dial.threads
+                    .push(Thread::default());
+                continue;
+            }
+            let thread = dial
+                .threads
+                .last_mut();
+            match (tag, thread) {
+                (PAIR, None) => dial
+                    .enterprise
+                    .push((text(a), text(b))),
+                (FAILURE, None) => dial.failure = a,
+                (PAIR, Some(thread)) => match thread
+                    .groups
+                    .last_mut()
+                    .and_then(|group| group.last_mut())
+                {
+                    Some(leg) => leg
+                        .pairs
+                        .push((text(a), text(b))),
+                    None => thread
+                        .pairs
+                        .push((text(a), text(b))),
+                },
+                (NESTED, Some(thread)) => thread.nested_vars = true,
+                (GROUP, Some(thread)) => thread
+                    .groups
+                    .push(Vec::new()),
+                (LEG, Some(thread)) => thread
+                    .groups
+                    .last_mut()
+                    .expect("a leg follows its group")
+                    .push(Leg::default()),
+                (ENDPOINT, Some(thread)) => {
+                    thread
+                        .groups
+                        .last_mut()
+                        .and_then(|group| group.last_mut())
+                        .expect("an endpoint follows its leg")
+                        .endpoint = a;
+                }
+                (FAILURE, Some(thread)) => thread.failure = a,
+                (tag, _) => panic!("the dial harness reported tag {tag}"),
+            }
+        }
+        dial
+    }
+
+    /// `switch_channel_expand_variables_check` on `input`.
+    pub fn expand(self, input: &[u8]) -> Expansion {
+        let mut expansion = Expansion::default();
+        for (tag, a, b) in self.run(
+            self.abi
+                .expand,
+            input,
+        ) {
+            match tag {
+                OUTPUT => expansion.text = text(a),
+                LOOKUP => expansion
+                    .lookups
+                    .push(text(a)),
+                API => expansion
+                    .api_calls
+                    .push((text(a), b)),
+                tag => panic!("the expansion harness reported tag {tag}"),
+            }
+        }
+        expansion
+    }
+
+    /// `originate_function` on an API argument line, stripped as `switch_api_execute` strips it.
+    pub fn api_originate(self, arg: &[u8]) -> ApiOriginate {
+        let mut api = ApiOriginate::default();
+        for (tag, a, b) in self.run(
+            self.abi
+                .api_originate,
+            arg,
+        ) {
+            if tag == ORIGINATE {
+                api.originated = Some(Originated {
+                    aleg: a,
+                    timeout: String::from_utf8(text(b))
+                        .ok()
+                        .and_then(|timeout| {
+                            timeout
+                                .parse()
+                                .ok()
+                        })
+                        .expect("the harness prints the timeout as a number"),
+                    ..Originated::default()
+                });
+                continue;
+            }
+            let originated = api
+                .originated
+                .as_mut();
+            match (tag, originated) {
+                (OUTPUT, _) => api
+                    .output
+                    .push(text(a)),
+                (FAILURE, _) => api.assertion = a,
+                (CALLER_ID, Some(originated)) => {
+                    originated.cid_name = a;
+                    originated.cid_num = b;
+                }
+                (APPLICATION, Some(originated)) => {
+                    originated.action = Some(Action::Application {
+                        name: text(a),
+                        arg: b,
+                    });
+                }
+                (TRANSFER, Some(originated)) => {
+                    originated.action = Some(Action::Transfer {
+                        extension: text(a),
+                        dialplan: text(b),
+                        context: Vec::new(),
+                    });
+                }
+                (CONTEXT, Some(originated)) => {
+                    if let Some(Action::Transfer { context, .. }) = &mut originated.action {
+                        *context = text(a);
+                    }
+                }
+                (tag, _) => panic!("the originate harness reported tag {tag}"),
+            }
+        }
+        api
+    }
+
+    /// `switch_true`.
+    pub fn switch_true(self, expr: &[u8]) -> bool {
+        let buffer = buffer(expr);
+        // SAFETY: the buffer is NUL-terminated and the C only reads it.
+        let truth = unsafe {
+            (self
+                .abi
+                .switch_true)(
+                buffer
+                    .as_ptr()
+                    .cast(),
+            )
+        };
+        truth != 0
+    }
+
+    /// Run a recording harness function over a NUL-terminated copy of `input`.
+    fn run(self, call: Recorded, input: &[u8]) -> Vec<Record> {
+        let input = buffer(input);
+        recorded(|emit, ctx| {
+            // SAFETY: the input is NUL-terminated, and `emit` and `ctx` outlive the call.
+            unsafe {
+                call(
+                    input
+                        .as_ptr()
+                        .cast(),
+                    emit,
+                    ctx,
+                );
+            }
+        })
+    }
 }

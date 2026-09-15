@@ -1,6 +1,9 @@
 //! Extracts the switch's C that `freeswitch-types` ports from every tree `hooks/source-refs.yaml`
 //! names, read out of the clone `FREESWITCH_SOURCE` names, and compiles one unit per tree with its
 //! symbols prefixed by the tree's name. Nothing of the FreeSWITCH tree is kept outside `OUT_DIR`.
+//!
+//! Functions are taken whole by name. Code living inside a larger function is taken as the
+//! brace-balanced statement opening on a marker line, which must occur once in that function.
 
 use std::collections::HashMap;
 use std::env;
@@ -13,24 +16,89 @@ use serde::Deserialize;
 
 const UTILS: &str = "src/switch_utils.c";
 const UTILS_H: &str = "src/include/switch_utils.h";
+const TYPES_H: &str = "src/include/switch_types.h";
+const EVENT: &str = "src/switch_event.c";
+const CHANNEL: &str = "src/switch_channel.c";
+const ORIGINATE: &str = "src/switch_ivr_originate.c";
+const COMMANDS: &str = "src/mod/applications/mod_commands/mod_commands.c";
 
-const TOKENIZER: &[&str] = &[
-    "unescape_char",
-    "cleanup_separated_string",
-    "switch_separate_string_string",
-    "separate_string_char_delim",
-    "separate_string_blank_delim",
-    "switch_separate_string",
-    "switch_find_end_paren",
+/// `(file, name)` of every `#define` the unit takes, in dependency order.
+const DEFINES: &[(&str, &str)] = &[
+    (UTILS, "ESCAPE_META"),
+    (UTILS_H, "end_of_p"),
+    (UTILS_H, "SWITCH_URL_UNSAFE"),
+    (UTILS_H, "switch_goto_status"),
+    (UTILS_H, "switch_safe_free"),
+    (TYPES_H, "SWITCH_ENT_ORIGINATE_DELIM"),
+    (TYPES_H, "SWITCH_BLANK_STRING"),
+    (TYPES_H, "SWITCH_STANDARD_API"),
+    (CHANNEL, "resize"),
+    (ORIGINATE, "QUOTED_ESC_COMMA"),
+    (ORIGINATE, "UNQUOTED_ESC_COMMA"),
+    (ORIGINATE, "MAX_PEERS"),
+    (COMMANDS, "ORIGINATE_SYNTAX"),
 ];
 
-const URL_ENCODE: &[&str] = &[
-    "switch_url_encode_opt",
-    "switch_url_encode",
-    "switch_core_url_encode_opt",
+/// `(file, name)` of every function the unit takes whole, in dependency order.
+const FUNCTIONS: &[(&str, &str)] = &[
+    (UTILS_H, "_zstr"),
+    (UTILS_H, "switch_toupper"),
+    (UTILS_H, "switch_strchr_strict"),
+    (UTILS_H, "switch_string_has_escaped_data"),
+    (UTILS_H, "switch_string_var_check_const"),
+    (UTILS_H, "switch_needs_url_encode"),
+    (UTILS, "unescape_char"),
+    (UTILS, "cleanup_separated_string"),
+    (UTILS, "switch_separate_string_string"),
+    (UTILS, "separate_string_char_delim"),
+    (UTILS, "separate_string_blank_delim"),
+    (UTILS, "switch_separate_string"),
+    (UTILS, "switch_find_end_paren"),
+    (UTILS, "switch_url_encode_opt"),
+    (UTILS, "switch_url_encode"),
+    (UTILS, "switch_core_url_encode_opt"),
+    (UTILS, "switch_stristr"),
+    (UTILS, "switch_strip_whitespace"),
+    (UTILS, "switch_is_number"),
+    (UTILS_H, "switch_true"),
+    (EVENT, "switch_event_create_brackets"),
+    (CHANNEL, "switch_channel_expand_variables_check"),
+    (COMMANDS, "originate_function"),
 ];
 
-const HEADER_FUNCTIONS: &[&str] = &["switch_needs_url_encode"];
+/// `(file, function, marker, placeholder)`: the statement a harness function names by placeholder.
+const BLOCKS: &[(&str, &str, &str, &str)] = &[
+    (
+        ORIGINATE,
+        "switch_ivr_originate",
+        "if (*data == '<') {",
+        "ORACLE_ORIGINATE_ULTRA_GLOBAL",
+    ),
+    (
+        ORIGINATE,
+        "switch_ivr_originate",
+        "while (*data == '{') {",
+        "ORACLE_ORIGINATE_GLOBAL",
+    ),
+    (
+        ORIGINATE,
+        "switch_ivr_originate",
+        "while (p && *p) {",
+        "ORACLE_ORIGINATE_COMMA_SCAN",
+    ),
+    (
+        ORIGINATE,
+        "switch_ivr_originate",
+        "while (*chan_type == '[') {",
+        "ORACLE_ORIGINATE_LOCAL",
+    ),
+    (
+        ORIGINATE,
+        "switch_ivr_enterprise_originate",
+        "while (data && *data == '<') {",
+        "ORACLE_ENTERPRISE_ULTRA_GLOBAL",
+    ),
+];
 
 /// Harness symbols Rust links against, renamed per tree like every extracted function.
 const EXPORTS: &[&str] = &[
@@ -40,16 +108,58 @@ const EXPORTS: &[&str] = &[
     "oracle_needs_url_encode",
     "oracle_core_url_encode_opt",
     "oracle_url_unsafe",
+    "oracle_brackets",
+    "oracle_dial",
+    "oracle_expand",
+    "oracle_api_originate",
+    "oracle_switch_true",
 ];
 
-/// What the extracted code needs of the switch's types and memory pools.
-const PRELUDE: &str = r"#include <stdlib.h>
+/// What the harness reports through its callback, numbered alike in C and in Rust.
+const TAGS: &[&str] = &[
+    "PAIR",
+    "THREAD",
+    "GROUP",
+    "LEG",
+    "ENDPOINT",
+    "NESTED",
+    "FAILURE",
+    "LOOKUP",
+    "API",
+    "ORIGINATE",
+    "CALLER_ID",
+    "APPLICATION",
+    "TRANSFER",
+    "CONTEXT",
+    "OUTPUT",
+];
+
+/// The switch's types, reduced to what the extracted code touches.
+const PRELUDE: &str = r#"#include <setjmp.h>
+#include <stdarg.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #define SWITCH_DECLARE(type) type
+#define _In_opt_z_
+#define _In_opt_
+#define _In_
+#define _Check_return_
+#define zstr(x) _zstr(x)
+static void oracle_assert_failed(const char *expr);
+#define switch_assert(expr) do { if (!(expr)) { oracle_assert_failed(#expr); } } while (0)
+#define switch_log_printf(...) ((void) 0)
 typedef int switch_bool_t;
 #define SWITCH_FALSE 0
 #define SWITCH_TRUE 1
 typedef size_t switch_size_t;
+typedef enum {
+	SWITCH_STATUS_SUCCESS,
+	SWITCH_STATUS_FALSE,
+	SWITCH_STATUS_GENERR
+} switch_status_t;
 
 typedef struct switch_memory_pool {
 	void *allocs[4];
@@ -71,9 +181,200 @@ static char *oracle_pool_strdup(switch_memory_pool_t *pool, const char *s)
 
 #define switch_core_alloc(_pool, _mem) oracle_pool_alloc(_pool, _mem)
 #define switch_core_strdup(_pool, _todup) oracle_pool_strdup(_pool, _todup)
-";
 
-const URL_WRAPPERS: &str = r"
+typedef void (*oracle_emit_fn)(void *ctx, int tag, const char *a, const char *b);
+static _Thread_local oracle_emit_fn oracle_emit;
+static _Thread_local void *oracle_ctx;
+
+static void oracle_record(int tag, const char *a, const char *b)
+{
+	oracle_emit(oracle_ctx, tag, a, b);
+}
+
+/* A harness that arms the jump reports a failed assertion and returns; any other aborts. */
+static _Thread_local jmp_buf *oracle_assert_jump;
+
+static void oracle_assert_failed(const char *expr)
+{
+	if (!oracle_assert_jump) {
+		abort();
+	}
+	oracle_record(ORACLE_FAILURE, expr, NULL);
+	longjmp(*oracle_assert_jump, 1);
+}
+
+/* Every header an extracted pass installs is reported; nothing is stored. */
+typedef struct switch_event {
+	int flags;
+} switch_event_t;
+#define EF_UNIQ_HEADERS 1
+#define SWITCH_EVENT_CHANNEL_DATA 0
+#define SWITCH_STACK_BOTTOM 0
+
+static switch_status_t switch_event_create_plain(switch_event_t **event, int id)
+{
+	(void) id;
+	*event = calloc(1, sizeof(**event));
+	return *event ? SWITCH_STATUS_SUCCESS : SWITCH_STATUS_FALSE;
+}
+
+static void switch_event_destroy(switch_event_t **event)
+{
+	free(*event);
+	*event = NULL;
+}
+
+static switch_status_t switch_event_add_header_string(switch_event_t *event, int stack, const char *name, const char *value)
+{
+	(void) event;
+	(void) stack;
+	oracle_record(ORACLE_PAIR, name, value);
+	return SWITCH_STATUS_SUCCESS;
+}
+
+static int switch_event_check_permission_list(switch_event_t *list, const char *name)
+{
+	(void) list;
+	(void) name;
+	return 1;
+}
+
+typedef struct switch_core_session {
+	int unused;
+} switch_core_session_t;
+typedef struct switch_channel {
+	switch_core_session_t *session;
+} switch_channel_t;
+typedef struct switch_caller_extension {
+	int unused;
+} switch_caller_extension_t;
+typedef int switch_call_cause_t;
+#define SWITCH_CAUSE_NORMAL_CLEARING 16
+#define SOF_NONE 0
+#define SCF_API_EXPANSION 0
+
+typedef struct switch_stream_handle switch_stream_handle_t;
+struct switch_stream_handle {
+	switch_status_t (*write_function)(switch_stream_handle_t *handle, const char *fmt, ...);
+	void *data;
+};
+#define SWITCH_STANDARD_STREAM(s) memset(&s, 0, sizeof(s)); s.data = malloc(1)
+
+/* Variable and API lookups answer nothing, so a reference expands to an empty string. */
+static const char *switch_channel_get_variable_dup(switch_channel_t *channel, const char *varname, switch_bool_t dup, int idx)
+{
+	(void) channel;
+	(void) dup;
+	(void) idx;
+	oracle_record(ORACLE_LOOKUP, varname, NULL);
+	return NULL;
+}
+
+static int switch_core_test_flag(int flag)
+{
+	(void) flag;
+	return 1;
+}
+
+static switch_status_t switch_api_execute(const char *cmd, const char *arg, switch_core_session_t *session, switch_stream_handle_t *stream)
+{
+	(void) session;
+	(void) stream;
+	oracle_record(ORACLE_API, cmd, arg);
+	return SWITCH_STATUS_FALSE;
+}
+
+static _Thread_local switch_core_session_t oracle_session;
+static _Thread_local switch_channel_t oracle_channel;
+static _Thread_local switch_caller_extension_t oracle_extension;
+static _Thread_local char *oracle_session_strings[8];
+static _Thread_local int oracle_session_string_count;
+
+static switch_status_t switch_ivr_originate(switch_core_session_t *session, switch_core_session_t **bleg, switch_call_cause_t *cause,
+											const char *bridgeto, uint32_t timelimit_sec, void *table, const char *cid_name_override,
+											const char *cid_num_override, void *caller_profile_override, void *ovars, int flags,
+											void *cancel_cause, void *dh)
+{
+	char timeout[16];
+
+	(void) session;
+	(void) table;
+	(void) caller_profile_override;
+	(void) ovars;
+	(void) flags;
+	(void) cancel_cause;
+	(void) dh;
+	snprintf(timeout, sizeof(timeout), "%u", timelimit_sec);
+	oracle_record(ORACLE_ORIGINATE, bridgeto, timeout);
+	oracle_record(ORACLE_CALLER_ID, cid_name_override, cid_num_override);
+	*cause = SWITCH_CAUSE_NORMAL_CLEARING;
+	*bleg = &oracle_session;
+	return SWITCH_STATUS_SUCCESS;
+}
+
+static switch_channel_t *switch_core_session_get_channel(switch_core_session_t *session)
+{
+	(void) session;
+	return &oracle_channel;
+}
+
+static char *switch_core_session_strdup(switch_core_session_t *session, const char *todup)
+{
+	(void) session;
+	if (oracle_session_string_count == sizeof(oracle_session_strings) / sizeof(oracle_session_strings[0])) {
+		abort();
+	}
+	return oracle_session_strings[oracle_session_string_count++] = strdup(todup);
+}
+
+static switch_caller_extension_t *switch_caller_extension_new(switch_core_session_t *session, const char *name, const char *number)
+{
+	(void) session;
+	(void) name;
+	(void) number;
+	return &oracle_extension;
+}
+
+static void switch_caller_extension_add_application(switch_core_session_t *session, switch_caller_extension_t *extension,
+													 const char *application_name, const char *extra_data)
+{
+	(void) session;
+	(void) extension;
+	oracle_record(ORACLE_APPLICATION, application_name, extra_data);
+}
+
+static void switch_ivr_session_transfer(switch_core_session_t *session, const char *extension, const char *dialplan, const char *context)
+{
+	(void) session;
+	oracle_record(ORACLE_TRANSFER, extension, dialplan);
+	oracle_record(ORACLE_CONTEXT, context, NULL);
+}
+
+#define switch_channel_cause2str(cause) ((void) (cause), "CAUSE")
+#define switch_channel_set_caller_extension(channel, extension) ((void) 0)
+#define switch_channel_set_state(channel, state) ((void) 0)
+#define switch_core_session_get_uuid(session) "uuid"
+#define switch_core_session_rwunlock(session) ((void) 0)
+"#;
+
+const HARNESS: &str = r#"
+char *oracle_cleanup(char *str, char delim)
+{
+	return cleanup_separated_string(str, delim);
+}
+
+unsigned int oracle_char_delim(char *buf, char delim, char **array, unsigned int arraylen)
+{
+	memset(array, 0, arraylen * sizeof(*array));
+	return separate_string_char_delim(buf, delim, array, arraylen);
+}
+
+unsigned int oracle_blank_delim(char *buf, char **array, unsigned int arraylen)
+{
+	memset(array, 0, arraylen * sizeof(*array));
+	return separate_string_blank_delim(buf, array, arraylen);
+}
+
 int oracle_needs_url_encode(const char *s)
 {
 	return switch_needs_url_encode(s);
@@ -82,6 +383,11 @@ int oracle_needs_url_encode(const char *s)
 const char *oracle_url_unsafe(void)
 {
 	return SWITCH_URL_UNSAFE;
+}
+
+int oracle_switch_true(const char *expr)
+{
+	return switch_true(expr);
 }
 
 size_t oracle_core_url_encode_opt(const char *url, switch_bool_t double_encode, char *out, size_t outlen)
@@ -100,26 +406,239 @@ size_t oracle_core_url_encode_opt(const char *url, switch_bool_t double_encode, 
 	}
 	return len;
 }
-";
 
-const WRAPPERS: &str = r"
-char *oracle_cleanup(char *str, char delim)
+/* switch_event_create_brackets on a block opening data, as originate calls it: the offset after
+   the block, or -1 where the call fails. */
+long oracle_brackets(char *data, char a, char b, char c, oracle_emit_fn emit, void *ctx)
 {
-	return cleanup_separated_string(str, delim);
+	switch_event_t event = { 0 };
+	switch_event_t *var_event = &event;
+	char *parsed = NULL;
+
+	oracle_emit = emit;
+	oracle_ctx = ctx;
+	if (switch_event_create_brackets(data, a, b, c, &var_event, &parsed, SWITCH_FALSE) != SWITCH_STATUS_SUCCESS || !parsed) {
+		return -1;
+	}
+	return (long) (parsed - data);
 }
 
-unsigned int oracle_char_delim(char *buf, char delim, char **array, unsigned int arraylen)
+/* switch_ivr_originate from its first space strip to each leg's endpoint, the passes the port
+   models, in its order; the statements between are the switch's own. */
+static switch_status_t oracle_originate(const char *bridgeto)
 {
-	memset(array, 0, arraylen * sizeof(*array));
-	return separate_string_char_delim(buf, delim, array, arraylen);
+	switch_status_t status = SWITCH_STATUS_SUCCESS;
+	switch_core_session_t *session = NULL;
+	switch_event_t event = { 0 };
+	switch_event_t *var_event = &event;
+	switch_event_t *local_var_event = NULL;
+	char *pipe_names[MAX_PEERS] = { 0 };
+	char *peer_names[MAX_PEERS] = { 0 };
+	char *odata = strdup(bridgeto);
+	char *data = odata;
+	char *loop_data = NULL;
+	char *chan_type = NULL;
+	const char *failure = "Parse Error!";
+	int or_argc = 0, and_argc = 0, r, i;
+
+	(void) session;
+
+	/* strip leading spaces */
+	while (data && *data && *data == ' ') {
+		data++;
+	}
+
+	if (switch_stristr("origination_nested_vars=true", data)) {
+		oracle_record(ORACLE_NESTED, NULL, NULL);
+	}
+
+	ORACLE_ORIGINATE_ULTRA_GLOBAL
+
+	ORACLE_ORIGINATE_GLOBAL
+
+	/* strip leading spaces (again) */
+	while (data && *data && *data == ' ') {
+		data++;
+	}
+
+	if (zstr(data)) {
+		failure = "No origination URL specified!";
+		status = SWITCH_STATUS_GENERR;
+		goto done;
+	}
+
+	loop_data = strdup(data);
+	or_argc = switch_separate_string(loop_data, '|', pipe_names, (sizeof(pipe_names) / sizeof(pipe_names[0])));
+
+	if (or_argc <= 0) {
+		oracle_record(ORACLE_FAILURE, "Nothing to do", NULL);
+		goto done;
+	}
+
+	for (r = 0; r < or_argc; r++) {
+		char *p, *end = NULL;
+		int q = 0, alt = 0;
+
+		p = pipe_names[r];
+
+		ORACLE_ORIGINATE_COMMA_SCAN
+
+		and_argc = switch_separate_string(pipe_names[r], ',', peer_names, (sizeof(peer_names) / sizeof(peer_names[0])));
+		oracle_record(ORACLE_GROUP, NULL, NULL);
+
+		for (i = 0; i < and_argc; i++) {
+			end = NULL;
+			oracle_record(ORACLE_LEG, NULL, NULL);
+
+			if (!(chan_type = peer_names[i])) {
+				failure = "Empty dial string";
+				switch_goto_status(SWITCH_STATUS_FALSE, done);
+			}
+
+			/* strip leading spaces */
+			while (chan_type && *chan_type && *chan_type == ' ') {
+				chan_type++;
+			}
+
+			if (*chan_type == '[') {
+				switch_event_create_plain(&local_var_event, SWITCH_EVENT_CHANNEL_DATA);
+			}
+
+			ORACLE_ORIGINATE_LOCAL
+
+			/* strip leading spaces (again) */
+			while (chan_type && *chan_type && *chan_type == ' ') {
+				chan_type++;
+			}
+
+			oracle_record(ORACLE_ENDPOINT, chan_type, NULL);
+
+			if (local_var_event) {
+				switch_event_destroy(&local_var_event);
+			}
+		}
+	}
+
+  done:
+	if (status != SWITCH_STATUS_SUCCESS) {
+		oracle_record(ORACLE_FAILURE, failure, NULL);
+	}
+	if (local_var_event) {
+		switch_event_destroy(&local_var_event);
+	}
+	switch_safe_free(loop_data);
+	switch_safe_free(odata);
+	return status;
 }
 
-unsigned int oracle_blank_delim(char *buf, char **array, unsigned int arraylen)
+/* switch_ivr_enterprise_originate up to the thread split, each thread then read as
+   switch_ivr_originate reads its bridgeto. */
+static switch_status_t oracle_enterprise_originate(const char *bridgeto)
 {
-	memset(array, 0, arraylen * sizeof(*array));
-	return separate_string_blank_delim(buf, array, arraylen);
+	switch_status_t status = SWITCH_STATUS_FALSE;
+	switch_core_session_t *session = NULL;
+	switch_event_t event = { 0 };
+	switch_event_t *var_event = &event;
+	char *x_argv[MAX_PEERS] = { 0 };
+	char *odata = strdup(bridgeto);
+	char *data = odata;
+	const char *failure = "Parse Error!";
+	int x_argc = 0, i;
+
+	(void) session;
+
+	/* strip leading spaces */
+	while (data && *data && *data == ' ') {
+		data++;
+	}
+
+	ORACLE_ENTERPRISE_ULTRA_GLOBAL
+
+	/* strip leading spaces (again) */
+	while (data && *data && *data == ' ') {
+		data++;
+	}
+
+	if (!(x_argc = switch_separate_string_string(data, SWITCH_ENT_ORIGINATE_DELIM, x_argv, MAX_PEERS))) {
+		failure = "DESTINATION_OUT_OF_ORDER";
+		goto done;
+	}
+
+	for (i = 0; i < x_argc; i++) {
+		oracle_record(ORACLE_THREAD, NULL, NULL);
+		oracle_originate(x_argv[i]);
+	}
+	status = SWITCH_STATUS_SUCCESS;
+
+  done:
+	if (status != SWITCH_STATUS_SUCCESS) {
+		oracle_record(ORACLE_FAILURE, failure, NULL);
+	}
+	switch_safe_free(odata);
+	return status;
 }
-";
+
+void oracle_dial(const char *bridgeto, oracle_emit_fn emit, void *ctx)
+{
+	oracle_emit = emit;
+	oracle_ctx = ctx;
+	if (strstr(bridgeto, SWITCH_ENT_ORIGINATE_DELIM)) {
+		oracle_enterprise_originate(bridgeto);
+	} else {
+		oracle_record(ORACLE_THREAD, NULL, NULL);
+		oracle_originate(bridgeto);
+	}
+}
+
+void oracle_expand(const char *in, oracle_emit_fn emit, void *ctx)
+{
+	switch_channel_t channel = { 0 };
+	char *expanded;
+
+	oracle_emit = emit;
+	oracle_ctx = ctx;
+	expanded = switch_channel_expand_variables_check(&channel, in, NULL, NULL, 0);
+	oracle_record(ORACLE_OUTPUT, expanded, NULL);
+	if (expanded != in) {
+		free(expanded);
+	}
+}
+
+static switch_status_t oracle_stream_write(switch_stream_handle_t *handle, const char *fmt, ...)
+{
+	char line[4096];
+	va_list ap;
+
+	(void) handle;
+	va_start(ap, fmt);
+	vsnprintf(line, sizeof(line), fmt, ap);
+	va_end(ap);
+	oracle_record(ORACLE_OUTPUT, line, NULL);
+	return SWITCH_STATUS_SUCCESS;
+}
+
+/* The api line after switch_api_execute strips its argument, run through originate_function. */
+void oracle_api_originate(const char *arg, oracle_emit_fn emit, void *ctx)
+{
+	switch_stream_handle_t stream = { 0 };
+	jmp_buf jump;
+	char *stripped;
+
+	oracle_emit = emit;
+	oracle_ctx = ctx;
+	stream.write_function = oracle_stream_write;
+	stripped = switch_strip_whitespace(arg);
+	if (!setjmp(jump)) {
+		oracle_assert_jump = &jump;
+		originate_function(stripped, NULL, &stream);
+	}
+	oracle_assert_jump = NULL;
+	free(stripped);
+	while (oracle_session_string_count) {
+		free(oracle_session_strings[--oracle_session_string_count]);
+	}
+}
+"#;
 
 #[derive(Deserialize)]
 struct Index {
@@ -164,7 +683,14 @@ fn main() {
         Some(root) => Ok(Path::new(root)),
     };
 
-    let mut table = String::from("static TREES: &[Tree] = &[\n");
+    let mut generated = String::new();
+    for (number, tag) in TAGS
+        .iter()
+        .enumerate()
+    {
+        writeln!(generated, "const {tag}: c_int = {};", number + 1).expect("String write");
+    }
+    generated.push_str("static TREES: &[Tree] = &[\n");
     let mut modules = String::new();
     for tree in trees(&index) {
         let abi = match root
@@ -186,16 +712,16 @@ fn main() {
             }
         };
         writeln!(
-            table,
+            generated,
             "    Tree {{ name: {:?}, commit: {:?}, public: {}, abi: {abi} }},",
             tree.name, tree.commit, tree.public
         )
         .expect("String write");
     }
-    table.push_str("];\n");
-    table.push_str(&modules);
-    let generated = out.join("trees.rs");
-    fs::write(&generated, table).unwrap_or_else(|e| panic!("writing {}: {e}", generated.display()));
+    generated.push_str("];\n");
+    generated.push_str(&modules);
+    let file = out.join("trees.rs");
+    fs::write(&file, generated).unwrap_or_else(|e| panic!("writing {}: {e}", file.display()));
 }
 
 fn trees(index: &Path) -> Vec<Tree> {
@@ -297,8 +823,8 @@ impl<'r> Source<'r> {
             })
     }
 
-    /// The `#define` naming `name`, continuation lines included; a tree that moved it breaks the
-    /// build rather than the oracle.
+    /// The first `#define` naming `name`, continuation lines included; a tree that moved it
+    /// breaks the build rather than the oracle.
     fn define(&mut self, path: &'static str, name: &str) -> String {
         let commit = self
             .commit
@@ -322,7 +848,7 @@ impl<'r> Source<'r> {
         format!("{}\n", lines[start..=end].join("\n"))
     }
 
-    /// A function's definition, from its signature at column 0 to the brace closing it there.
+    /// A function's first definition, from its signature at column 0 to the brace closing it there.
     fn function(&mut self, path: &'static str, name: &str) -> String {
         let commit = self
             .commit
@@ -342,6 +868,103 @@ impl<'r> Source<'r> {
             .unwrap_or_else(|| panic!("{name} in {path} at {commit} never closes"));
         format!("{}\n\n", lines[start..=end].join("\n"))
     }
+
+    /// The statement opening on the one line of `function` that reads `marker`, through the brace
+    /// balancing its first.
+    fn block(&mut self, path: &'static str, function: &str, marker: &str) -> String {
+        let commit = self
+            .commit
+            .clone();
+        let body = self.function(path, function);
+        let lines: Vec<&str> = body
+            .lines()
+            .collect();
+        let starts: Vec<usize> = lines
+            .iter()
+            .enumerate()
+            .filter(|(_, line)| line.trim() == marker)
+            .map(|(at, _)| at)
+            .collect();
+        let [start] = starts[..] else {
+            panic!(
+                "{function} in {path} at {commit} reads {marker:?} on {} lines, not one",
+                starts.len()
+            );
+        };
+        let mut depth = 0usize;
+        let mut lexer = Lexer::default();
+        for (at, line) in lines
+            .iter()
+            .enumerate()
+            .skip(start)
+        {
+            for c in line.chars() {
+                match lexer.code(c) {
+                    Some('{') => depth += 1,
+                    Some('}') => {
+                        depth -= 1;
+                        if depth == 0 {
+                            return format!("{}\n", lines[start..=at].join("\n"));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            lexer.end_line();
+        }
+        panic!("{marker:?} in {function} in {path} at {commit} never closes");
+    }
+}
+
+/// Just enough of C's lexical grammar to tell a brace in code from one in a literal or comment.
+#[derive(Default)]
+struct Lexer {
+    state: Lexed,
+    previous: Option<char>,
+}
+
+#[derive(Default, Clone, Copy, PartialEq, Eq)]
+enum Lexed {
+    #[default]
+    Code,
+    Char,
+    Str,
+    LineComment,
+    BlockComment,
+}
+
+impl Lexer {
+    /// `c` when it is code, `None` when it sits in a literal or comment.
+    fn code(&mut self, c: char) -> Option<char> {
+        let previous = self
+            .previous
+            .replace(c);
+        let escaped = previous == Some('\\');
+        match self.state {
+            Lexed::Code => match c {
+                '\'' => self.state = Lexed::Char,
+                '"' => self.state = Lexed::Str,
+                '/' if previous == Some('/') => self.state = Lexed::LineComment,
+                '*' if previous == Some('/') => self.state = Lexed::BlockComment,
+                c => return Some(c),
+            },
+            Lexed::Char if c == '\'' && !escaped => self.state = Lexed::Code,
+            Lexed::Str if c == '"' && !escaped => self.state = Lexed::Code,
+            Lexed::BlockComment if c == '/' && previous == Some('*') => self.state = Lexed::Code,
+            _ => {}
+        }
+        if escaped && c == '\\' {
+            self.previous = None;
+        }
+        None
+    }
+
+    fn end_line(&mut self) {
+        if self.state == Lexed::LineComment {
+            self.state = Lexed::Code;
+        }
+        self.previous = None;
+    }
 }
 
 fn git(root: &Path) -> Command {
@@ -357,34 +980,47 @@ fn is_definition(line: &str, name: &str) -> bool {
         && line
             .match_indices(name)
             .any(|(at, _)| {
-                line[at + name.len()..].starts_with('(') && line[..at].ends_with([' ', '*'])
+                line[at + name.len()..].starts_with(['(', ')'])
+                    && line[..at].ends_with([' ', '*', '('])
             })
 }
 
 fn compile(tree: &Tree, source: &mut Source<'_>, out: &Path) {
-    let mut unit = String::from(PRELUDE);
-    for symbol in TOKENIZER
+    let mut unit = String::new();
+    for (number, tag) in TAGS
         .iter()
-        .chain(URL_ENCODE)
-        .chain(HEADER_FUNCTIONS)
-        .chain(EXPORTS)
+        .enumerate()
+    {
+        writeln!(unit, "#define ORACLE_{tag} {}", number + 1).expect("String write");
+    }
+    for symbol in FUNCTIONS
+        .iter()
+        .map(|&(_, name)| name)
+        .chain(
+            EXPORTS
+                .iter()
+                .copied(),
+        )
     {
         writeln!(unit, "#define {symbol} {}_{symbol}", tree.name).expect("String write");
     }
-    unit.push_str(&source.define(UTILS, "ESCAPE_META"));
-    unit.push_str(&source.define(UTILS_H, "end_of_p"));
-    unit.push_str(&source.define(UTILS_H, "SWITCH_URL_UNSAFE"));
-    for name in HEADER_FUNCTIONS {
-        unit.push_str(&source.function(UTILS_H, name));
+    unit.push_str(PRELUDE);
+    for &(path, name) in DEFINES {
+        unit.push_str(&source.define(path, name));
     }
-    for name in TOKENIZER
-        .iter()
-        .chain(URL_ENCODE)
-    {
-        unit.push_str(&source.function(UTILS, name));
+    for &(path, name) in FUNCTIONS {
+        unit.push_str(&source.function(path, name));
     }
-    unit.push_str(WRAPPERS);
-    unit.push_str(URL_WRAPPERS);
+    let mut harness = HARNESS.to_owned();
+    for &(path, function, marker, placeholder) in BLOCKS {
+        let block = source.block(path, function, marker);
+        assert!(
+            harness.contains(placeholder),
+            "the harness names no {placeholder}"
+        );
+        harness = harness.replace(placeholder, &block);
+    }
+    unit.push_str(&harness);
     let file = out.join(format!("{}.c", tree.name));
     fs::write(&file, unit).unwrap_or_else(|e| panic!("writing {}: {e}", file.display()));
     // The unit is the switch's code as each tree ships it, so its warnings are not ours to fix.

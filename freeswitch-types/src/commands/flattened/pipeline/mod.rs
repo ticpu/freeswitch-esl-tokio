@@ -13,6 +13,8 @@ use crate::tokenizer::{
 };
 
 #[cfg(test)]
+mod c_oracle;
+#[cfg(test)]
 mod tests;
 
 /// `MAX_PEERS` in `switch_ivr_originate.c`: the most threads, groups or legs a
@@ -111,29 +113,39 @@ pub(crate) fn read(input: &str, target: DialStringTarget) -> Result<DialList, Pi
             (text, raw, false)
         }
         DialStringCarrier::Dialplan => {
-            let (text, expands) = expand_escapes(&input);
-            (text, extent(&input), expands)
+            let (text, references) = expand_escapes(&input);
+            (text, extent(&input), !references.is_empty())
         }
     };
+    dial_list(&text, raw, carrier_expands)
+}
+
+/// `switch_ivr_originate`'s passes over `text`, what the carrier's pass left of the input bytes
+/// `raw`.
+fn dial_list(
+    text: &[Traced],
+    raw: Range<usize>,
+    carrier_expands: bool,
+) -> Result<DialList, PipelineError> {
     let mut reader = Reader::default();
-    let (blocks, threads) = if find(&text, ENTERPRISE_DELIM).is_some() {
-        let head = head_blocks(&text, &[('<', '>')], 0)?;
+    let (blocks, threads) = if find(text, ENTERPRISE_DELIM).is_some() {
+        let head = head_blocks(text, &[('<', '>')], 0)?;
         let threads = separate_string_string(&text[head.data..], ENTERPRISE_DELIM, MAX_PEERS)
             .into_iter()
             .enumerate()
             .map(|(k, span)| {
                 let span = head.span(k, span);
-                reader.thread(&text[span.clone()], byte_range(&text, raw.clone(), span))
+                reader.thread(&text[span.clone()], byte_range(text, raw.clone(), span))
             })
             .collect::<Result<_, _>>()?;
         (head.blocks, threads)
     } else {
-        (Vec::new(), vec![reader.thread(&text, raw)?])
+        (Vec::new(), vec![reader.thread(text, raw)?])
     };
     Ok(DialList {
         blocks,
         threads,
-        nested_vars: untrace(&text)
+        nested_vars: untrace(text)
             .to_ascii_lowercase()
             .contains("origination_nested_vars=true"),
         quote_spans_legs: reader.quote_spans_legs,
@@ -156,8 +168,9 @@ fn api_argument(
         .ok_or(PipelineError::Empty)
 }
 
-/// The escape handling of `switch_channel_expand_variables_check`.
-fn expand_escapes(text: &[Traced]) -> (Vec<Traced>, bool) {
+/// The escape handling of `switch_channel_expand_variables_check`, and the spans of its output
+/// holding a reference the switch substitutes.
+fn expand_escapes(text: &[Traced]) -> (Vec<Traced>, Vec<Range<usize>>) {
     let has_escaped_data = text
         .windows(2)
         .any(|w| w[0].0 == '\\' && matches!(w[1].0, '\\' | 'n' | 's' | 't' | '\''));
@@ -167,14 +180,14 @@ fn expand_escapes(text: &[Traced]) -> (Vec<Traced>, bool) {
                 .map(|&(c, ..)| c),
         )
     {
-        return (text.to_vec(), false);
+        return (text.to_vec(), Vec::new());
     }
     let at = |i: usize| {
         text.get(i)
             .map(|&(c, ..)| c)
     };
     let mut out = Vec::with_capacity(text.len());
-    let mut expands = false;
+    let mut references = Vec::new();
     let mut p = 0;
     while let Some(c) = at(p) {
         match (c, at(p + 1)) {
@@ -200,8 +213,9 @@ fn expand_escapes(text: &[Traced]) -> (Vec<Traced>, bool) {
                 }
                 if at(p + 1) == Some('{') {
                     p = reference_end(text, p + 2);
+                    let written = out.len();
                     out.extend_from_slice(&text[reference..p]);
-                    expands = true;
+                    references.push(written..out.len());
                     // The char after the reference is copied unescaped, unless it
                     // opens another reference.
                     if at(p).is_some_and(|next| next != '$') {
@@ -216,7 +230,7 @@ fn expand_escapes(text: &[Traced]) -> (Vec<Traced>, bool) {
         out.push(text[p]);
         p += 1;
     }
-    (out, expands)
+    (out, references)
 }
 
 /// The index after the `}` closing a reference whose name starts at `start`.
