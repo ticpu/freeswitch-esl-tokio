@@ -821,7 +821,7 @@ pub(crate) fn escape_text(text: &str, target: DialStringTarget, field: EscapedFi
     let escaped = value
         .replace('\\', &target.backslash_escape(field))
         .replace('\'', &target.quote_escape(field));
-    let dollars = protects_dollars(value, target, field);
+    let dollars = protects_dollars(value, target);
     let escaped = if dollars {
         escaped.replace('$', "\\$")
     } else {
@@ -911,17 +911,13 @@ fn guard_channel_commas(
 
 /// Expansion drops the first `$` of a `$$` opening no reference and substitutes a reference.
 /// `\$` keeps it only while expansion runs, which a leading `\'` guarantees and expansion then
-/// deletes. A block value naming a variable is left to the switch; endpoint text is not.
-fn protects_dollars(value: &str, target: DialStringTarget, field: EscapedField) -> bool {
+/// deletes. Text naming a variable is left to the switch, whichever field carries it.
+fn protects_dollars(value: &str, target: DialStringTarget) -> bool {
     target
         .carrier()
         .expands()
-        && match field {
-            EscapedField::Value { .. } | EscapedField::Key { .. } => {
-                value.contains("$$") && !names_a_variable(value)
-            }
-            EscapedField::Endpoint => value.contains("$$") || names_a_variable(value),
-        }
+        && value.contains("$$")
+        && !names_a_variable(value)
 }
 
 /// Inverts [`escape_value`].

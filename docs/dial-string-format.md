@@ -130,10 +130,14 @@ carrier's pass and both leg splits first: `switch_ivr_originate` cuts groups on
 pass, as a `{}` value is, with `\,` and `\|` for the separators: a backslash
 needs eight on either carrier, a quote seven backslashes over `originate` and six
 through a dialplan application, a space quotes the text on the blank split, and
-an edge space rides as `\s`. Through a dialplan application every `$` of a text
-holding `$$` or `${` is written `\$` behind a leading `\'`, so the module
-receives the reference as text. `sofia_contact` and `group_call` expressions are
-written as they stand, for the carrier's expansion to read.
+an edge space rides as `\s`. A `${…}` reference is left to the switch as in a
+block value ([A value naming a variable](#a-value-naming-a-variable)): through a
+dialplan application the expansion substitutes it before the leg splits, so
+`sofia/gateway/gw/${destination_number}` dials the executing channel's number. A
+text holding `$$` and no reference has every `$` written `\$` behind a leading
+`\'`, as a value does, so the module receives `$$` whole. `sofia_contact` and
+`group_call` expressions are written as they stand, for the carrier's expansion
+to read.
 
 What no escaping delivers is refused on parse and config load, and built
 unchecked:
