@@ -60,6 +60,9 @@ impl VariablesType {
 /// what the switch itself decodes depends on which command carries the block
 /// and which parser revision reads it, documented in `docs/dial-string-format.md`.
 ///
+/// A value naming a variable (`${…}`) is left to the switch, which expands it or
+/// drops it at install unless `origination_nested_vars` is true.
+///
 /// # Serde format
 ///
 /// [`Default`](VariablesType::Default) scope with the comma separator

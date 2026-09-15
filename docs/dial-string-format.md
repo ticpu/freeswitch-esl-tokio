@@ -279,6 +279,15 @@ three scopes over `originate`, `bridge` and an `originate ^^~` line:
   but the originate is still split into threads. `Variables` refuses such a
   value wherever it is parsed or loaded.
 
+### A value naming a variable
+
+`Variables` writes a `${…}` reference as it stands and leaves it to the switch.
+The dialplan carrier substitutes it before the block is parsed. What reaches
+install is dropped: `switch_ivr_originate` sets each pair through
+`switch_channel_set_variable_var_check`, which refuses a value holding `${` with
+a CRIT log line unless `origination_nested_vars` is true on the list, the
+originating channel, the core, or anywhere in the dial string's text.
+
 ### The inline action list is a third carrier
 
 Everything above concerns a `{k=v}` block. An inline action list —

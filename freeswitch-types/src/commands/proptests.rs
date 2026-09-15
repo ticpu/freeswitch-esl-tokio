@@ -99,9 +99,9 @@ fn config_refuses_vars(vars: &Variables) -> bool {
     serde_json::from_value::<Variables>(json).is_err()
 }
 
-/// A value naming a variable is the switch's to expand or to refuse at install, never text
-/// escaping delivers verbatim.
-fn names_a_switch_variable(vars: &Variables) -> bool {
+/// Left to the switch, as the `Variables` rustdoc and dial-string-format.md's *A value naming a
+/// variable* say, so no escaping delivers it verbatim.
+fn left_to_the_switch(vars: &Variables) -> bool {
     vars.iter()
         .any(|(_, value)| names_a_variable(value))
 }
@@ -568,7 +568,7 @@ fn render_list(spec: &ListSpec, target: DialStringTarget) -> Option<RenderedList
         if vars.is_empty() {
             return Some(Vec::new());
         }
-        if config_refuses_vars(&vars) || names_a_switch_variable(&vars) {
+        if config_refuses_vars(&vars) || left_to_the_switch(&vars) {
             return None;
         }
         text.push_str(
@@ -677,7 +677,7 @@ proptest! {
         let Some(vars) = build_vars(scope, "v", &values, sep) else {
             return Ok(());
         };
-        if names_a_switch_variable(&vars) {
+        if left_to_the_switch(&vars) {
             return Ok(());
         }
         let refused = config_refuses_vars(&vars);
@@ -713,7 +713,7 @@ proptest! {
             let Some(vars) = build_vars(*scope, "v", values, *sep) else {
                 return Ok(());
             };
-            if names_a_switch_variable(&vars) {
+            if left_to_the_switch(&vars) {
                 return Ok(());
             }
             endpoint.set_variables(Some(vars));
@@ -914,7 +914,7 @@ fn variables_arrive_through_the_c_passes() {
             let Some(vars) = build_vars(scope, "v", &values, sep) else {
                 return Ok(());
             };
-            if names_a_switch_variable(&vars) || config_refuses_vars(&vars) {
+            if left_to_the_switch(&vars) || config_refuses_vars(&vars) {
                 return Ok(());
             }
             let (open, close) = match scope {
