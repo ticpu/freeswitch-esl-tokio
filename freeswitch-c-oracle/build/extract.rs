@@ -1,7 +1,9 @@
-//! Pieces of the switch's C cut out of one file's text, and the directive lines that name them.
+//! Pieces of the switch's C cut out of one file's syntax tree, and the directive lines that name them.
 //!
-//! A function is found by its definition at column 0 whatever line it sits on; code inside a
-//! function by a marker line that must occur once in it. A piece that cannot be found is an error.
+//! A piece is the whole lines its tree-sitter node spans; code inside a function is found by a
+//! marker line that must occur once in it. A piece that cannot be found is an error.
+
+use tree_sitter::{Node, Parser, Tree};
 
 /// What a `//@` line in an oracle unit takes out of a tree, in the unit's place of that line.
 #[derive(Debug, PartialEq, Eq)]
@@ -18,7 +20,7 @@ pub enum Directive<'a> {
     },
     /// `//@ declaration <path> <opening>`: the declaration opening on the column-0 line `opening`.
     Declaration { path: &'a str, opening: &'a str },
-    /// `//@ typedef <path> <name>`: the `typedef` closing on `} name;`.
+    /// `//@ typedef <path> <name>`: the `typedef` declaring `name`.
     Typedef { path: &'a str, name: &'a str },
     /// `//@ after <path> <function> <anchor> => <marker>`: the statement opening on the first line
     /// reading `marker` after the one line of `function` reading `anchor`.
@@ -47,6 +49,162 @@ pub enum Side {
     Before,
 }
 
+/// One file's text and its C syntax tree.
+pub struct Parsed {
+    text: String,
+    tree: Tree,
+}
+
+impl Parsed {
+    pub fn new(text: String) -> Result<Self, String> {
+        let mut parser = Parser::new();
+        parser
+            .set_language(&tree_sitter_c::LANGUAGE.into())
+            .map_err(|e| format!("loading the C grammar: {e}"))?;
+        let tree = parser
+            .parse(&text, None)
+            .ok_or("tree-sitter returned no tree")?;
+        Ok(Self { text, tree })
+    }
+
+    /// Every node in document order, inside error nodes too; `bodies` descends into functions.
+    fn nodes(&self, bodies: bool) -> Vec<Node<'_>> {
+        let mut nodes = Vec::new();
+        let mut pending = vec![self
+            .tree
+            .root_node()];
+        while let Some(node) = pending.pop() {
+            nodes.push(node);
+            if !bodies && node.kind() == "function_definition" {
+                continue;
+            }
+            let mut cursor = node.walk();
+            let children: Vec<Node<'_>> = node
+                .children(&mut cursor)
+                .collect();
+            pending.extend(
+                children
+                    .into_iter()
+                    .rev(),
+            );
+        }
+        nodes
+    }
+
+    fn text_of(&self, node: Node<'_>) -> &str {
+        &self.text[node.byte_range()]
+    }
+
+    /// The whole lines bytes `start..end` touch, newline-terminated.
+    fn lines(&self, start: usize, end: usize) -> String {
+        let text = &self.text;
+        let start = text[..start]
+            .rfind('\n')
+            .map_or(0, |at| at + 1);
+        let end = if text[..end].ends_with('\n') {
+            end - 1
+        } else {
+            text[end..]
+                .find('\n')
+                .map_or(text.len(), |at| end + at)
+        };
+        format!("{}\n", &text[start..end])
+    }
+
+    /// The byte of each line's first non-blank character in `start..end` whose trimmed text is `line`.
+    fn reading(&self, start: usize, end: usize, line: &str) -> Vec<usize> {
+        let start = self.text[..start]
+            .rfind('\n')
+            .map_or(0, |at| at + 1);
+        let mut at = start;
+        let mut found = Vec::new();
+        for text in self.text[start..end].split_inclusive('\n') {
+            if text.trim() == line {
+                found.push(
+                    at + text.len()
+                        - text
+                            .trim_start()
+                            .len(),
+                );
+            }
+            at += text.len();
+        }
+        found
+    }
+
+    /// The outermost node opening at byte `at`, with a `;` closing it on its heels.
+    fn statement_at(&self, at: usize) -> Result<(usize, usize), String> {
+        let row = self.text[..at]
+            .matches('\n')
+            .count()
+            + 1;
+        let root = self
+            .tree
+            .root_node();
+        let mut node = root
+            .named_descendant_for_byte_range(at, at + 1)
+            .ok_or_else(|| format!("has no node at line {row}"))?;
+        while let Some(parent) = node.parent() {
+            if parent.start_byte() != at
+                || parent
+                    .parent()
+                    .is_none()
+                || parent.is_error()
+            {
+                break;
+            }
+            node = parent;
+        }
+        if node.start_byte() != at || node.kind() == "comment" {
+            return Err(format!("opens no statement at line {row}"));
+        }
+        if node.has_error() {
+            return Err(format!(
+                "the {} at line {row} does not parse through line {}",
+                node.kind(),
+                node.end_position()
+                    .row
+                    + 1
+            ));
+        }
+        let end = match node.next_sibling() {
+            Some(next) if next.kind() == ";" => next.end_byte(),
+            _ => node.end_byte(),
+        };
+        Ok((at, end))
+    }
+
+    /// The one definition of the function `name`.
+    fn definition(&self, name: &str) -> Result<Node<'_>, String> {
+        let found: Vec<Node<'_>> = self
+            .nodes(false)
+            .into_iter()
+            .filter(|node| {
+                node.kind() == "function_definition" && self.declared_name(*node) == Some(name)
+            })
+            .collect();
+        match found[..] {
+            [node] => Ok(node),
+            _ => Err(format!(
+                "has {} definitions of {name}, not one",
+                found.len()
+            )),
+        }
+    }
+
+    /// The identifier a definition's declarator names, through pointers and parentheses.
+    fn declared_name(&self, node: Node<'_>) -> Option<&str> {
+        let mut node = node.child_by_field_name("declarator")?;
+        loop {
+            node = match node.kind() {
+                "identifier" => return Some(self.text_of(node)),
+                "parenthesized_declarator" => node.named_child(0)?,
+                _ => node.child_by_field_name("declarator")?,
+            };
+        }
+    }
+}
+
 impl Directive<'_> {
     /// The file the piece is read from.
     pub fn path(&self) -> &str {
@@ -61,32 +219,30 @@ impl Directive<'_> {
         }
     }
 
-    /// The piece cut out of `text`, the file at [`Directive::path`].
-    pub fn extract(&self, text: &str) -> Result<String, String> {
+    /// The piece cut out of `file`, the file at [`Directive::path`].
+    pub fn extract(&self, file: &Parsed) -> Result<String, String> {
         match *self {
-            Directive::Define { name, .. } => define(text, name),
-            Directive::Function { name, .. } => function(text, name),
+            Directive::Define { name, .. } => define(file, name),
+            Directive::Function { name, .. } => function(file, name),
             Directive::Block {
-                function: name,
-                marker,
-                ..
-            } => block(&function(text, name)?, marker).map_err(|e| format!("{name}: {e}")),
-            Directive::Declaration { opening, .. } => declaration(text, opening),
-            Directive::Typedef { name, .. } => typedef(text, name),
+                function, marker, ..
+            } => block(file, function, marker).map_err(|e| format!("{function}: {e}")),
+            Directive::Declaration { opening, .. } => declaration(file, opening),
+            Directive::Typedef { name, .. } => typedef(file, name),
             Directive::After {
-                function: name,
+                function,
                 anchor,
                 marker,
                 ..
-            } => beside(&function(text, name)?, anchor, marker, Side::After)
-                .map_err(|e| format!("{name}: {e}")),
+            } => beside(file, function, anchor, marker, Side::After)
+                .map_err(|e| format!("{function}: {e}")),
             Directive::Before {
-                function: name,
+                function,
                 anchor,
                 marker,
                 ..
-            } => beside(&function(text, name)?, anchor, marker, Side::Before)
-                .map_err(|e| format!("{name}: {e}")),
+            } => beside(file, function, anchor, marker, Side::Before)
+                .map_err(|e| format!("{function}: {e}")),
         }
     }
 }
@@ -167,112 +323,93 @@ pub fn directive(line: &str) -> Result<Option<Directive<'_>>, String> {
 }
 
 /// The first `#define` naming `name`, continuation lines included.
-pub fn define(text: &str, name: &str) -> Result<String, String> {
-    let lines: Vec<&str> = text
-        .lines()
-        .collect();
-    let start = lines
-        .iter()
-        .position(|line| {
-            line.strip_prefix("#define ")
-                .and_then(|rest| rest.strip_prefix(name))
-                .is_some_and(|rest| rest.starts_with([' ', '\t', '(']))
+pub fn define(file: &Parsed, name: &str) -> Result<String, String> {
+    let node = file
+        .nodes(true)
+        .into_iter()
+        .find(|node| {
+            matches!(node.kind(), "preproc_def" | "preproc_function_def")
+                && node
+                    .child_by_field_name("name")
+                    .is_some_and(|named| file.text_of(named) == name)
         })
         .ok_or_else(|| format!("defines no {name}"))?;
-    let end = lines[start..]
-        .iter()
-        .position(|line| !line.ends_with('\\'))
-        .map_or(lines.len() - 1, |at| start + at);
-    Ok(format!("{}\n", lines[start..=end].join("\n")))
+    Ok(file.lines(node.start_byte(), node.end_byte()))
 }
 
-/// A function's definition, from its signature at column 0 to the brace closing it there.
-pub fn function(text: &str, name: &str) -> Result<String, String> {
-    let lines: Vec<&str> = text
-        .lines()
-        .collect();
-    let starts: Vec<usize> = (0..lines.len())
-        .filter(|&at| is_definition(&lines[at..], name))
-        .collect();
-    let [start] = starts[..] else {
-        return Err(format!(
-            "has {} definitions of {name}, not one",
-            starts.len()
-        ));
-    };
-    let end = lines[start..]
-        .iter()
-        .position(|line| *line == "}")
-        .map(|at| start + at)
-        .ok_or_else(|| format!("{name} never closes"))?;
-    Ok(format!("{}\n\n", lines[start..=end].join("\n")))
+/// A function's definition, never its prototype.
+pub fn function(file: &Parsed, name: &str) -> Result<String, String> {
+    let node = file.definition(name)?;
+    Ok(format!(
+        "{}\n",
+        file.lines(node.start_byte(), node.end_byte())
+    ))
 }
 
-/// The statement opening on the one line of `body` that reads `marker`: through the brace
-/// balancing its first and any `else` chained on, or through its `;` when it opens no brace.
-pub fn block(body: &str, marker: &str) -> Result<String, String> {
-    let lines: Vec<&str> = body
-        .lines()
-        .collect();
-    let starts: Vec<usize> = lines
-        .iter()
-        .enumerate()
-        .filter(|(_, line)| line.trim() == marker)
-        .map(|(at, _)| at)
-        .collect();
+/// The statement opening on the one line of `function` that reads `marker`, `else` chain included.
+pub fn block(file: &Parsed, function: &str, marker: &str) -> Result<String, String> {
+    let body = file.definition(function)?;
+    let starts = file.reading(body.start_byte(), body.end_byte(), marker);
     let [start] = starts[..] else {
         return Err(format!(
             "reads {marker:?} on {} lines, not one",
             starts.len()
         ));
     };
-    let end = statement_end(&lines, start).ok_or_else(|| format!("{marker:?} never closes"))?;
-    Ok(format!("{}\n", lines[start..=end].join("\n")))
+    let (start, end) = file.statement_at(start)?;
+    Ok(file.lines(start, end))
 }
 
-/// The statement opening on the nearest line of `body` reading `marker` on `side` of the one line
-/// reading `anchor`.
-pub fn beside(body: &str, anchor: &str, marker: &str, side: Side) -> Result<String, String> {
-    let lines: Vec<&str> = body
-        .lines()
-        .collect();
-    let anchors: Vec<usize> = lines
-        .iter()
-        .enumerate()
-        .filter(|(_, line)| line.trim() == anchor)
-        .map(|(at, _)| at)
-        .collect();
+/// The statement opening on the nearest line of `function` reading `marker` on `side` of the one
+/// line reading `anchor`.
+pub fn beside(
+    file: &Parsed,
+    function: &str,
+    anchor: &str,
+    marker: &str,
+    side: Side,
+) -> Result<String, String> {
+    let body = file.definition(function)?;
+    let (from, to) = (body.start_byte(), body.end_byte());
+    let anchors = file.reading(from, to, anchor);
     let [at] = anchors[..] else {
         return Err(format!(
             "reads {anchor:?} on {} lines, not one",
             anchors.len()
         ));
     };
-    let reads = |line: &&str| line.trim() == marker;
+    let markers = file.reading(from, to, marker);
     let start = match side {
-        Side::After => lines[at + 1..]
-            .iter()
-            .position(reads)
-            .map(|found| at + 1 + found),
-        Side::Before => lines[..at]
-            .iter()
-            .rposition(reads),
+        Side::After => markers
+            .into_iter()
+            .find(|&found| found > at),
+        Side::Before => markers
+            .into_iter()
+            .rev()
+            .find(|&found| found < at),
     }
     .ok_or_else(|| format!("reads no {marker:?} beside {anchor:?}"))?;
-    let end = statement_end(&lines, start).ok_or_else(|| format!("{marker:?} never closes"))?;
-    Ok(format!("{}\n", lines[start..=end].join("\n")))
+    let (start, end) = file.statement_at(start)?;
+    Ok(file.lines(start, end))
 }
 
-/// The declaration opening on the one column-0 line reading `opening`, through its `;`.
-pub fn declaration(text: &str, opening: &str) -> Result<String, String> {
-    let lines: Vec<&str> = text
-        .lines()
-        .collect();
-    let starts: Vec<usize> = lines
-        .iter()
-        .enumerate()
-        .filter(|(_, line)| line.trim_end() == opening)
-        .map(|(at, _)| at)
+/// The declaration opening on the one line reading `opening`, through its `;`.
+pub fn declaration(file: &Parsed, opening: &str) -> Result<String, String> {
+    let starts: Vec<usize> = file
+        .reading(
+            0,
+            file.text
+                .len(),
+            opening,
+        )
+        .into_iter()
+        .filter(|&at| {
+            at == 0
+                || file
+                    .text
+                    .as_bytes()[at - 1]
+                    == b'\n'
+        })
         .collect();
     let [start] = starts[..] else {
         return Err(format!(
@@ -280,186 +417,26 @@ pub fn declaration(text: &str, opening: &str) -> Result<String, String> {
             starts.len()
         ));
     };
-    let end = statement_end(&lines, start).ok_or_else(|| format!("{opening:?} never closes"))?;
-    Ok(format!("{}\n", lines[start..=end].join("\n")))
+    let (start, end) = file.statement_at(start)?;
+    Ok(file.lines(start, end))
 }
 
-/// The `typedef` closing on the one column-0 line `} name;`, from the `typedef` opening it.
-pub fn typedef(text: &str, name: &str) -> Result<String, String> {
-    let lines: Vec<&str> = text
-        .lines()
+/// The one `typedef` declaring `name`.
+pub fn typedef(file: &Parsed, name: &str) -> Result<String, String> {
+    let found: Vec<Node<'_>> = file
+        .nodes(true)
+        .into_iter()
+        .filter(|node| {
+            node.kind() == "type_definition"
+                && node
+                    .children_by_field_name("declarator", &mut node.walk())
+                    .any(|declarator| file.text_of(declarator) == name)
+        })
         .collect();
-    let closing = format!("}} {name};");
-    let ends: Vec<usize> = lines
-        .iter()
-        .enumerate()
-        .filter(|(_, line)| line.trim_end() == closing)
-        .map(|(at, _)| at)
-        .collect();
-    let [end] = ends[..] else {
-        return Err(format!(
-            "closes {closing:?} on {} lines, not one",
-            ends.len()
-        ));
+    let [node] = found[..] else {
+        return Err(format!("has {} typedefs of {name}, not one", found.len()));
     };
-    let start = lines[..end]
-        .iter()
-        .rposition(|line| line.starts_with("typedef "))
-        .ok_or_else(|| format!("opens no typedef before {closing:?}"))?;
-    match statement_end(&lines, start) {
-        Some(at) if at == end => Ok(format!("{}\n", lines[start..=end].join("\n"))),
-        _ => Err(format!(
-            "the typedef before {closing:?} does not close there"
-        )),
-    }
-}
-
-/// The line a statement opening on `lines[start]` ends on.
-fn statement_end(lines: &[&str], start: usize) -> Option<usize> {
-    let mut depth = 0usize;
-    let mut closed = false;
-    let mut lexer = Lexer::default();
-    for (at, line) in lines
-        .iter()
-        .enumerate()
-        .skip(start)
-    {
-        let mut after_close = String::new();
-        for c in line.chars() {
-            let Some(c) = lexer.code(c) else {
-                continue;
-            };
-            match c {
-                ';' if depth == 0 && !closed => return Some(at),
-                '{' => depth += 1,
-                '}' => {
-                    depth = depth.checked_sub(1)?;
-                    if depth == 0 {
-                        closed = true;
-                        after_close.clear();
-                        continue;
-                    }
-                }
-                _ => {}
-            }
-            after_close.push(c);
-        }
-        lexer.end_line();
-        if !closed || depth > 0 {
-            continue;
-        }
-        let trailing = after_close.trim();
-        if trailing.starts_with("else") {
-            continue;
-        }
-        if !trailing.is_empty() {
-            return Some(at);
-        }
-        let next = lines[at + 1..]
-            .iter()
-            .find(|line| {
-                !line
-                    .trim()
-                    .is_empty()
-            });
-        if !next.is_some_and(|line| {
-            line.trim_start()
-                .starts_with("else")
-        }) {
-            return Some(at);
-        }
-    }
-    None
-}
-
-/// `lines[0]` opens the definition of `name`: its signature at column 0, whose parameter list
-/// closes before a `{`, where a declaration closes before a `;`.
-fn is_definition(lines: &[&str], name: &str) -> bool {
-    let line = lines[0];
-    if line.starts_with([' ', '\t', '#', '}', '/', '*']) {
-        return false;
-    }
-    let named = line
-        .match_indices(name)
-        .any(|(at, _)| {
-            line[at + name.len()..].starts_with(['(', ')']) && line[..at].ends_with([' ', '*', '('])
-        });
-    if !named {
-        return false;
-    }
-    let mut depth = 0usize;
-    let mut opened = false;
-    let mut lexer = Lexer::default();
-    for line in lines {
-        for c in line.chars() {
-            let Some(c) = lexer.code(c) else {
-                continue;
-            };
-            match c {
-                '(' => {
-                    depth += 1;
-                    opened = true;
-                }
-                ')' => depth = depth.saturating_sub(1),
-                c if c.is_whitespace() || c.is_ascii_alphanumeric() || c == '_' || c == '*' => {}
-                c if opened && depth == 0 => return c == '{',
-                _ => {}
-            }
-        }
-        lexer.end_line();
-    }
-    false
-}
-
-/// Just enough of C's lexical grammar to tell a brace in code from one in a literal or comment.
-#[derive(Default)]
-struct Lexer {
-    state: Lexed,
-    previous: Option<char>,
-}
-
-#[derive(Default, Clone, Copy, PartialEq, Eq)]
-enum Lexed {
-    #[default]
-    Code,
-    Char,
-    Str,
-    LineComment,
-    BlockComment,
-}
-
-impl Lexer {
-    /// `c` when it is code, `None` when it sits in a literal or comment.
-    fn code(&mut self, c: char) -> Option<char> {
-        let previous = self
-            .previous
-            .replace(c);
-        let escaped = previous == Some('\\');
-        match self.state {
-            Lexed::Code => match c {
-                '\'' => self.state = Lexed::Char,
-                '"' => self.state = Lexed::Str,
-                '/' if previous == Some('/') => self.state = Lexed::LineComment,
-                '*' if previous == Some('/') => self.state = Lexed::BlockComment,
-                c => return Some(c),
-            },
-            Lexed::Char if c == '\'' && !escaped => self.state = Lexed::Code,
-            Lexed::Str if c == '"' && !escaped => self.state = Lexed::Code,
-            Lexed::BlockComment if c == '/' && previous == Some('*') => self.state = Lexed::Code,
-            _ => {}
-        }
-        if escaped && c == '\\' {
-            self.previous = None;
-        }
-        None
-    }
-
-    fn end_line(&mut self) {
-        if self.state == Lexed::LineComment {
-            self.state = Lexed::Code;
-        }
-        self.previous = None;
-    }
+    Ok(file.lines(node.start_byte(), node.end_byte()))
 }
 
 #[cfg(test)]
@@ -527,30 +504,38 @@ typedef enum {
 } number_t;
 "#;
 
+    fn parsed(text: &str) -> Parsed {
+        Parsed::new(text.to_owned()).expect("C parses")
+    }
+
     #[test]
     fn a_define_takes_its_continuation_lines() {
-        assert_eq!(define(FILE, "SHORT"), Ok("#define SHORT 1\n".to_owned()));
+        let file = parsed(FILE);
+        assert_eq!(define(&file, "SHORT"), Ok("#define SHORT 1\n".to_owned()));
         assert_eq!(
-            define(FILE, "LONG"),
+            define(&file, "LONG"),
             Ok("#define LONG(a) \\\n\t(a) + \\\n\t1\n".to_owned())
         );
-        assert!(define(FILE, "SHOR").is_err());
+        assert!(define(&file, "SHOR").is_err());
     }
 
     #[test]
     fn a_function_is_its_definition_not_its_prototype() {
-        let helper = function(FILE, "helper").expect("helper is defined");
+        let file = parsed(FILE);
+        let helper = function(&file, "helper").expect("helper is defined");
         assert!(helper.starts_with("static int helper(const char *s,\n\t\t\t\t  int n)\n{"));
         assert!(helper.ends_with("return x;\n}\n\n"));
-        let api = function(FILE, "helper_function").expect("the API is defined");
+        let api = function(&file, "helper_function").expect("the API is defined");
         assert!(api.starts_with("SWITCH_STANDARD_API(helper_function)\n{"));
-        assert!(function(FILE, "help").is_err());
-        assert!(function(FILE, "missing").is_err());
+        assert!(function(&file, "help").is_err());
+        assert!(function(&file, "missing").is_err());
     }
 
     #[test]
     fn two_definitions_of_one_name_are_refused() {
-        let twice = format!("{FILE}\nstatic int helper(void)\n{{\n\treturn 0;\n}}\n");
+        let twice = parsed(&format!(
+            "{FILE}\nstatic int helper(void)\n{{\n\treturn 0;\n}}\n"
+        ));
         assert_eq!(
             function(&twice, "helper"),
             Err("has 2 definitions of helper, not one".to_owned())
@@ -559,74 +544,82 @@ typedef enum {
 
     #[test]
     fn line_drift_moves_nothing_extracted() {
-        let drifted = FILE.replace(
+        let file = parsed(FILE);
+        let drifted = parsed(&FILE.replace(
             "#include <switch.h>\n",
             "#include <switch.h>\n\n/* inserted */\nstatic int unrelated;\n\n",
-        );
+        ));
         for name in ["helper", "helper_function"] {
-            assert_eq!(function(FILE, name), function(&drifted, name));
+            assert_eq!(function(&file, name), function(&drifted, name));
         }
         let marker = "if (s[0] == '{') {";
-        let body = function(FILE, "helper").expect("helper is defined");
-        let drifted_body = function(&drifted, "helper").expect("helper is defined");
-        assert_eq!(block(&body, marker), block(&drifted_body, marker));
+        assert_eq!(
+            block(&file, "helper", marker),
+            block(&drifted, "helper", marker)
+        );
     }
 
     #[test]
     fn a_block_follows_braces_through_else_and_literals() {
-        let body = function(FILE, "helper").expect("helper is defined");
+        let file = parsed(FILE);
         assert_eq!(
-            block(&body, "if (s[0] == '{') {"),
+            block(&file, "helper", "if (s[0] == '{') {"),
             Ok("\tif (s[0] == '{') {\n\t\tx = n;\n\t} else if (s[0] == '}') {\n\t\tx = -n;\n\t}\n\telse {\n\t\tx = 0;\n\t}\n".to_owned())
         );
-        let api = function(FILE, "helper_function").expect("the API is defined");
         assert_eq!(
-            block(&api, "if (p) {"),
+            block(&file, "helper_function", "if (p) {"),
             Ok("\tif (p) {\n\t\t*p++ = '\\0';\n\t}\n".to_owned())
         );
     }
 
     #[test]
     fn a_block_without_a_brace_is_its_statement() {
-        let api = function(FILE, "helper_function").expect("the API is defined");
+        let file = parsed(FILE);
         assert_eq!(
-            block(&api, "char *p = strchr(cmd, '/');"),
+            block(&file, "helper_function", "char *p = strchr(cmd, '/');"),
             Ok("\tchar *p = strchr(cmd, '/');\n".to_owned())
+        );
+        assert_eq!(
+            block(&file, "helper_function", "/* { in a comment */"),
+            Err("opens no statement at line 34".to_owned())
         );
     }
 
     #[test]
     fn a_marker_must_occur_exactly_once() {
-        let body = function(FILE, "helper").expect("helper is defined");
-        assert_eq!(block(&body, "x = 0;"), Ok("\t\tx = 0;\n".to_owned()));
-        let twice = body.replace("x = n;", "x = 0;");
+        let file = parsed(FILE);
         assert_eq!(
-            block(&twice, "x = 0;"),
+            block(&file, "helper", "x = 0;"),
+            Ok("\t\tx = 0;\n".to_owned())
+        );
+        let twice = parsed(&FILE.replace("x = n;", "x = 0;"));
+        assert_eq!(
+            block(&twice, "helper", "x = 0;"),
             Err("reads \"x = 0;\" on 2 lines, not one".to_owned())
         );
         assert_eq!(
-            block(&body, "if (t) {"),
+            block(&file, "helper", "if (t) {"),
             Err("reads \"if (t) {\" on 0 lines, not one".to_owned())
         );
     }
 
     #[test]
     fn a_marker_beside_its_anchor_is_the_nearest_one() {
-        let body = "static int f(void)\n{\n\tx = 1;\n\tif (a) {\n\t\ty();\n\t}\n\tx = 2;\n\tanchor();\n\tx = 1;\n\tz();\n\tx = 1;\n}\n";
+        let file = parsed("static int f(void)\n{\n\tx = 1;\n\tif (a) {\n\t\ty();\n\t}\n\tx = 2;\n\tanchor();\n\tx = 1;\n\tz();\n\tx = 1;\n}\n");
         assert_eq!(
-            beside(body, "anchor();", "x = 1;", Side::After),
+            beside(&file, "f", "anchor();", "x = 1;", Side::After),
             Ok("\tx = 1;\n".to_owned())
         );
         assert_eq!(
-            beside(body, "if (a) {", "x = 1;", Side::Before),
+            beside(&file, "f", "if (a) {", "x = 1;", Side::Before),
             Ok("\tx = 1;\n".to_owned())
         );
         assert_eq!(
-            beside(body, "x = 1;", "z();", Side::After),
+            beside(&file, "f", "x = 1;", "z();", Side::After),
             Err("reads \"x = 1;\" on 3 lines, not one".to_owned())
         );
-        assert!(beside(body, "anchor();", "missing();", Side::After).is_err());
-        assert!(beside(body, "if (a) {", "z();", Side::Before).is_err());
+        assert!(beside(&file, "f", "anchor();", "missing();", Side::After).is_err());
+        assert!(beside(&file, "f", "if (a) {", "z();", Side::Before).is_err());
     }
 
     #[test]
@@ -654,24 +647,26 @@ typedef enum {
 
     #[test]
     fn declarations_and_typedefs_run_to_their_semicolon() {
+        let file = parsed(FILE);
         assert_eq!(
-            declaration(FILE, "struct pair {"),
+            declaration(&file, "struct pair {"),
             Ok("struct pair {\n\tconst char *name;\n\tint value;\n};\n".to_owned())
         );
         assert_eq!(
-            declaration(FILE, "static struct pair TABLE[] = {"),
+            declaration(&file, "static struct pair TABLE[] = {"),
             Ok("static struct pair TABLE[] = {\n\t{\"A\", 1},\n\t{NULL, 0}\n};\n".to_owned())
         );
         assert_eq!(
-            typedef(FILE, "number_t"),
+            typedef(&file, "number_t"),
             Ok("typedef enum {\n\tONE = 1,\n\tTWO\n} number_t;\n".to_owned())
         );
-        assert!(typedef(FILE, "missing_t").is_err());
-        assert!(declaration(FILE, "struct missing {").is_err());
+        assert!(typedef(&file, "missing_t").is_err());
+        assert!(declaration(&file, "struct missing {").is_err());
     }
 
     #[test]
     fn directives_parse_by_kind() {
+        let file = parsed(FILE);
         assert_eq!(directive("\tint x;"), Ok(None));
         assert_eq!(
             directive("//@ function src/a.c helper"),
@@ -702,25 +697,25 @@ typedef enum {
             .expect("a directive");
         assert_eq!(block.path(), "src/a.c");
         assert_eq!(
-            block.extract(FILE),
+            block.extract(&file),
             Ok("\tif (p) {\n\t\t*p++ = '\\0';\n\t}\n".to_owned())
         );
         let elsewhere = directive("//@ block src/a.c helper if (p) {")
             .expect("a block directive")
             .expect("a directive");
         assert_eq!(
-            elsewhere.extract(FILE),
+            elsewhere.extract(&file),
             Err("helper: reads \"if (p) {\" on 0 lines, not one".to_owned())
         );
         let define = directive("//@ define src/a.c SHORT")
             .expect("a define directive")
             .expect("a directive");
-        assert_eq!(define.extract(FILE), Ok("#define SHORT 1\n".to_owned()));
+        assert_eq!(define.extract(&file), Ok("#define SHORT 1\n".to_owned()));
         let typedef = directive("//@ typedef src/a.c number_t")
             .expect("a typedef directive")
             .expect("a directive");
         assert!(typedef
-            .extract(FILE)
+            .extract(&file)
             .is_ok());
     }
 }

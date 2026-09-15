@@ -17,7 +17,7 @@ use std::process::Command;
 
 use serde::Deserialize;
 
-use extract::Directive;
+use extract::{Directive, Parsed};
 
 /// The oracle's C, in the order the unit joins it.
 const UNITS: &[&str] = &[
@@ -390,11 +390,12 @@ fn trees(index: &Path) -> Vec<Tree> {
         .collect()
 }
 
-/// The files of one tree, read out of the clone at its commit as they are needed.
+/// The files of one tree, read out of the clone at its commit and parsed as they are needed.
 struct Source<'r> {
     root: &'r Path,
+    name: String,
     commit: String,
-    files: HashMap<String, String>,
+    files: HashMap<String, Parsed>,
 }
 
 impl<'r> Source<'r> {
@@ -418,6 +419,9 @@ impl<'r> Source<'r> {
         }
         Ok(Self {
             root,
+            name: tree
+                .name
+                .clone(),
             commit: tree
                 .commit
                 .clone(),
@@ -426,7 +430,7 @@ impl<'r> Source<'r> {
     }
 
     /// `path` at the tree's commit; a commit that has the tree but lacks the file breaks the build.
-    fn file(&mut self, path: &str) -> &str {
+    fn file(&mut self, path: &str) -> &Parsed {
         let (root, commit) = (self.root, &self.commit);
         self.files
             .entry(path.to_owned())
@@ -443,20 +447,19 @@ impl<'r> Source<'r> {
                     "{path} at {commit}: {}",
                     String::from_utf8_lossy(&output.stderr)
                 );
-                String::from_utf8(output.stdout)
-                    .unwrap_or_else(|e| panic!("{path} at {commit} is not UTF-8: {e}"))
+                let text = String::from_utf8(output.stdout)
+                    .unwrap_or_else(|e| panic!("{path} at {commit} is not UTF-8: {e}"));
+                Parsed::new(text).unwrap_or_else(|e| panic!("{path} at {commit}: {e}"))
             })
     }
 
-    /// What `directive` names in this tree; a tree that lacks it breaks the build.
-    fn extract(&mut self, directive: &Directive<'_>) -> String {
-        let commit = self
-            .commit
-            .clone();
+    /// What `line`, holding `directive`, names in this tree; a tree that lacks it breaks the build.
+    fn extract(&mut self, line: &str, directive: &Directive<'_>) -> String {
+        let label = format!("tree {} ({})", self.name, self.commit);
         let path = directive.path();
         directive
             .extract(self.file(path))
-            .unwrap_or_else(|e| panic!("{path} at {commit}: {e}"))
+            .unwrap_or_else(|e| panic!("{label}, {path}, {:?}: {e}", line.trim()))
     }
 }
 
@@ -483,7 +486,7 @@ fn compile(tree: &Tree, source: &mut Source<'_>, units: &[(&str, String)], out: 
                 assert!(taken.insert(name), "{unit}: function {name} is taken twice");
                 symbols.push(name);
             }
-            body.push_str(&source.extract(&directive));
+            body.push_str(&source.extract(line, &directive));
         }
     }
     let mut unit = String::new();
