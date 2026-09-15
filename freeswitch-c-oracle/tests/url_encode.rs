@@ -1,13 +1,10 @@
 //! `switch_url_encode` and its siblings on every built tree, against the rule that tree follows.
 //! Nothing in the workspace ports them; the rules are what a sofia destination meets per tree.
 
-use std::io::Write as _;
-
-use freeswitch_c_oracle::Oracle;
+use freeswitch_c_oracle::on_every_tree;
 use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest::sample::select;
-use proptest::test_runner::{TestCaseResult, TestRunner};
 
 /// What `switch_url_encode_opt` does, `double_encode` false, with `%` and two uppercase hex digits.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -89,51 +86,10 @@ fn encoded(unsafe_bytes: &[u8], url: &[u8], cap: usize, keep_escapes: bool) -> V
     out
 }
 
-fn config() -> ProptestConfig {
-    let cases = std::env::var("PROPTEST_CASES")
-        .ok()
-        .and_then(|cases| {
-            cases
-                .parse()
-                .ok()
-        })
-        .unwrap_or(1024);
-    ProptestConfig {
-        cases,
-        source_file: Some(file!()),
-        ..ProptestConfig::default()
-    }
-}
-
-fn on_every_tree<S: Strategy>(
-    name: &str,
-    strategy: S,
-    property: impl Fn(&str, Oracle, S::Value) -> TestCaseResult,
-) {
-    for tree in freeswitch_c_oracle::trees() {
-        let oracle = match tree.oracle() {
-            Ok(oracle) => oracle,
-            Err(missing) => {
-                writeln!(
-                    std::io::stderr(),
-                    "{name}: skipped on tree {}, {missing}",
-                    tree.name()
-                )
-                .unwrap_or_else(|e| panic!("{name}: writing the skip line: {e}"));
-                continue;
-            }
-        };
-        if let Err(failure) =
-            TestRunner::new(config()).run(&strategy, |value| property(tree.name(), oracle, value))
-        {
-            panic!("{name} on tree {}: {failure}", tree.name());
-        }
-    }
-}
-
 #[test]
 fn url_encode_follows_the_tree_rule() {
     on_every_tree(
+        file!(),
         "url_encode_follows_the_tree_rule",
         (url(), any::<bool>(), select(&[1usize, 2, 3, 4, 8, 64][..])),
         |tree, c, (url, double_encode, len)| {
@@ -156,6 +112,7 @@ fn url_encode_follows_the_tree_rule() {
 #[test]
 fn core_url_encode_sizes_its_buffer_by_tree() {
     on_every_tree(
+        file!(),
         "core_url_encode_sizes_its_buffer_by_tree",
         (url(), any::<bool>()),
         |tree, c, (url, double_encode)| {
@@ -182,6 +139,7 @@ fn core_url_encode_sizes_its_buffer_by_tree() {
 #[test]
 fn needs_url_encode_reads_the_unsafe_set_alone() {
     on_every_tree(
+        file!(),
         "needs_url_encode_reads_the_unsafe_set_alone",
         url(),
         |_, c, url| {

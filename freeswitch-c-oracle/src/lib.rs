@@ -7,6 +7,13 @@
 
 use std::ffi::{c_char, c_int, c_long, c_uint, c_void, CStr};
 
+mod every_tree;
+#[cfg(test)]
+#[path = "../build/extract.rs"]
+mod extract;
+
+pub use every_tree::{against_the_c, config, on_every_tree};
+
 /// One FreeSWITCH tree the build compiles: the pin, or an entry of `trees` in the index.
 #[derive(Debug)]
 pub struct Tree {
@@ -50,133 +57,8 @@ pub struct Oracle {
     abi: &'static Abi,
 }
 
-type Split = unsafe extern "C" fn(*mut c_char, c_char, *mut *mut c_char, c_uint) -> c_uint;
 type Emit = unsafe extern "C" fn(*mut c_void, c_int, *const c_char, *const c_char);
 type Recorded = unsafe extern "C" fn(*const c_char, Emit, *mut c_void);
-
-#[derive(Debug)]
-struct Abi {
-    cleanup: unsafe extern "C" fn(*mut c_char, c_char) -> *mut c_char,
-    char_delim: Split,
-    blank_delim: unsafe extern "C" fn(*mut c_char, *mut *mut c_char, c_uint) -> c_uint,
-    separate_string: Split,
-    separate_string_string:
-        unsafe extern "C" fn(*mut c_char, *mut c_char, *mut *mut c_char, c_uint) -> c_uint,
-    find_end_paren: unsafe extern "C" fn(*const c_char, c_char, c_char) -> *mut c_char,
-    url_encode_opt: unsafe extern "C" fn(*const c_char, *mut c_char, usize, c_int) -> *mut c_char,
-    url_encode: unsafe extern "C" fn(*const c_char, *mut c_char, usize) -> *mut c_char,
-    needs_url_encode: unsafe extern "C" fn(*const c_char) -> c_int,
-    core_url_encode_opt: unsafe extern "C" fn(*const c_char, c_int, *mut c_char, usize) -> usize,
-    url_unsafe: unsafe extern "C" fn() -> *const c_char,
-    brackets:
-        unsafe extern "C" fn(*mut c_char, c_char, c_char, c_char, Emit, *mut c_void) -> c_long,
-    dial: Recorded,
-    expand: Recorded,
-    api_originate: Recorded,
-    switch_true: unsafe extern "C" fn(*const c_char) -> c_int,
-}
-
-/// Link one tree's prefixed symbols into a module holding its `ABI`.
-#[cfg(c_oracle)]
-macro_rules! tree_abi {
-    ($tree:ident, $prefix:literal) => {
-        mod $tree {
-            use std::ffi::{c_char, c_int, c_long, c_uint, c_void};
-
-            use super::Emit;
-
-            extern "C" {
-                #[link_name = concat!($prefix, "oracle_cleanup")]
-                fn cleanup(str: *mut c_char, delim: c_char) -> *mut c_char;
-                #[link_name = concat!($prefix, "oracle_char_delim")]
-                fn char_delim(
-                    buf: *mut c_char,
-                    delim: c_char,
-                    array: *mut *mut c_char,
-                    arraylen: c_uint,
-                ) -> c_uint;
-                #[link_name = concat!($prefix, "oracle_blank_delim")]
-                fn blank_delim(
-                    buf: *mut c_char,
-                    array: *mut *mut c_char,
-                    arraylen: c_uint,
-                ) -> c_uint;
-                #[link_name = concat!($prefix, "switch_separate_string")]
-                fn separate_string(
-                    buf: *mut c_char,
-                    delim: c_char,
-                    array: *mut *mut c_char,
-                    arraylen: c_uint,
-                ) -> c_uint;
-                #[link_name = concat!($prefix, "switch_separate_string_string")]
-                fn separate_string_string(
-                    buf: *mut c_char,
-                    delim: *mut c_char,
-                    array: *mut *mut c_char,
-                    arraylen: c_uint,
-                ) -> c_uint;
-                #[link_name = concat!($prefix, "switch_find_end_paren")]
-                fn find_end_paren(s: *const c_char, open: c_char, close: c_char) -> *mut c_char;
-                #[link_name = concat!($prefix, "switch_url_encode_opt")]
-                fn url_encode_opt(
-                    url: *const c_char,
-                    buf: *mut c_char,
-                    len: usize,
-                    double_encode: c_int,
-                ) -> *mut c_char;
-                #[link_name = concat!($prefix, "switch_url_encode")]
-                fn url_encode(url: *const c_char, buf: *mut c_char, len: usize) -> *mut c_char;
-                #[link_name = concat!($prefix, "oracle_needs_url_encode")]
-                fn needs_url_encode(s: *const c_char) -> c_int;
-                #[link_name = concat!($prefix, "oracle_core_url_encode_opt")]
-                fn core_url_encode_opt(
-                    url: *const c_char,
-                    double_encode: c_int,
-                    out: *mut c_char,
-                    outlen: usize,
-                ) -> usize;
-                #[link_name = concat!($prefix, "oracle_url_unsafe")]
-                fn url_unsafe() -> *const c_char;
-                #[link_name = concat!($prefix, "oracle_brackets")]
-                fn brackets(
-                    data: *mut c_char,
-                    a: c_char,
-                    b: c_char,
-                    c: c_char,
-                    emit: Emit,
-                    ctx: *mut c_void,
-                ) -> c_long;
-                #[link_name = concat!($prefix, "oracle_dial")]
-                fn dial(bridgeto: *const c_char, emit: Emit, ctx: *mut c_void);
-                #[link_name = concat!($prefix, "oracle_expand")]
-                fn expand(input: *const c_char, emit: Emit, ctx: *mut c_void);
-                #[link_name = concat!($prefix, "oracle_api_originate")]
-                fn api_originate(arg: *const c_char, emit: Emit, ctx: *mut c_void);
-                #[link_name = concat!($prefix, "oracle_switch_true")]
-                fn switch_true(expr: *const c_char) -> c_int;
-            }
-
-            pub(super) static ABI: super::Abi = super::Abi {
-                cleanup,
-                char_delim,
-                blank_delim,
-                separate_string,
-                separate_string_string,
-                find_end_paren,
-                url_encode_opt,
-                url_encode,
-                needs_url_encode,
-                core_url_encode_opt,
-                url_unsafe,
-                brackets,
-                dial,
-                expand,
-                api_originate,
-                switch_true,
-            };
-        }
-    };
-}
 
 include!(concat!(env!("OUT_DIR"), "/trees.rs"));
 
