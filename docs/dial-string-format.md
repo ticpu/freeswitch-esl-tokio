@@ -1,11 +1,11 @@
 # FreeSWITCH Dial String Format
 
 Reference for endpoint strings, variable scoping, and bridge semantics as they
-appear on the ESL wire and in FreeSWITCH configuration. Based on FreeSWITCH
-1.10.x source code (`switch_ivr_originate.c`, `mod_sofia.c`, `mod_loopback.c`,
-`mod_dptools.c`). Line numbers index FreeSWITCH `v1.11.1`
-(commit `c2c59645f6911a76589e5008c4d73349ded44b65`). Behaviour described as
-measured was measured on FreeSWITCH 1.10.13-dev (git 8bb2a39).
+appear on the ESL wire and in FreeSWITCH configuration. Based on the FreeSWITCH
+source at `v1.11.1` (commit `c2c59645f6911a76589e5008c4d73349ded44b65`), the
+commit hooks/source-refs.yaml pins, chiefly switch_ivr_originate.c, mod_sofia.c,
+mod_loopback.c and mod_dptools.c; line numbers index that commit. Behaviour
+described as measured was measured on FreeSWITCH 1.10.13-dev (git 8bb2a39).
 
 ## Endpoint types
 
