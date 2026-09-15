@@ -1356,6 +1356,44 @@ mod tests {
         }
     }
 
+    /// `separate_string_char_delim` skips the byte after a backslash, a quote pairs with the next
+    /// one, a space or control is trimmed or cuts the argument, and `n r t s` name escapes.
+    #[test]
+    fn a_separator_breaking_the_switch_split_is_refused_everywhere() {
+        for sep in [
+            '\\', '\'', ' ', '\t', '\n', '\u{b}', '\0', '\u{7f}', 'n', 'r', 't', 's',
+        ] {
+            for scope in [
+                VariablesType::Default,
+                VariablesType::Enterprise,
+                VariablesType::Channel,
+            ] {
+                let mut vars = Variables::new(scope);
+                vars.insert("a", "1");
+                assert!(
+                    vars.with_separator(sep)
+                        .is_err(),
+                    "builder accepted {sep:?} in {scope:?}"
+                );
+            }
+            assert!(
+                format!("{{^^{sep}a=1{sep}b=2}}")
+                    .parse::<Variables>()
+                    .is_err(),
+                "parser accepted {sep:?}"
+            );
+        }
+        for sep in ['~', ';', '!', '#', 'N', '0', '"', ','] {
+            let mut vars = Variables::new(VariablesType::Default);
+            vars.insert("a", "1");
+            assert!(
+                vars.with_separator(sep)
+                    .is_ok(),
+                "refused {sep:?}"
+            );
+        }
+    }
+
     /// The parser has to refuse what the builder refuses, `^` included:
     /// accepting a block no render of this crate can reproduce hands the caller
     /// a value that changes when it is written back out.
