@@ -12,10 +12,10 @@ use proptest::sample::select;
 
 use super::flattened::pipeline::{self, names_a_variable, PairEffect};
 use super::{
-    originate_quote, originate_unquote, Application, BlockParse, DialString, DialStringCarrier,
-    DialStringTarget, DialplanType, Endpoint, ErrorEndpoint, FlattenedDialString, FlattenedLeg,
-    LegTarget, LoopbackEndpoint, Originate, SofiaEndpoint, SofiaGateway, UserEndpoint, Variables,
-    VariablesType,
+    originate_quote, originate_unquote, Application, AudioEndpoint, BlockParse, DialString,
+    DialStringCarrier, DialStringTarget, DialplanType, Endpoint, ErrorEndpoint,
+    FlattenedDialString, FlattenedLeg, GroupCall, GroupCallOrder, LegTarget, LoopbackEndpoint,
+    Originate, SofiaContact, SofiaEndpoint, SofiaGateway, UserEndpoint, Variables, VariablesType,
 };
 use crate::channel::HangupCause;
 use crate::test_text::{against_the_c, config, text};
@@ -207,7 +207,54 @@ fn bare_endpoint() -> impl Strategy<Value = Endpoint> {
             ][..]
         )
         .prop_map(|cause| ErrorEndpoint::new(cause).into()),
+        (text(), text(), option::of(text())).prop_map(|(user, domain, profile)| {
+            let mut ep = SofiaContact::new(user, domain);
+            ep.profile = profile;
+            ep.into()
+        }),
+        (
+            text(),
+            text(),
+            option::of(select(
+                &[
+                    GroupCallOrder::All,
+                    GroupCallOrder::Enterprise,
+                    GroupCallOrder::First,
+                ][..]
+            ))
+        )
+            .prop_map(|(group, domain, order)| {
+                let mut ep = GroupCall::new(group, domain);
+                ep.order = order;
+                ep.into()
+            }),
+        (
+            select(&[Endpoint::PortAudio, Endpoint::PulseAudio, Endpoint::Alsa][..]),
+            option::of(text())
+        )
+            .prop_map(|(variant, destination)| {
+                let mut ep = AudioEndpoint::new();
+                ep.destination = destination;
+                variant(ep)
+            }),
     ]
+}
+
+/// Left to the switch like a block value naming a variable; an expression's own `${` is not.
+fn fields_name_a_variable(bare: &Endpoint) -> bool {
+    match bare {
+        Endpoint::SofiaContact(ep) => [
+            Some(&ep.user),
+            Some(&ep.domain),
+            ep.profile
+                .as_ref(),
+        ]
+        .into_iter()
+        .flatten()
+        .any(|field| names_a_variable(field)),
+        Endpoint::GroupCall(ep) => names_a_variable(&ep.group) || names_a_variable(&ep.domain),
+        other => names_a_variable(&other.module_text()),
+    }
 }
 
 /// A loopback dialplan without a context renders the switch's default context in the gap.
@@ -709,7 +756,7 @@ proptest! {
         bare in bare_endpoint(),
         vars in option::of((scope(), block_separator(), entries(1..3))),
     ) {
-        if names_a_variable(&bare.module_text()) {
+        if fields_name_a_variable(&bare) {
             return Ok(());
         }
         let mut endpoint = bare.clone();
@@ -739,8 +786,12 @@ proptest! {
             });
             let parsed = Endpoint::parse_for(&rendered, target);
             prop_assert!(
-                delivered || refused || parsed.is_err(),
+                delivered || refused,
                 "{endpoint:?} at {target:?}: rendered {rendered:?}, port read {got:?}"
+            );
+            prop_assert!(
+                parsed.is_ok() || refused,
+                "{endpoint:?} at {target:?}: rendered {rendered:?} loads from config, parse {parsed:?}"
             );
             if delivered && !refused {
                 let parsed = parsed.map(|mut parsed| {
@@ -986,7 +1037,7 @@ fn endpoints_arrive_through_the_c_passes() {
             option::of((scope, block_separator(), entries(1..3))),
         ),
         |(bare, vars)| {
-            if names_a_variable(&bare.module_text()) {
+            if fields_name_a_variable(&bare) {
                 return Ok(());
             }
             let mut endpoint = bare.clone();

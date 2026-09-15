@@ -1452,6 +1452,129 @@ mod tests {
         assert_eq!(ep.to_string(), "loopback/app=bridge:null/farend");
     }
 
+    /// `sofia_contact_function` cuts at the first `~`, then `/`, then `@`, then a `/` after the
+    /// domain, and `group_call_function` at the first `+`, then `@`; the argument split, the leg
+    /// splits and the reference parse read the rest ahead of either. Each value carries `SECRET`.
+    #[test]
+    fn expression_and_audio_fields_the_switch_misreads_are_refused() {
+        for json in [
+            r#"{"sofia_contact":{"user":"SECRET~x","domain":"example.com"}}"#,
+            r#"{"sofia_contact":{"user":"SECRET@x","domain":"example.com"}}"#,
+            r#"{"sofia_contact":{"user":"SECRET/x","domain":"example.com"}}"#,
+            r#"{"sofia_contact":{"user":"u","domain":"SECRET/x"}}"#,
+            r#"{"sofia_contact":{"user":"u","domain":"SECRET~x"}}"#,
+            r#"{"sofia_contact":{"user":"SECRET","domain":""}}"#,
+            r#"{"sofia_contact":{"user":"SECRET","domain":"example.com","profile":""}}"#,
+            r#"{"sofia_contact":{"user":"u","domain":"example.com","profile":"SECRET/x"}}"#,
+            r#"{"sofia_contact":{"user":"SECRET:_:x","domain":"example.com"}}"#,
+            r#"{"sofia_contact":{"user":"SECRET x","domain":"example.com"}}"#,
+            r#"{"sofia_contact":{"user":"SECRET,x","domain":"example.com"}}"#,
+            r#"{"sofia_contact":{"user":"SECRET's","domain":"example.com"}}"#,
+            r#"{"sofia_contact":{"user":"SECRET\\n","domain":"example.com"}}"#,
+            r#"{"sofia_contact":{"user":"SECRET)","domain":"example.com"}}"#,
+            r#"{"group_call":{"group":"SECRET+x","domain":"example.com"}}"#,
+            r#"{"group_call":{"group":"SECRET@x","domain":"example.com"}}"#,
+            r#"{"group_call":{"group":"g","domain":"SECRET+x"}}"#,
+            r#"{"group_call":{"group":"SECRET|x","domain":"example.com"}}"#,
+            r#"{"group_call":{"group":"g","domain":"SECRET}"}}"#,
+            r#"{"group_call":{"group":"g","domain":"SECRET:_:x"}}"#,
+            r#"{"portaudio":{"destination":""}}"#,
+            r#"{"alsa":{"destination":""}}"#,
+        ] {
+            let msg = serde_json::from_str::<Endpoint>(json)
+                .expect_err(json)
+                .to_string();
+            assert!(!msg.contains("SECRET"), "{json}: {msg}");
+        }
+        for input in [
+            "${sofia_contact(SECRET~x@example.com)}",
+            "${sofia_contact(/SECRET@example.com)}",
+            "${sofia_contact(SECRET@)}",
+            "${sofia_contact(SECRET@example.com/x)}",
+            "${group_call(g@SECRET:_:x)}",
+        ] {
+            let msg = Endpoint::parse_for(input, DialStringCarrier::Dialplan)
+                .expect_err(input)
+                .to_string();
+            assert!(!msg.contains("SECRET"), "{input}: {msg}");
+        }
+    }
+
+    /// The module reads each of these empty fields as written rather than as a default.
+    #[test]
+    fn empty_fields_the_module_reads_as_written_round_trip() {
+        let cases: [Endpoint; 8] = [
+            LoopbackEndpoint::new("").into(),
+            SofiaEndpoint::new("", "1000").into(),
+            SofiaEndpoint::new("internal", "").into(),
+            SofiaGateway::new("gw", "1")
+                .with_profile("")
+                .into(),
+            UserEndpoint::new("bob")
+                .with_domain("")
+                .into(),
+            GroupCall::new("", "example.com").into(),
+            GroupCall::new("support", "").into(),
+            SofiaContact::new("", "example.com").into(),
+        ];
+        for ep in cases {
+            for target in [
+                DialStringTarget::new(DialStringCarrier::EslApi),
+                DialStringTarget::new(DialStringCarrier::Dialplan),
+                tilde(),
+            ] {
+                let rendered = ep
+                    .display_for(target)
+                    .to_string();
+                assert_eq!(
+                    Endpoint::parse_for(&rendered, target)
+                        .unwrap_or_else(|e| panic!("{rendered:?} at {target:?}: {e}")),
+                    ep,
+                    "{rendered:?} at {target:?}"
+                );
+            }
+            let json = serde_json::to_string(&ep).unwrap();
+            assert_eq!(
+                serde_json::from_str::<Endpoint>(&json).unwrap(),
+                ep,
+                "{json}"
+            );
+        }
+    }
+
+    /// `group_call_function` takes the first `+` for the order before it looks for `@`, and
+    /// `sofia_contact_function` reads a `/` after the profile's as part of the user.
+    #[test]
+    fn expression_fields_split_where_the_functions_split() {
+        let group: GroupCall = "${group_call(g@d@e+F)}"
+            .parse()
+            .unwrap();
+        assert_eq!(
+            (
+                group
+                    .group
+                    .as_str(),
+                group
+                    .domain
+                    .as_str(),
+                group.order
+            ),
+            ("g", "d@e", Some(GroupCallOrder::First))
+        );
+        let contact = SofiaContact::new("u/x", "example.com").with_profile("p");
+        assert_eq!(
+            contact
+                .to_string()
+                .parse::<SofiaContact>()
+                .unwrap(),
+            contact
+        );
+        assert!(serde_json::from_str::<Endpoint>(
+            r#"{"sofia_contact":{"user":"u/x","domain":"example.com","profile":"p"}}"#
+        )
+        .is_ok());
+    }
+
     /// `:_:` splits the dial string into threads, so no endpoint carries it.
     #[test]
     fn the_enterprise_separator_is_refused_in_any_field() {
