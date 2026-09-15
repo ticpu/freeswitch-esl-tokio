@@ -18,43 +18,9 @@ use super::{
     VariablesType,
 };
 use crate::channel::HangupCause;
+use crate::test_text::{against_the_c, config, text};
 use crate::tokenizer::{separate, trace, untrace};
 use crate::variables::VariableName;
-
-const HOSTILE: &[&str] = &[
-    " ", "\t", "'", "\"", "\\", ",", "|", ":", "_", ":_:", "=", "{", "}", "[", "]", "<", ">", "^",
-    "^^", "~", "!", ";", "$", "${", "(", ")", "&", r"\n", r"\r", r"\t", r"\s", "n", "r", "t", "s",
-    "é", "😀", "\u{b}",
-];
-const ORDINARY: &[&str] = &["a", "Z", "0", "42", "bob", "x9"];
-const WHOLE: &[&str] = &["", "undef", "UNDEF", "Undef"];
-const EDGE: &[&str] = &["", "", " ", "  "];
-
-/// `PROPTEST_CASES` raises the count the pre-commit hook runs.
-fn config() -> ProptestConfig {
-    let cases = std::env::var("PROPTEST_CASES")
-        .ok()
-        .and_then(|cases| {
-            cases
-                .parse()
-                .ok()
-        })
-        .unwrap_or(1024);
-    ProptestConfig {
-        cases,
-        ..ProptestConfig::default()
-    }
-}
-
-fn text() -> impl Strategy<Value = String> {
-    let piece = prop_oneof![3 => select(HOSTILE), 2 => select(ORDINARY)];
-    let body = vec(piece, 0..8).prop_map(|pieces| pieces.concat());
-    prop_oneof![
-        8 => (select(EDGE), body, select(EDGE))
-            .prop_map(|(lead, body, trail)| format!("{lead}{body}{trail}")),
-        1 => select(WHOLE).prop_map(str::to_owned),
-    ]
-}
 
 fn scope() -> impl Strategy<Value = VariablesType> {
     prop_oneof![
@@ -898,4 +864,81 @@ proptest! {
         prop_assert_eq!(tokens, vec!["x".to_owned(), value, "y".to_owned()], "{:?}", line);
         prop_assert!(!split.open_quote, "{line:?}");
     }
+}
+
+/// The pairs and endpoint `originate_function` and `switch_event_create_brackets` read of a line
+/// opening with one `{}` or `<>` block, every split done by the switch's own C.
+fn c_reads_the_block(
+    line: &str,
+    open: u8,
+    close: u8,
+) -> Result<(Vec<(String, String)>, String), String> {
+    const BUILT: &str = "against_the_c runs only with the oracle built";
+    let utf8 = |bytes: &[u8]| String::from_utf8(bytes.to_vec()).map_err(|e| e.to_string());
+    let argv = freeswitch_c_oracle::separate_string(strip_whitespace(line).as_bytes(), b' ', 10)
+        .expect(BUILT);
+    let dial = argv
+        .first()
+        .ok_or("no argument")?;
+    let end = freeswitch_c_oracle::find_end_paren(dial, open, close)
+        .expect(BUILT)
+        .ok_or("the block never closes")?;
+    let (separator, content) = match &dial[1..end] {
+        [b'^', b'^', picked, rest @ ..] => (*picked, rest),
+        content => (b',', content),
+    };
+    let mut installed = Vec::new();
+    for pair in freeswitch_c_oracle::separate_string(content, separator, 1024).expect(BUILT) {
+        if let [key, value] =
+            &freeswitch_c_oracle::separate_string(&pair, b'=', 2).expect(BUILT)[..]
+        {
+            installed.push((utf8(key)?, utf8(value)?));
+        }
+    }
+    Ok((installed, utf8(&dial[end + 1..])?))
+}
+
+/// `{}` and `<>` blocks at the API targets read by the switch's C rather than the port; the dialplan
+/// carrier's expansion and a `[]` block's leg splits are not extracted.
+#[test]
+fn variables_arrive_through_the_c_passes() {
+    let scope = prop_oneof![
+        Just(VariablesType::Default),
+        Just(VariablesType::Enterprise)
+    ];
+    against_the_c(
+        file!(),
+        "variables_arrive_through_the_c_passes",
+        (scope, block_separator(), vec(text(), 1..4)),
+        |(scope, sep, values)| {
+            let Some(vars) = build_vars(scope, "v", &values, sep) else {
+                return Ok(());
+            };
+            if names_a_switch_variable(&vars) || config_refuses_vars(&vars) {
+                return Ok(());
+            }
+            let (open, close) = match scope {
+                VariablesType::Enterprise => (b'<', b'>'),
+                _ => (b'{', b'}'),
+            };
+            let want = Ok((pairs(&vars), "null/drift".to_owned()));
+            for target in api_targets() {
+                let block = vars
+                    .display_for(target)
+                    .to_string();
+                let line = match target.argv_separator() {
+                    Some(argv) => format!("^^{argv}{block}null/drift{argv}&park()"),
+                    None => format!("{block}null/drift &park()"),
+                };
+                prop_assert_eq!(
+                    &c_reads_the_block(&line, open, close),
+                    &want,
+                    "{:?} at {:?}",
+                    line,
+                    target
+                );
+            }
+            Ok(())
+        },
+    );
 }

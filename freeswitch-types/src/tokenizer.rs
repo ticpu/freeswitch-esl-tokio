@@ -458,6 +458,9 @@ pub(crate) fn blank_delim_spans<'s>(s: &'s str, text: &[Traced]) -> (Vec<&'s str
 }
 
 #[cfg(all(test, feature = "esl"))]
+mod c_oracle;
+
+#[cfg(all(test, feature = "esl"))]
 pub(crate) const TILING_INPUTS: &[&str] = &[
     "a,'b c',error/X",
     "'b c',a",

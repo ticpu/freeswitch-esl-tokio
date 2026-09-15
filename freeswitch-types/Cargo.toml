@@ -33,3 +33,4 @@ sdp-types = { version = "0.2", optional = true }
 [dev-dependencies]
 serde_json = "1.0"
 proptest = { version = "1.11", default-features = false, features = ["std"] }
+freeswitch-c-oracle = { path = "../freeswitch-c-oracle" }
