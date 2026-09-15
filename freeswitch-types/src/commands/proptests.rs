@@ -5,7 +5,7 @@
 use std::str::FromStr;
 use std::time::Duration;
 
-use freeswitch_c_oracle::Oracle;
+use freeswitch_c_oracle::{Action, Oracle};
 use proptest::collection::vec;
 use proptest::option;
 use proptest::prelude::*;
@@ -1012,6 +1012,225 @@ fn variables_arrive_through_the_c_passes() {
                     target
                 );
             }
+            Ok(())
+        },
+    );
+}
+
+/// What `originate_function` does with an argument line, the same shape whichever side read it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ApiReading {
+    Usage,
+    /// `switch_assert(exten)` fails on an `undef` target, which aborts the switch.
+    TargetUnset,
+    Originated {
+        aleg: Option<Vec<u8>>,
+        cid_name: Option<Vec<u8>>,
+        cid_num: Option<Vec<u8>>,
+        timeout: u32,
+        action: ApiAction,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ApiAction {
+    Application {
+        name: Vec<u8>,
+        arg: Vec<u8>,
+    },
+    Transfer {
+        extension: Vec<u8>,
+        dialplan: Vec<u8>,
+        context: Vec<u8>,
+    },
+}
+
+/// glibc's `atoi`: `strtol` clamped to `long`, truncated to `int`, stored in a `uint32_t`.
+fn atoi_timeout(text: &str) -> u32 {
+    let text = text.trim_start_matches([' ', '\t', '\n', '\u{b}', '\u{c}', '\r']);
+    let (negative, digits) = match text
+        .as_bytes()
+        .first()
+    {
+        Some(b'-') => (true, &text[1..]),
+        Some(b'+') => (false, &text[1..]),
+        _ => (false, text),
+    };
+    let cap = i128::from(i64::MAX) + 1;
+    let magnitude = digits
+        .bytes()
+        .take_while(u8::is_ascii_digit)
+        .fold(0i128, |n, digit| {
+            (n * 10 + i128::from(digit - b'0')).min(cap)
+        });
+    let value = if negative { -magnitude } else { magnitude };
+    let long = value.clamp(i128::from(i64::MIN), i128::from(i64::MAX)) as i64;
+    long as i32 as u32
+}
+
+/// The reading `originate_argv` and `switch_application` model, which the positional properties
+/// above take for the switch's.
+fn port_api_reading(line: &str) -> ApiReading {
+    let Ok(argv) = originate_argv(line) else {
+        return ApiReading::Usage;
+    };
+    let slot = |at: usize| {
+        argv.get(at)
+            .cloned()
+            .flatten()
+    };
+    let Some(exten) = slot(1) else {
+        return ApiReading::TargetUnset;
+    };
+    let action = match switch_application(&exten) {
+        Some(SwitchTarget::Application { name, arg }) => ApiAction::Application {
+            name: name.into_bytes(),
+            arg: arg.into_bytes(),
+        },
+        _ => ApiAction::Transfer {
+            extension: exten.into_bytes(),
+            dialplan: slot(2)
+                .unwrap_or_else(|| "XML".to_owned())
+                .into_bytes(),
+            context: slot(3)
+                .unwrap_or_else(|| "default".to_owned())
+                .into_bytes(),
+        },
+    };
+    ApiReading::Originated {
+        aleg: slot(0).map(String::into_bytes),
+        cid_name: slot(4).map(String::into_bytes),
+        cid_num: slot(5).map(String::into_bytes),
+        timeout: slot(6).map_or(60, |timeout| atoi_timeout(&timeout)),
+        action,
+    }
+}
+
+fn switch_api_reading(c: Oracle, line: &str) -> ApiReading {
+    let api = c.api_originate(
+        line.strip_prefix("originate ")
+            .unwrap_or(line)
+            .as_bytes(),
+    );
+    if api
+        .assertion
+        .is_some()
+    {
+        return ApiReading::TargetUnset;
+    }
+    let Some(originated) = api.originated else {
+        return ApiReading::Usage;
+    };
+    let action = match originated
+        .action
+        .expect("originate_function acts on every channel it originates")
+    {
+        Action::Application { name, arg } => ApiAction::Application {
+            name,
+            arg: arg.unwrap_or_default(),
+        },
+        Action::Transfer {
+            extension,
+            dialplan,
+            context,
+        } => ApiAction::Transfer {
+            extension,
+            dialplan,
+            context,
+        },
+    };
+    ApiReading::Originated {
+        aleg: originated.aleg,
+        cid_name: originated.cid_name,
+        cid_num: originated.cid_num,
+        timeout: originated.timeout,
+        action,
+    }
+}
+
+/// A rendered originate, or `None` where the builder refuses the spec, and lines of stray text.
+fn api_lines() -> impl Strategy<Value = Option<String>> {
+    prop_oneof![
+        3 => originate_spec().prop_map(|spec| build_originate(&spec).map(|originate| originate.to_string())),
+        1 => vec(text(), 0..9).prop_map(|tokens| Some(format!("originate {}", tokens.join(" ")))),
+    ]
+}
+
+/// The port takes no `^^` head naming a non-ASCII separator, which the switch splits on as a byte.
+fn opens_a_non_ascii_head(line: &str) -> bool {
+    let arguments = line
+        .strip_prefix("originate ")
+        .unwrap_or(line);
+    matches!(strip_whitespace(arguments).as_bytes(), [b'^', b'^', picked, ..] if !picked.is_ascii())
+}
+
+#[test]
+fn originate_function_reads_lines_as_the_port_does() {
+    against_the_c(
+        file!(),
+        "originate_function_reads_lines_as_the_port_does",
+        api_lines(),
+        |c, line| {
+            let Some(line) = line.filter(|line| !opens_a_non_ascii_head(line)) else {
+                return Ok(());
+            };
+            prop_assert_eq!(
+                switch_api_reading(c, &line),
+                port_api_reading(&line),
+                "{:?}",
+                line
+            );
+            Ok(())
+        },
+    );
+}
+
+/// A line `Originate` parses renders back to one `originate_function` reads the same: the dial
+/// string compared by what the switch's leg passes read of it, a dialplan name without regard to
+/// case as the module lookup reads it, and an inline action list by the port's model of the hunt.
+#[test]
+fn a_parsed_originate_reads_back_the_same_through_the_switch() {
+    against_the_c(
+        file!(),
+        "a_parsed_originate_reads_back_the_same_through_the_switch",
+        api_lines(),
+        |c, line| {
+            let Some(line) = line else {
+                return Ok(());
+            };
+            let Ok(parsed) = Originate::from_str(&line) else {
+                return Ok(());
+            };
+            let rendered = parsed.to_string();
+            let read = |text: &str| {
+                let mut reading = switch_api_reading(c, text);
+                let (mut dial, mut hunt) = (None, None);
+                if let ApiReading::Originated { aleg, action, .. } = &mut reading {
+                    dial = aleg
+                        .take()
+                        .map(|aleg| c.dial(&aleg));
+                    if let ApiAction::Transfer {
+                        extension,
+                        dialplan,
+                        ..
+                    } = action
+                    {
+                        dialplan.make_ascii_lowercase();
+                        if *dialplan == *b"inline" {
+                            let list = std::mem::take(extension);
+                            hunt = Some(switch_inline(&String::from_utf8_lossy(&list)));
+                        }
+                    }
+                }
+                (dial, hunt, reading)
+            };
+            prop_assert_eq!(
+                read(&rendered),
+                read(&line),
+                "{:?} renders {:?}",
+                line,
+                rendered
+            );
             Ok(())
         },
     );
