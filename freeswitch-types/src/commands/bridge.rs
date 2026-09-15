@@ -148,7 +148,7 @@ impl BridgeDialString {
     /// [`display_with`](Self::display_with).
     pub fn parse_with(s: &str, block_parse: BlockParse) -> Result<Self, OriginateError> {
         let target = DialStringTarget::new(CARRIER).with_block_parse(block_parse);
-        let s = s.trim();
+        let s = s.trim_matches(' ');
         if s.is_empty() {
             return Err(OriginateError::ParseError(
                 "empty bridge dial string".into(),
@@ -161,7 +161,7 @@ impl BridgeDialString {
         let group_strs = split_respecting_brackets(rest, '|');
         let mut groups = Vec::new();
         for group_str in &group_strs {
-            let group_str = group_str.trim();
+            let group_str = group_str.trim_matches(' ');
             if group_str.is_empty() {
                 continue;
             }
@@ -169,7 +169,7 @@ impl BridgeDialString {
             let ep_strs = split_respecting_brackets(group_str, ',');
             let mut endpoints = Vec::new();
             for ep_str in &ep_strs {
-                let ep_str = ep_str.trim();
+                let ep_str = ep_str.trim_matches(' ');
                 if ep_str.is_empty() {
                     continue;
                 }

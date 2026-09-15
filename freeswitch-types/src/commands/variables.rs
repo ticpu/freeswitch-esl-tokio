@@ -1055,7 +1055,7 @@ impl Variables {
         let (argument, target) = target
             .into()
             .read_argument(s)?;
-        let s = argument.trim();
+        let s = argument.trim_matches(' ');
         if s.len() < 2 {
             return Err(OriginateError::ParseError(
                 "variable block too short".into(),

@@ -191,7 +191,7 @@ pub(super) fn extract_scoped_variables<'a>(
     let var_str = &s[..=close];
     let vars = Variables::parse_for(var_str, target)?;
     let vars = if vars.is_empty() { None } else { Some(vars) };
-    Ok((vars, s[close + 1..].trim()))
+    Ok((vars, s[close + 1..].trim_matches(' ')))
 }
 
 // ---------------------------------------------------------------------------
@@ -602,6 +602,26 @@ mod tests {
                 .to_string(),
             input
         );
+    }
+
+    /// The leg split and the block parse skip and trim spaces only, so any other whitespace
+    /// the switch keeps is endpoint text.
+    #[test]
+    fn whitespace_other_than_a_space_is_kept() {
+        let ep = Endpoint::parse_for("<v0==>loopback/\u{b}", DialStringCarrier::EslApi).unwrap();
+        let Endpoint::Loopback(loopback) = &ep else {
+            panic!("expected Loopback: {ep:?}");
+        };
+        assert_eq!(loopback.extension, "\u{b}");
+
+        assert!(Variables::parse_for("\u{b}{k=v}", DialStringCarrier::Dialplan).is_err());
+
+        let bridge = crate::commands::BridgeDialString::parse_with(
+            "loopback/9199/test\t",
+            crate::commands::BlockParse::PairSplitCleans,
+        )
+        .unwrap();
+        assert_eq!(bridge.to_string(), "loopback/9199/test\t");
     }
 
     #[test]
