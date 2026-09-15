@@ -1,0 +1,1588 @@
+vars/Enterprise/sep-comma/api/render	"<v0=abc123,v1='a b c',v2=\\\\\\\\sabc,v3=abc\\\\\\\\s,v4=it\\\\\\\\\\\\\\'s,v5='he said \"hi\"',v6=a\\\\\\\\\\\\\\\\b,v7=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b,v8=a\\,b,v9=a|b,v10=a=b,v11=a{b}c[d]e<f>g,v12=a$b,v13=a$$b,v14=${foo},v15=a^^b,v16=a\nb,v17=a\tb,v18=café☎>"
+vars/Enterprise/sep-comma/dialplan/render	"<v0=abc123,v1='a b c',v2=\\\\\\\\sabc,v3=abc\\\\\\\\s,v4=it\\\\\\\\\\\\'s,v5='he said \"hi\"',v6=a\\\\\\\\\\\\\\\\b,v7=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b,v8=a\\,b,v9=a|b,v10=a=b,v11=a{b}c[d]e<f>g,v12=a$b,v13=\\'a\\$\\$b,v14=${foo},v15=a^^b,v16=a\nb,v17=a\tb,v18=café☎>"
+vars/Enterprise/sep-comma/api-tilde/render	"<v0=abc123,v1=\\'a b c\\',v2=\\\\\\\\sabc,v3=abc\\\\\\\\s,v4=it\\\\\\\\\\\\\\'s,v5=\\'he said \"hi\"\\',v6=a\\\\\\\\\\\\\\\\b,v7=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b,v8=a\\\\,b,v9=a|b,v10=a=b,v11=a{b}c[d]e<f>g,v12=a$b,v13=a$$b,v14=${foo},v15=a^^b,v16=a\\nb,v17=a\\tb,v18=café☎>"
+vars/Enterprise/sep-comma/api-bang/render	"<v0=abc123,v1=\\'a b c\\',v2=\\\\\\\\sabc,v3=abc\\\\\\\\s,v4=it\\\\\\\\\\\\\\'s,v5=\\'he said \"hi\"\\',v6=a\\\\\\\\\\\\\\\\b,v7=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b,v8=a\\\\,b,v9=a|b,v10=a=b,v11=a{b}c[d]e<f>g,v12=a$b,v13=a$$b,v14=${foo},v15=a^^b,v16=a\\nb,v17=a\\tb,v18=café☎>"
+vars/Enterprise/sep-:/api/render	"<^^:v0=abc123:v1='a b c':v2=\\\\\\\\sabc:v3=abc\\\\\\\\s:v4=it\\\\\\\\\\\\\\'s:v5='he said \"hi\"':v6=a\\\\\\\\\\\\\\\\b:v7=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b:v8=a,b:v9=a|b:v10=a=b:v11=a{b}c[d]e<f>g:v12=a$b:v13=a$$b:v14=${foo}:v15=a^^b:v16=a\nb:v17=a\tb:v18=café☎>"
+vars/Enterprise/sep-:/api/parse	(Enterprise, None, [("v0", "abc123"), ("v1", "a b c"), ("v10", "a=b"), ("v11", "a{b}c[d]e<f>g"), ("v12", "a$b"), ("v13", "a$$b"), ("v14", "${foo}"), ("v15", "a^^b"), ("v16", "a\nb"), ("v17", "a\tb"), ("v18", "café☎"), ("v2", " abc"), ("v3", "abc "), ("v4", "it's"), ("v5", "he said \"hi\""), ("v6", "a\\b"), ("v7", "a\\\\b"), ("v8", "a,b"), ("v9", "a|b")])
+vars/Enterprise/sep-:/dialplan/render	"<^^:v0=abc123:v1='a b c':v2=\\\\\\\\sabc:v3=abc\\\\\\\\s:v4=it\\\\\\\\\\\\'s:v5='he said \"hi\"':v6=a\\\\\\\\\\\\\\\\b:v7=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b:v8=a,b:v9=a|b:v10=a=b:v11=a{b}c[d]e<f>g:v12=a$b:v13=\\'a\\$\\$b:v14=${foo}:v15=a^^b:v16=a\nb:v17=a\tb:v18=café☎>"
+vars/Enterprise/sep-:/dialplan/parse	(Enterprise, None, [("v0", "abc123"), ("v1", "a b c"), ("v10", "a=b"), ("v11", "a{b}c[d]e<f>g"), ("v12", "a$b"), ("v13", "a$$b"), ("v14", "${foo}"), ("v15", "a^^b"), ("v16", "a\nb"), ("v17", "a\tb"), ("v18", "café☎"), ("v2", " abc"), ("v3", "abc "), ("v4", "it's"), ("v5", "he said \"hi\""), ("v6", "a\\b"), ("v7", "a\\\\b"), ("v8", "a,b"), ("v9", "a|b")])
+vars/Enterprise/sep-:/api-tilde/render	"<^^:v0=abc123:v1=\\'a b c\\':v2=\\\\\\\\sabc:v3=abc\\\\\\\\s:v4=it\\\\\\\\\\\\\\'s:v5=\\'he said \"hi\"\\':v6=a\\\\\\\\\\\\\\\\b:v7=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b:v8=a,b:v9=a|b:v10=a=b:v11=a{b}c[d]e<f>g:v12=a$b:v13=a$$b:v14=${foo}:v15=a^^b:v16=a\\nb:v17=a\\tb:v18=café☎>"
+vars/Enterprise/sep-:/api-tilde/parse	(Enterprise, None, [("v0", "abc123"), ("v1", "a b c"), ("v10", "a=b"), ("v11", "a{b}c[d]e<f>g"), ("v12", "a$b"), ("v13", "a$$b"), ("v14", "${foo}"), ("v15", "a^^b"), ("v16", "a\nb"), ("v17", "a\tb"), ("v18", "café☎"), ("v2", " abc"), ("v3", "abc "), ("v4", "it's"), ("v5", "he said \"hi\""), ("v6", "a\\b"), ("v7", "a\\\\b"), ("v8", "a,b"), ("v9", "a|b")])
+vars/Enterprise/sep-:/api-bang/render	"<^^:v0=abc123:v1=\\'a b c\\':v2=\\\\\\\\sabc:v3=abc\\\\\\\\s:v4=it\\\\\\\\\\\\\\'s:v5=\\'he said \"hi\"\\':v6=a\\\\\\\\\\\\\\\\b:v7=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b:v8=a,b:v9=a|b:v10=a=b:v11=a{b}c[d]e<f>g:v12=a$b:v13=a$$b:v14=${foo}:v15=a^^b:v16=a\\nb:v17=a\\tb:v18=café☎>"
+vars/Enterprise/sep-:/api-bang/parse	(Enterprise, None, [("v0", "abc123"), ("v1", "a b c"), ("v10", "a=b"), ("v11", "a{b}c[d]e<f>g"), ("v12", "a$b"), ("v13", "a$$b"), ("v14", "${foo}"), ("v15", "a^^b"), ("v16", "a\nb"), ("v17", "a\tb"), ("v18", "café☎"), ("v2", " abc"), ("v3", "abc "), ("v4", "it's"), ("v5", "he said \"hi\""), ("v6", "a\\b"), ("v7", "a\\\\b"), ("v8", "a,b"), ("v9", "a|b")])
+vars/Default/sep-comma/api/render	"{v0=abc123,v1='a b c',v2=\\\\\\\\sabc,v3=abc\\\\\\\\s,v4=it\\\\\\\\\\\\\\'s,v5='he said \"hi\"',v6=a\\\\\\\\\\\\\\\\b,v7=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b,v8=a\\,b,v9=a|b,v10=a=b,v11=a{b}c[d]e<f>g,v12=a$b,v13=a$$b,v14=${foo},v15=a^^b,v16=a\nb,v17=a\tb,v18=café☎}"
+vars/Default/sep-comma/dialplan/render	"{v0=abc123,v1='a b c',v2=\\\\\\\\sabc,v3=abc\\\\\\\\s,v4=it\\\\\\\\\\\\'s,v5='he said \"hi\"',v6=a\\\\\\\\\\\\\\\\b,v7=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b,v8=a\\,b,v9=a|b,v10=a=b,v11=a{b}c[d]e<f>g,v12=a$b,v13=\\'a\\$\\$b,v14=${foo},v15=a^^b,v16=a\nb,v17=a\tb,v18=café☎}"
+vars/Default/sep-comma/api-tilde/render	"{v0=abc123,v1=\\'a b c\\',v2=\\\\\\\\sabc,v3=abc\\\\\\\\s,v4=it\\\\\\\\\\\\\\'s,v5=\\'he said \"hi\"\\',v6=a\\\\\\\\\\\\\\\\b,v7=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b,v8=a\\\\,b,v9=a|b,v10=a=b,v11=a{b}c[d]e<f>g,v12=a$b,v13=a$$b,v14=${foo},v15=a^^b,v16=a\\nb,v17=a\\tb,v18=café☎}"
+vars/Default/sep-comma/api-bang/render	"{v0=abc123,v1=\\'a b c\\',v2=\\\\\\\\sabc,v3=abc\\\\\\\\s,v4=it\\\\\\\\\\\\\\'s,v5=\\'he said \"hi\"\\',v6=a\\\\\\\\\\\\\\\\b,v7=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b,v8=a\\\\,b,v9=a|b,v10=a=b,v11=a{b}c[d]e<f>g,v12=a$b,v13=a$$b,v14=${foo},v15=a^^b,v16=a\\nb,v17=a\\tb,v18=café☎}"
+vars/Default/sep-:/api/render	"{^^:v0=abc123:v1='a b c':v2=\\\\\\\\sabc:v3=abc\\\\\\\\s:v4=it\\\\\\\\\\\\\\'s:v5='he said \"hi\"':v6=a\\\\\\\\\\\\\\\\b:v7=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b:v8=a,b:v9=a|b:v10=a=b:v11=a{b}c[d]e<f>g:v12=a$b:v13=a$$b:v14=${foo}:v15=a^^b:v16=a\nb:v17=a\tb:v18=café☎}"
+vars/Default/sep-:/api/parse	(Default, None, [("v0", "abc123"), ("v1", "a b c"), ("v10", "a=b"), ("v11", "a{b}c[d]e<f>g"), ("v12", "a$b"), ("v13", "a$$b"), ("v14", "${foo}"), ("v15", "a^^b"), ("v16", "a\nb"), ("v17", "a\tb"), ("v18", "café☎"), ("v2", " abc"), ("v3", "abc "), ("v4", "it's"), ("v5", "he said \"hi\""), ("v6", "a\\b"), ("v7", "a\\\\b"), ("v8", "a,b"), ("v9", "a|b")])
+vars/Default/sep-:/dialplan/render	"{^^:v0=abc123:v1='a b c':v2=\\\\\\\\sabc:v3=abc\\\\\\\\s:v4=it\\\\\\\\\\\\'s:v5='he said \"hi\"':v6=a\\\\\\\\\\\\\\\\b:v7=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b:v8=a,b:v9=a|b:v10=a=b:v11=a{b}c[d]e<f>g:v12=a$b:v13=\\'a\\$\\$b:v14=${foo}:v15=a^^b:v16=a\nb:v17=a\tb:v18=café☎}"
+vars/Default/sep-:/dialplan/parse	(Default, None, [("v0", "abc123"), ("v1", "a b c"), ("v10", "a=b"), ("v11", "a{b}c[d]e<f>g"), ("v12", "a$b"), ("v13", "a$$b"), ("v14", "${foo}"), ("v15", "a^^b"), ("v16", "a\nb"), ("v17", "a\tb"), ("v18", "café☎"), ("v2", " abc"), ("v3", "abc "), ("v4", "it's"), ("v5", "he said \"hi\""), ("v6", "a\\b"), ("v7", "a\\\\b"), ("v8", "a,b"), ("v9", "a|b")])
+vars/Default/sep-:/api-tilde/render	"{^^:v0=abc123:v1=\\'a b c\\':v2=\\\\\\\\sabc:v3=abc\\\\\\\\s:v4=it\\\\\\\\\\\\\\'s:v5=\\'he said \"hi\"\\':v6=a\\\\\\\\\\\\\\\\b:v7=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b:v8=a,b:v9=a|b:v10=a=b:v11=a{b}c[d]e<f>g:v12=a$b:v13=a$$b:v14=${foo}:v15=a^^b:v16=a\\nb:v17=a\\tb:v18=café☎}"
+vars/Default/sep-:/api-tilde/parse	(Default, None, [("v0", "abc123"), ("v1", "a b c"), ("v10", "a=b"), ("v11", "a{b}c[d]e<f>g"), ("v12", "a$b"), ("v13", "a$$b"), ("v14", "${foo}"), ("v15", "a^^b"), ("v16", "a\nb"), ("v17", "a\tb"), ("v18", "café☎"), ("v2", " abc"), ("v3", "abc "), ("v4", "it's"), ("v5", "he said \"hi\""), ("v6", "a\\b"), ("v7", "a\\\\b"), ("v8", "a,b"), ("v9", "a|b")])
+vars/Default/sep-:/api-bang/render	"{^^:v0=abc123:v1=\\'a b c\\':v2=\\\\\\\\sabc:v3=abc\\\\\\\\s:v4=it\\\\\\\\\\\\\\'s:v5=\\'he said \"hi\"\\':v6=a\\\\\\\\\\\\\\\\b:v7=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b:v8=a,b:v9=a|b:v10=a=b:v11=a{b}c[d]e<f>g:v12=a$b:v13=a$$b:v14=${foo}:v15=a^^b:v16=a\\nb:v17=a\\tb:v18=café☎}"
+vars/Default/sep-:/api-bang/parse	(Default, None, [("v0", "abc123"), ("v1", "a b c"), ("v10", "a=b"), ("v11", "a{b}c[d]e<f>g"), ("v12", "a$b"), ("v13", "a$$b"), ("v14", "${foo}"), ("v15", "a^^b"), ("v16", "a\nb"), ("v17", "a\tb"), ("v18", "café☎"), ("v2", " abc"), ("v3", "abc "), ("v4", "it's"), ("v5", "he said \"hi\""), ("v6", "a\\b"), ("v7", "a\\\\b"), ("v8", "a,b"), ("v9", "a|b")])
+vars/Channel/sep-comma/api/render	"[v0=abc123,v1='a b c',v2=\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\sabc,v3=abc\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\s,v4=it\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'s,v5='he said \"hi\"',v6=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b,v7=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b,v8=a\\,b,v9=a\\|b,v10=a=b,v11=a{b}c[d]e<f>g,v12=a$b,v13=a$$b,v14=${foo},v15=a^^b,v16=a\nb,v17=a\tb,v18=café☎]"
+vars/Channel/sep-comma/api/parse	"Err"
+vars/Channel/sep-comma/dialplan/render	"[v0=abc123,v1='a b c',v2=\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\sabc,v3=abc\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\s,v4=it\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'s,v5='he said \"hi\"',v6=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b,v7=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b,v8=a\\,b,v9=a\\|b,v10=a=b,v11=a{b}c[d]e<f>g,v12=a$b,v13=\\'a\\$\\$b,v14=${foo},v15=a^^b,v16=a\nb,v17=a\tb,v18=café☎]"
+vars/Channel/sep-comma/dialplan/parse	"Err"
+vars/Channel/sep-comma/api-tilde/render	"[v0=abc123,v1=\\'a b c\\',v2=\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\sabc,v3=abc\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\s,v4=it\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'s,v5=\\'he said \"hi\"\\',v6=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b,v7=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b,v8=a\\\\,b,v9=a\\\\|b,v10=a=b,v11=a{b}c[d]e<f>g,v12=a$b,v13=a$$b,v14=${foo},v15=a^^b,v16=a\\nb,v17=a\\tb,v18=café☎]"
+vars/Channel/sep-comma/api-tilde/parse	"Err"
+vars/Channel/sep-comma/api-bang/render	"[v0=abc123,v1=\\'a b c\\',v2=\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\sabc,v3=abc\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\s,v4=it\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'s,v5=\\'he said \"hi\"\\',v6=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b,v7=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b,v8=a\\\\,b,v9=a\\\\|b,v10=a=b,v11=a{b}c[d]e<f>g,v12=a$b,v13=a$$b,v14=${foo},v15=a^^b,v16=a\\nb,v17=a\\tb,v18=café☎]"
+vars/Channel/sep-comma/api-bang/parse	"Err"
+vars/Channel/sep-:/api/render	"[^^:v0=abc123:v1='a b c':v2=\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\sabc:v3=abc\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\s:v4=it\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'s:v5='he said \"hi\"':v6=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b:v7=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b:v8=a,b:v9=a\\|b:v10=a=b:v11=a{b}c[d]e<f>g:v12=a$b:v13=a$$b:v14=${foo}:v15=a^^b:v16=a\nb:v17=a\tb:v18=café☎]"
+vars/Channel/sep-:/api/parse	"Err"
+vars/Channel/sep-:/dialplan/render	"[^^:v0=abc123:v1='a b c':v2=\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\sabc:v3=abc\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\s:v4=it\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'s:v5='he said \"hi\"':v6=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b:v7=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b:v8=a,b:v9=a\\|b:v10=a=b:v11=a{b}c[d]e<f>g:v12=a$b:v13=\\'a\\$\\$b:v14=${foo}:v15=a^^b:v16=a\nb:v17=a\tb:v18=café☎]"
+vars/Channel/sep-:/dialplan/parse	"Err"
+vars/Channel/sep-:/api-tilde/render	"[^^:v0=abc123:v1=\\'a b c\\':v2=\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\sabc:v3=abc\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\s:v4=it\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'s:v5=\\'he said \"hi\"\\':v6=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b:v7=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b:v8=a,b:v9=a\\\\|b:v10=a=b:v11=a{b}c[d]e<f>g:v12=a$b:v13=a$$b:v14=${foo}:v15=a^^b:v16=a\\nb:v17=a\\tb:v18=café☎]"
+vars/Channel/sep-:/api-tilde/parse	"Err"
+vars/Channel/sep-:/api-bang/render	"[^^:v0=abc123:v1=\\'a b c\\':v2=\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\sabc:v3=abc\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\s:v4=it\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'s:v5=\\'he said \"hi\"\\':v6=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b:v7=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b:v8=a,b:v9=a\\\\|b:v10=a=b:v11=a{b}c[d]e<f>g:v12=a$b:v13=a$$b:v14=${foo}:v15=a^^b:v16=a\\nb:v17=a\\tb:v18=café☎]"
+vars/Channel/sep-:/api-bang/parse	"Err"
+vars/Enterprise/single-plain/api/render	"<k=abc123>"
+vars/Enterprise/single-plain/dialplan/render	"<k=abc123>"
+vars/Enterprise/single-plain/api-tilde/render	"<k=abc123>"
+vars/Enterprise/single-plain/api-bang/render	"<k=abc123>"
+vars/Enterprise/single-space-in/api/render	"<k='a b c'>"
+vars/Enterprise/single-space-in/dialplan/render	"<k='a b c'>"
+vars/Enterprise/single-space-in/api-tilde/render	"<k=\\'a b c\\'>"
+vars/Enterprise/single-space-in/api-bang/render	"<k=\\'a b c\\'>"
+vars/Enterprise/single-space-lead/api/render	"<k=\\\\\\\\sabc>"
+vars/Enterprise/single-space-lead/dialplan/render	"<k=\\\\\\\\sabc>"
+vars/Enterprise/single-space-lead/api-tilde/render	"<k=\\\\\\\\sabc>"
+vars/Enterprise/single-space-lead/api-bang/render	"<k=\\\\\\\\sabc>"
+vars/Enterprise/single-space-trail/api/render	"<k=abc\\\\\\\\s>"
+vars/Enterprise/single-space-trail/dialplan/render	"<k=abc\\\\\\\\s>"
+vars/Enterprise/single-space-trail/api-tilde/render	"<k=abc\\\\\\\\s>"
+vars/Enterprise/single-space-trail/api-bang/render	"<k=abc\\\\\\\\s>"
+vars/Enterprise/single-quote/api/render	"<k=it\\\\\\\\\\\\\\'s>"
+vars/Enterprise/single-quote/dialplan/render	"<k=it\\\\\\\\\\\\'s>"
+vars/Enterprise/single-quote/api-tilde/render	"<k=it\\\\\\\\\\\\\\'s>"
+vars/Enterprise/single-quote/api-bang/render	"<k=it\\\\\\\\\\\\\\'s>"
+vars/Enterprise/single-dquote/api/render	"<k='he said \"hi\"'>"
+vars/Enterprise/single-dquote/dialplan/render	"<k='he said \"hi\"'>"
+vars/Enterprise/single-dquote/api-tilde/render	"<k=\\'he said \"hi\"\\'>"
+vars/Enterprise/single-dquote/api-bang/render	"<k=\\'he said \"hi\"\\'>"
+vars/Enterprise/single-backslash/api/render	"<k=a\\\\\\\\\\\\\\\\b>"
+vars/Enterprise/single-backslash/dialplan/render	"<k=a\\\\\\\\\\\\\\\\b>"
+vars/Enterprise/single-backslash/api-tilde/render	"<k=a\\\\\\\\\\\\\\\\b>"
+vars/Enterprise/single-backslash/api-bang/render	"<k=a\\\\\\\\\\\\\\\\b>"
+vars/Enterprise/single-backslash2/api/render	"<k=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b>"
+vars/Enterprise/single-backslash2/dialplan/render	"<k=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b>"
+vars/Enterprise/single-backslash2/api-tilde/render	"<k=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b>"
+vars/Enterprise/single-backslash2/api-bang/render	"<k=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b>"
+vars/Enterprise/single-comma/api/render	"<k=a\\,b>"
+vars/Enterprise/single-comma/dialplan/render	"<k=a\\,b>"
+vars/Enterprise/single-comma/api-tilde/render	"<k=a\\\\,b>"
+vars/Enterprise/single-comma/api-bang/render	"<k=a\\\\,b>"
+vars/Enterprise/single-pipe/api/render	"<k=a|b>"
+vars/Enterprise/single-pipe/dialplan/render	"<k=a|b>"
+vars/Enterprise/single-pipe/api-tilde/render	"<k=a|b>"
+vars/Enterprise/single-pipe/api-bang/render	"<k=a|b>"
+vars/Enterprise/single-equals/api/render	"<k=a=b>"
+vars/Enterprise/single-equals/dialplan/render	"<k=a=b>"
+vars/Enterprise/single-equals/api-tilde/render	"<k=a=b>"
+vars/Enterprise/single-equals/api-bang/render	"<k=a=b>"
+vars/Enterprise/single-brackets/api/render	"<k=a{b}c[d]e<f>g>"
+vars/Enterprise/single-brackets/dialplan/render	"<k=a{b}c[d]e<f>g>"
+vars/Enterprise/single-brackets/api-tilde/render	"<k=a{b}c[d]e<f>g>"
+vars/Enterprise/single-brackets/api-bang/render	"<k=a{b}c[d]e<f>g>"
+vars/Enterprise/single-dollar/api/render	"<k=a$b>"
+vars/Enterprise/single-dollar/dialplan/render	"<k=a$b>"
+vars/Enterprise/single-dollar/api-tilde/render	"<k=a$b>"
+vars/Enterprise/single-dollar/api-bang/render	"<k=a$b>"
+vars/Enterprise/single-dolldoll/api/render	"<k=a$$b>"
+vars/Enterprise/single-dolldoll/dialplan/render	"<k=\\'a\\$\\$b>"
+vars/Enterprise/single-dolldoll/api-tilde/render	"<k=a$$b>"
+vars/Enterprise/single-dolldoll/api-bang/render	"<k=a$$b>"
+vars/Enterprise/single-varref/api/render	"<k=${foo}>"
+vars/Enterprise/single-varref/dialplan/render	"<k=${foo}>"
+vars/Enterprise/single-varref/api-tilde/render	"<k=${foo}>"
+vars/Enterprise/single-varref/api-bang/render	"<k=${foo}>"
+vars/Enterprise/single-caret/api/render	"<k=a^^b>"
+vars/Enterprise/single-caret/dialplan/render	"<k=a^^b>"
+vars/Enterprise/single-caret/api-tilde/render	"<k=a^^b>"
+vars/Enterprise/single-caret/api-bang/render	"<k=a^^b>"
+vars/Enterprise/single-newline/api/render	"<k=a\nb>"
+vars/Enterprise/single-newline/dialplan/render	"<k=a\nb>"
+vars/Enterprise/single-newline/api-tilde/render	"<k=a\\nb>"
+vars/Enterprise/single-newline/api-bang/render	"<k=a\\nb>"
+vars/Enterprise/single-tab/api/render	"<k=a\tb>"
+vars/Enterprise/single-tab/dialplan/render	"<k=a\tb>"
+vars/Enterprise/single-tab/api-tilde/render	"<k=a\\tb>"
+vars/Enterprise/single-tab/api-bang/render	"<k=a\\tb>"
+vars/Enterprise/single-nonascii/api/render	"<k=café☎>"
+vars/Enterprise/single-nonascii/dialplan/render	"<k=café☎>"
+vars/Enterprise/single-nonascii/api-tilde/render	"<k=café☎>"
+vars/Enterprise/single-nonascii/api-bang/render	"<k=café☎>"
+vars/Enterprise/single-empty/api/render	"<k=>"
+vars/Enterprise/single-empty/api/parse	"Err"
+vars/Enterprise/single-empty/dialplan/render	"<k=>"
+vars/Enterprise/single-empty/dialplan/parse	"Err"
+vars/Enterprise/single-empty/api-tilde/render	"<k=>"
+vars/Enterprise/single-empty/api-tilde/parse	"Err"
+vars/Enterprise/single-empty/api-bang/render	"<k=>"
+vars/Enterprise/single-empty/api-bang/parse	"Err"
+vars/Default/single-plain/api/render	"{k=abc123}"
+vars/Default/single-plain/dialplan/render	"{k=abc123}"
+vars/Default/single-plain/api-tilde/render	"{k=abc123}"
+vars/Default/single-plain/api-bang/render	"{k=abc123}"
+vars/Default/single-space-in/api/render	"{k='a b c'}"
+vars/Default/single-space-in/dialplan/render	"{k='a b c'}"
+vars/Default/single-space-in/api-tilde/render	"{k=\\'a b c\\'}"
+vars/Default/single-space-in/api-bang/render	"{k=\\'a b c\\'}"
+vars/Default/single-space-lead/api/render	"{k=\\\\\\\\sabc}"
+vars/Default/single-space-lead/dialplan/render	"{k=\\\\\\\\sabc}"
+vars/Default/single-space-lead/api-tilde/render	"{k=\\\\\\\\sabc}"
+vars/Default/single-space-lead/api-bang/render	"{k=\\\\\\\\sabc}"
+vars/Default/single-space-trail/api/render	"{k=abc\\\\\\\\s}"
+vars/Default/single-space-trail/dialplan/render	"{k=abc\\\\\\\\s}"
+vars/Default/single-space-trail/api-tilde/render	"{k=abc\\\\\\\\s}"
+vars/Default/single-space-trail/api-bang/render	"{k=abc\\\\\\\\s}"
+vars/Default/single-quote/api/render	"{k=it\\\\\\\\\\\\\\'s}"
+vars/Default/single-quote/dialplan/render	"{k=it\\\\\\\\\\\\'s}"
+vars/Default/single-quote/api-tilde/render	"{k=it\\\\\\\\\\\\\\'s}"
+vars/Default/single-quote/api-bang/render	"{k=it\\\\\\\\\\\\\\'s}"
+vars/Default/single-dquote/api/render	"{k='he said \"hi\"'}"
+vars/Default/single-dquote/dialplan/render	"{k='he said \"hi\"'}"
+vars/Default/single-dquote/api-tilde/render	"{k=\\'he said \"hi\"\\'}"
+vars/Default/single-dquote/api-bang/render	"{k=\\'he said \"hi\"\\'}"
+vars/Default/single-backslash/api/render	"{k=a\\\\\\\\\\\\\\\\b}"
+vars/Default/single-backslash/dialplan/render	"{k=a\\\\\\\\\\\\\\\\b}"
+vars/Default/single-backslash/api-tilde/render	"{k=a\\\\\\\\\\\\\\\\b}"
+vars/Default/single-backslash/api-bang/render	"{k=a\\\\\\\\\\\\\\\\b}"
+vars/Default/single-backslash2/api/render	"{k=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b}"
+vars/Default/single-backslash2/dialplan/render	"{k=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b}"
+vars/Default/single-backslash2/api-tilde/render	"{k=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b}"
+vars/Default/single-backslash2/api-bang/render	"{k=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b}"
+vars/Default/single-comma/api/render	"{k=a\\,b}"
+vars/Default/single-comma/dialplan/render	"{k=a\\,b}"
+vars/Default/single-comma/api-tilde/render	"{k=a\\\\,b}"
+vars/Default/single-comma/api-bang/render	"{k=a\\\\,b}"
+vars/Default/single-pipe/api/render	"{k=a|b}"
+vars/Default/single-pipe/dialplan/render	"{k=a|b}"
+vars/Default/single-pipe/api-tilde/render	"{k=a|b}"
+vars/Default/single-pipe/api-bang/render	"{k=a|b}"
+vars/Default/single-equals/api/render	"{k=a=b}"
+vars/Default/single-equals/dialplan/render	"{k=a=b}"
+vars/Default/single-equals/api-tilde/render	"{k=a=b}"
+vars/Default/single-equals/api-bang/render	"{k=a=b}"
+vars/Default/single-brackets/api/render	"{k=a{b}c[d]e<f>g}"
+vars/Default/single-brackets/dialplan/render	"{k=a{b}c[d]e<f>g}"
+vars/Default/single-brackets/api-tilde/render	"{k=a{b}c[d]e<f>g}"
+vars/Default/single-brackets/api-bang/render	"{k=a{b}c[d]e<f>g}"
+vars/Default/single-dollar/api/render	"{k=a$b}"
+vars/Default/single-dollar/dialplan/render	"{k=a$b}"
+vars/Default/single-dollar/api-tilde/render	"{k=a$b}"
+vars/Default/single-dollar/api-bang/render	"{k=a$b}"
+vars/Default/single-dolldoll/api/render	"{k=a$$b}"
+vars/Default/single-dolldoll/dialplan/render	"{k=\\'a\\$\\$b}"
+vars/Default/single-dolldoll/api-tilde/render	"{k=a$$b}"
+vars/Default/single-dolldoll/api-bang/render	"{k=a$$b}"
+vars/Default/single-varref/api/render	"{k=${foo}}"
+vars/Default/single-varref/dialplan/render	"{k=${foo}}"
+vars/Default/single-varref/api-tilde/render	"{k=${foo}}"
+vars/Default/single-varref/api-bang/render	"{k=${foo}}"
+vars/Default/single-caret/api/render	"{k=a^^b}"
+vars/Default/single-caret/dialplan/render	"{k=a^^b}"
+vars/Default/single-caret/api-tilde/render	"{k=a^^b}"
+vars/Default/single-caret/api-bang/render	"{k=a^^b}"
+vars/Default/single-newline/api/render	"{k=a\nb}"
+vars/Default/single-newline/dialplan/render	"{k=a\nb}"
+vars/Default/single-newline/api-tilde/render	"{k=a\\nb}"
+vars/Default/single-newline/api-bang/render	"{k=a\\nb}"
+vars/Default/single-tab/api/render	"{k=a\tb}"
+vars/Default/single-tab/dialplan/render	"{k=a\tb}"
+vars/Default/single-tab/api-tilde/render	"{k=a\\tb}"
+vars/Default/single-tab/api-bang/render	"{k=a\\tb}"
+vars/Default/single-nonascii/api/render	"{k=café☎}"
+vars/Default/single-nonascii/dialplan/render	"{k=café☎}"
+vars/Default/single-nonascii/api-tilde/render	"{k=café☎}"
+vars/Default/single-nonascii/api-bang/render	"{k=café☎}"
+vars/Default/single-empty/api/render	"{k=}"
+vars/Default/single-empty/api/parse	"Err"
+vars/Default/single-empty/dialplan/render	"{k=}"
+vars/Default/single-empty/dialplan/parse	"Err"
+vars/Default/single-empty/api-tilde/render	"{k=}"
+vars/Default/single-empty/api-tilde/parse	"Err"
+vars/Default/single-empty/api-bang/render	"{k=}"
+vars/Default/single-empty/api-bang/parse	"Err"
+vars/Channel/single-plain/api/render	"[k=abc123]"
+vars/Channel/single-plain/dialplan/render	"[k=abc123]"
+vars/Channel/single-plain/api-tilde/render	"[k=abc123]"
+vars/Channel/single-plain/api-bang/render	"[k=abc123]"
+vars/Channel/single-space-in/api/render	"[k='a b c']"
+vars/Channel/single-space-in/dialplan/render	"[k='a b c']"
+vars/Channel/single-space-in/api-tilde/render	"[k=\\'a b c\\']"
+vars/Channel/single-space-in/api-bang/render	"[k=\\'a b c\\']"
+vars/Channel/single-space-lead/api/render	"[k=\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\sabc]"
+vars/Channel/single-space-lead/dialplan/render	"[k=\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\sabc]"
+vars/Channel/single-space-lead/api-tilde/render	"[k=\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\sabc]"
+vars/Channel/single-space-lead/api-bang/render	"[k=\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\sabc]"
+vars/Channel/single-space-trail/api/render	"[k=abc\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\s]"
+vars/Channel/single-space-trail/dialplan/render	"[k=abc\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\s]"
+vars/Channel/single-space-trail/api-tilde/render	"[k=abc\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\s]"
+vars/Channel/single-space-trail/api-bang/render	"[k=abc\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\s]"
+vars/Channel/single-quote/api/render	"[k=it\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'s]"
+vars/Channel/single-quote/api/parse	"Err"
+vars/Channel/single-quote/dialplan/render	"[k=it\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'s]"
+vars/Channel/single-quote/dialplan/parse	"Err"
+vars/Channel/single-quote/api-tilde/render	"[k=it\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'s]"
+vars/Channel/single-quote/api-tilde/parse	"Err"
+vars/Channel/single-quote/api-bang/render	"[k=it\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'s]"
+vars/Channel/single-quote/api-bang/parse	"Err"
+vars/Channel/single-dquote/api/render	"[k='he said \"hi\"']"
+vars/Channel/single-dquote/dialplan/render	"[k='he said \"hi\"']"
+vars/Channel/single-dquote/api-tilde/render	"[k=\\'he said \"hi\"\\']"
+vars/Channel/single-dquote/api-bang/render	"[k=\\'he said \"hi\"\\']"
+vars/Channel/single-backslash/api/render	"[k=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b]"
+vars/Channel/single-backslash/dialplan/render	"[k=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b]"
+vars/Channel/single-backslash/api-tilde/render	"[k=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b]"
+vars/Channel/single-backslash/api-bang/render	"[k=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b]"
+vars/Channel/single-backslash2/api/render	"[k=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b]"
+vars/Channel/single-backslash2/dialplan/render	"[k=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b]"
+vars/Channel/single-backslash2/api-tilde/render	"[k=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b]"
+vars/Channel/single-backslash2/api-bang/render	"[k=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b]"
+vars/Channel/single-comma/api/render	"[k=a\\,b]"
+vars/Channel/single-comma/dialplan/render	"[k=a\\,b]"
+vars/Channel/single-comma/api-tilde/render	"[k=a\\\\,b]"
+vars/Channel/single-comma/api-bang/render	"[k=a\\\\,b]"
+vars/Channel/single-pipe/api/render	"[k=a\\|b]"
+vars/Channel/single-pipe/dialplan/render	"[k=a\\|b]"
+vars/Channel/single-pipe/api-tilde/render	"[k=a\\\\|b]"
+vars/Channel/single-pipe/api-bang/render	"[k=a\\\\|b]"
+vars/Channel/single-equals/api/render	"[k=a=b]"
+vars/Channel/single-equals/dialplan/render	"[k=a=b]"
+vars/Channel/single-equals/api-tilde/render	"[k=a=b]"
+vars/Channel/single-equals/api-bang/render	"[k=a=b]"
+vars/Channel/single-brackets/api/render	"[k=a{b}c[d]e<f>g]"
+vars/Channel/single-brackets/dialplan/render	"[k=a{b}c[d]e<f>g]"
+vars/Channel/single-brackets/api-tilde/render	"[k=a{b}c[d]e<f>g]"
+vars/Channel/single-brackets/api-bang/render	"[k=a{b}c[d]e<f>g]"
+vars/Channel/single-dollar/api/render	"[k=a$b]"
+vars/Channel/single-dollar/dialplan/render	"[k=a$b]"
+vars/Channel/single-dollar/api-tilde/render	"[k=a$b]"
+vars/Channel/single-dollar/api-bang/render	"[k=a$b]"
+vars/Channel/single-dolldoll/api/render	"[k=a$$b]"
+vars/Channel/single-dolldoll/dialplan/render	"[k=\\'a\\$\\$b]"
+vars/Channel/single-dolldoll/api-tilde/render	"[k=a$$b]"
+vars/Channel/single-dolldoll/api-bang/render	"[k=a$$b]"
+vars/Channel/single-varref/api/render	"[k=${foo}]"
+vars/Channel/single-varref/dialplan/render	"[k=${foo}]"
+vars/Channel/single-varref/api-tilde/render	"[k=${foo}]"
+vars/Channel/single-varref/api-bang/render	"[k=${foo}]"
+vars/Channel/single-caret/api/render	"[k=a^^b]"
+vars/Channel/single-caret/dialplan/render	"[k=a^^b]"
+vars/Channel/single-caret/api-tilde/render	"[k=a^^b]"
+vars/Channel/single-caret/api-bang/render	"[k=a^^b]"
+vars/Channel/single-newline/api/render	"[k=a\nb]"
+vars/Channel/single-newline/dialplan/render	"[k=a\nb]"
+vars/Channel/single-newline/api-tilde/render	"[k=a\\nb]"
+vars/Channel/single-newline/api-bang/render	"[k=a\\nb]"
+vars/Channel/single-tab/api/render	"[k=a\tb]"
+vars/Channel/single-tab/dialplan/render	"[k=a\tb]"
+vars/Channel/single-tab/api-tilde/render	"[k=a\\tb]"
+vars/Channel/single-tab/api-bang/render	"[k=a\\tb]"
+vars/Channel/single-nonascii/api/render	"[k=café☎]"
+vars/Channel/single-nonascii/dialplan/render	"[k=café☎]"
+vars/Channel/single-nonascii/api-tilde/render	"[k=café☎]"
+vars/Channel/single-nonascii/api-bang/render	"[k=café☎]"
+vars/Channel/single-empty/api/render	"[k=]"
+vars/Channel/single-empty/api/parse	"Err"
+vars/Channel/single-empty/dialplan/render	"[k=]"
+vars/Channel/single-empty/dialplan/parse	"Err"
+vars/Channel/single-empty/api-tilde/render	"[k=]"
+vars/Channel/single-empty/api-tilde/parse	"Err"
+vars/Channel/single-empty/api-bang/render	"[k=]"
+vars/Channel/single-empty/api-bang/parse	"Err"
+vars/Enterprise/empty/api/render	"<>"
+vars/Enterprise/empty/dialplan/render	"<>"
+vars/Enterprise/empty/api-tilde/render	"<>"
+vars/Enterprise/empty/api-bang/render	"<>"
+vars/Default/empty/api/render	"{}"
+vars/Default/empty/dialplan/render	"{}"
+vars/Default/empty/api-tilde/render	"{}"
+vars/Default/empty/api-bang/render	"{}"
+vars/Channel/empty/api/render	"[]"
+vars/Channel/empty/dialplan/render	"[]"
+vars/Channel/empty/api-tilde/render	"[]"
+vars/Channel/empty/api-bang/render	"[]"
+ep/sofia/plain/api/render	"sofia/pbx/abc123"
+ep/sofia/plain/dialplan/render	"sofia/pbx/abc123"
+ep/sofia/plain/api-tilde/render	"sofia/pbx/abc123"
+ep/sofia-gateway/plain/api/render	"sofia/gateway/internal::gw1/abc123"
+ep/sofia-gateway/plain/dialplan/render	"sofia/gateway/internal::gw1/abc123"
+ep/sofia-gateway/plain/api-tilde/render	"sofia/gateway/internal::gw1/abc123"
+ep/loopback/plain/api/render	"loopback/abc123/ctx"
+ep/loopback/plain/dialplan/render	"loopback/abc123/ctx"
+ep/loopback/plain/api-tilde/render	"loopback/abc123/ctx"
+ep/user/plain/api/render	"user/abc123@example.com"
+ep/user/plain/dialplan/render	"user/abc123@example.com"
+ep/user/plain/api-tilde/render	"user/abc123@example.com"
+ep/sofia-contact/plain/api/render	"${sofia_contact(internal/abc123@example.com)}"
+ep/sofia-contact/plain/dialplan/render	"${sofia_contact(internal/abc123@example.com)}"
+ep/sofia-contact/plain/api-tilde/render	"${sofia_contact(internal/abc123@example.com)}"
+ep/group-call/plain/api/render	"${group_call(abc123@example.com+E)}"
+ep/group-call/plain/dialplan/render	"${group_call(abc123@example.com+E)}"
+ep/group-call/plain/api-tilde/render	"${group_call(abc123@example.com+E)}"
+ep/portaudio/plain/api/render	"portaudio/abc123"
+ep/portaudio/plain/dialplan/render	"portaudio/abc123"
+ep/portaudio/plain/api-tilde/render	"portaudio/abc123"
+ep/pulseaudio/plain/api/render	"pulseaudio/abc123"
+ep/pulseaudio/plain/dialplan/render	"pulseaudio/abc123"
+ep/pulseaudio/plain/api-tilde/render	"pulseaudio/abc123"
+ep/alsa/plain/api/render	"alsa/abc123"
+ep/alsa/plain/dialplan/render	"alsa/abc123"
+ep/alsa/plain/api-tilde/render	"alsa/abc123"
+ep/sofia/comma/api/render	"sofia/pbx/a\\,b"
+ep/sofia/comma/dialplan/render	"sofia/pbx/a\\,b"
+ep/sofia/comma/api-tilde/render	"sofia/pbx/a\\\\,b"
+ep/sofia-gateway/comma/api/render	"sofia/gateway/internal::gw1/a\\,b"
+ep/sofia-gateway/comma/dialplan/render	"sofia/gateway/internal::gw1/a\\,b"
+ep/sofia-gateway/comma/api-tilde/render	"sofia/gateway/internal::gw1/a\\\\,b"
+ep/loopback/comma/api/render	"loopback/a\\,b/ctx"
+ep/loopback/comma/dialplan/render	"loopback/a\\,b/ctx"
+ep/loopback/comma/api-tilde/render	"loopback/a\\\\,b/ctx"
+ep/user/comma/api/render	"user/a\\,b@example.com"
+ep/user/comma/dialplan/render	"user/a\\,b@example.com"
+ep/user/comma/api-tilde/render	"user/a\\\\,b@example.com"
+ep/sofia-contact/comma/api/render	"${sofia_contact(internal/a,b@example.com)}"
+ep/sofia-contact/comma/api/parse	"Err"
+ep/sofia-contact/comma/dialplan/render	"${sofia_contact(internal/a,b@example.com)}"
+ep/sofia-contact/comma/dialplan/parse	"Err"
+ep/sofia-contact/comma/api-tilde/render	"${sofia_contact(internal/a,b@example.com)}"
+ep/sofia-contact/comma/api-tilde/parse	"Err"
+ep/group-call/comma/api/render	"${group_call(a,b@example.com+E)}"
+ep/group-call/comma/api/parse	"Err"
+ep/group-call/comma/dialplan/render	"${group_call(a,b@example.com+E)}"
+ep/group-call/comma/dialplan/parse	"Err"
+ep/group-call/comma/api-tilde/render	"${group_call(a,b@example.com+E)}"
+ep/group-call/comma/api-tilde/parse	"Err"
+ep/portaudio/comma/api/render	"portaudio/a\\,b"
+ep/portaudio/comma/dialplan/render	"portaudio/a\\,b"
+ep/portaudio/comma/api-tilde/render	"portaudio/a\\\\,b"
+ep/pulseaudio/comma/api/render	"pulseaudio/a\\,b"
+ep/pulseaudio/comma/dialplan/render	"pulseaudio/a\\,b"
+ep/pulseaudio/comma/api-tilde/render	"pulseaudio/a\\\\,b"
+ep/alsa/comma/api/render	"alsa/a\\,b"
+ep/alsa/comma/dialplan/render	"alsa/a\\,b"
+ep/alsa/comma/api-tilde/render	"alsa/a\\\\,b"
+ep/sofia/pipe/api/render	"sofia/pbx/a\\|b"
+ep/sofia/pipe/dialplan/render	"sofia/pbx/a\\|b"
+ep/sofia/pipe/api-tilde/render	"sofia/pbx/a\\\\|b"
+ep/sofia-gateway/pipe/api/render	"sofia/gateway/internal::gw1/a\\|b"
+ep/sofia-gateway/pipe/dialplan/render	"sofia/gateway/internal::gw1/a\\|b"
+ep/sofia-gateway/pipe/api-tilde/render	"sofia/gateway/internal::gw1/a\\\\|b"
+ep/loopback/pipe/api/render	"loopback/a\\|b/ctx"
+ep/loopback/pipe/dialplan/render	"loopback/a\\|b/ctx"
+ep/loopback/pipe/api-tilde/render	"loopback/a\\\\|b/ctx"
+ep/user/pipe/api/render	"user/a\\|b@example.com"
+ep/user/pipe/dialplan/render	"user/a\\|b@example.com"
+ep/user/pipe/api-tilde/render	"user/a\\\\|b@example.com"
+ep/sofia-contact/pipe/api/render	"${sofia_contact(internal/a|b@example.com)}"
+ep/sofia-contact/pipe/api/parse	"Err"
+ep/sofia-contact/pipe/dialplan/render	"${sofia_contact(internal/a|b@example.com)}"
+ep/sofia-contact/pipe/dialplan/parse	"Err"
+ep/sofia-contact/pipe/api-tilde/render	"${sofia_contact(internal/a|b@example.com)}"
+ep/sofia-contact/pipe/api-tilde/parse	"Err"
+ep/group-call/pipe/api/render	"${group_call(a|b@example.com+E)}"
+ep/group-call/pipe/api/parse	"Err"
+ep/group-call/pipe/dialplan/render	"${group_call(a|b@example.com+E)}"
+ep/group-call/pipe/dialplan/parse	"Err"
+ep/group-call/pipe/api-tilde/render	"${group_call(a|b@example.com+E)}"
+ep/group-call/pipe/api-tilde/parse	"Err"
+ep/portaudio/pipe/api/render	"portaudio/a\\|b"
+ep/portaudio/pipe/dialplan/render	"portaudio/a\\|b"
+ep/portaudio/pipe/api-tilde/render	"portaudio/a\\\\|b"
+ep/pulseaudio/pipe/api/render	"pulseaudio/a\\|b"
+ep/pulseaudio/pipe/dialplan/render	"pulseaudio/a\\|b"
+ep/pulseaudio/pipe/api-tilde/render	"pulseaudio/a\\\\|b"
+ep/alsa/pipe/api/render	"alsa/a\\|b"
+ep/alsa/pipe/dialplan/render	"alsa/a\\|b"
+ep/alsa/pipe/api-tilde/render	"alsa/a\\\\|b"
+ep/sofia/quote/api/render	"sofia/pbx/it\\\\\\\\\\\\\\'s"
+ep/sofia/quote/dialplan/render	"sofia/pbx/it\\\\\\\\\\\\'s"
+ep/sofia/quote/api-tilde/render	"sofia/pbx/it\\\\\\\\\\\\\\'s"
+ep/sofia-gateway/quote/api/render	"sofia/gateway/internal::gw1/it\\\\\\\\\\\\\\'s"
+ep/sofia-gateway/quote/dialplan/render	"sofia/gateway/internal::gw1/it\\\\\\\\\\\\'s"
+ep/sofia-gateway/quote/api-tilde/render	"sofia/gateway/internal::gw1/it\\\\\\\\\\\\\\'s"
+ep/loopback/quote/api/render	"loopback/it\\\\\\\\\\\\\\'s/ctx"
+ep/loopback/quote/dialplan/render	"loopback/it\\\\\\\\\\\\'s/ctx"
+ep/loopback/quote/api-tilde/render	"loopback/it\\\\\\\\\\\\\\'s/ctx"
+ep/user/quote/api/render	"user/it\\\\\\\\\\\\\\'s@example.com"
+ep/user/quote/dialplan/render	"user/it\\\\\\\\\\\\'s@example.com"
+ep/user/quote/api-tilde/render	"user/it\\\\\\\\\\\\\\'s@example.com"
+ep/sofia-contact/quote/api/render	"${sofia_contact(internal/it's@example.com)}"
+ep/sofia-contact/quote/api/parse	"Err"
+ep/sofia-contact/quote/dialplan/render	"${sofia_contact(internal/it's@example.com)}"
+ep/sofia-contact/quote/dialplan/parse	"Err"
+ep/sofia-contact/quote/api-tilde/render	"${sofia_contact(internal/it\\'s@example.com)}"
+ep/sofia-contact/quote/api-tilde/parse	"Err"
+ep/group-call/quote/api/render	"${group_call(it's@example.com+E)}"
+ep/group-call/quote/api/parse	"Err"
+ep/group-call/quote/dialplan/render	"${group_call(it's@example.com+E)}"
+ep/group-call/quote/dialplan/parse	"Err"
+ep/group-call/quote/api-tilde/render	"${group_call(it\\'s@example.com+E)}"
+ep/group-call/quote/api-tilde/parse	"Err"
+ep/portaudio/quote/api/render	"portaudio/it\\\\\\\\\\\\\\'s"
+ep/portaudio/quote/dialplan/render	"portaudio/it\\\\\\\\\\\\'s"
+ep/portaudio/quote/api-tilde/render	"portaudio/it\\\\\\\\\\\\\\'s"
+ep/pulseaudio/quote/api/render	"pulseaudio/it\\\\\\\\\\\\\\'s"
+ep/pulseaudio/quote/dialplan/render	"pulseaudio/it\\\\\\\\\\\\'s"
+ep/pulseaudio/quote/api-tilde/render	"pulseaudio/it\\\\\\\\\\\\\\'s"
+ep/alsa/quote/api/render	"alsa/it\\\\\\\\\\\\\\'s"
+ep/alsa/quote/dialplan/render	"alsa/it\\\\\\\\\\\\'s"
+ep/alsa/quote/api-tilde/render	"alsa/it\\\\\\\\\\\\\\'s"
+ep/sofia/backslash/api/render	"sofia/pbx/a\\\\\\\\\\\\\\\\b"
+ep/sofia/backslash/dialplan/render	"sofia/pbx/a\\\\\\\\\\\\\\\\b"
+ep/sofia/backslash/api-tilde/render	"sofia/pbx/a\\\\\\\\\\\\\\\\b"
+ep/sofia-gateway/backslash/api/render	"sofia/gateway/internal::gw1/a\\\\\\\\\\\\\\\\b"
+ep/sofia-gateway/backslash/dialplan/render	"sofia/gateway/internal::gw1/a\\\\\\\\\\\\\\\\b"
+ep/sofia-gateway/backslash/api-tilde/render	"sofia/gateway/internal::gw1/a\\\\\\\\\\\\\\\\b"
+ep/loopback/backslash/api/render	"loopback/a\\\\\\\\\\\\\\\\b/ctx"
+ep/loopback/backslash/dialplan/render	"loopback/a\\\\\\\\\\\\\\\\b/ctx"
+ep/loopback/backslash/api-tilde/render	"loopback/a\\\\\\\\\\\\\\\\b/ctx"
+ep/user/backslash/api/render	"user/a\\\\\\\\\\\\\\\\b@example.com"
+ep/user/backslash/dialplan/render	"user/a\\\\\\\\\\\\\\\\b@example.com"
+ep/user/backslash/api-tilde/render	"user/a\\\\\\\\\\\\\\\\b@example.com"
+ep/sofia-contact/backslash/api/render	"${sofia_contact(internal/a\\b@example.com)}"
+ep/sofia-contact/backslash/api/parse	"Err"
+ep/sofia-contact/backslash/dialplan/render	"${sofia_contact(internal/a\\b@example.com)}"
+ep/sofia-contact/backslash/dialplan/parse	"Err"
+ep/sofia-contact/backslash/api-tilde/render	"${sofia_contact(internal/a\\\\b@example.com)}"
+ep/sofia-contact/backslash/api-tilde/parse	"Err"
+ep/group-call/backslash/api/render	"${group_call(a\\b@example.com+E)}"
+ep/group-call/backslash/api/parse	"Err"
+ep/group-call/backslash/dialplan/render	"${group_call(a\\b@example.com+E)}"
+ep/group-call/backslash/dialplan/parse	"Err"
+ep/group-call/backslash/api-tilde/render	"${group_call(a\\\\b@example.com+E)}"
+ep/group-call/backslash/api-tilde/parse	"Err"
+ep/portaudio/backslash/api/render	"portaudio/a\\\\\\\\\\\\\\\\b"
+ep/portaudio/backslash/dialplan/render	"portaudio/a\\\\\\\\\\\\\\\\b"
+ep/portaudio/backslash/api-tilde/render	"portaudio/a\\\\\\\\\\\\\\\\b"
+ep/pulseaudio/backslash/api/render	"pulseaudio/a\\\\\\\\\\\\\\\\b"
+ep/pulseaudio/backslash/dialplan/render	"pulseaudio/a\\\\\\\\\\\\\\\\b"
+ep/pulseaudio/backslash/api-tilde/render	"pulseaudio/a\\\\\\\\\\\\\\\\b"
+ep/alsa/backslash/api/render	"alsa/a\\\\\\\\\\\\\\\\b"
+ep/alsa/backslash/dialplan/render	"alsa/a\\\\\\\\\\\\\\\\b"
+ep/alsa/backslash/api-tilde/render	"alsa/a\\\\\\\\\\\\\\\\b"
+ep/sofia/space-in/api/render	"'sofia/pbx/a b c'"
+ep/sofia/space-in/dialplan/render	"'sofia/pbx/a b c'"
+ep/sofia/space-in/api-tilde/render	"\\'sofia/pbx/a b c\\'"
+ep/sofia-gateway/space-in/api/render	"'sofia/gateway/internal::gw1/a b c'"
+ep/sofia-gateway/space-in/dialplan/render	"'sofia/gateway/internal::gw1/a b c'"
+ep/sofia-gateway/space-in/api-tilde/render	"\\'sofia/gateway/internal::gw1/a b c\\'"
+ep/loopback/space-in/api/render	"'loopback/a b c/ctx'"
+ep/loopback/space-in/dialplan/render	"'loopback/a b c/ctx'"
+ep/loopback/space-in/api-tilde/render	"\\'loopback/a b c/ctx\\'"
+ep/user/space-in/api/render	"'user/a b c@example.com'"
+ep/user/space-in/dialplan/render	"'user/a b c@example.com'"
+ep/user/space-in/api-tilde/render	"\\'user/a b c@example.com\\'"
+ep/sofia-contact/space-in/api/render	"${sofia_contact(internal/a b c@example.com)}"
+ep/sofia-contact/space-in/api/parse	"Err"
+ep/sofia-contact/space-in/dialplan/render	"${sofia_contact(internal/a b c@example.com)}"
+ep/sofia-contact/space-in/dialplan/parse	"Err"
+ep/sofia-contact/space-in/api-tilde/render	"${sofia_contact(internal/a b c@example.com)}"
+ep/sofia-contact/space-in/api-tilde/parse	"Err"
+ep/group-call/space-in/api/render	"${group_call(a b c@example.com+E)}"
+ep/group-call/space-in/api/parse	"Err"
+ep/group-call/space-in/dialplan/render	"${group_call(a b c@example.com+E)}"
+ep/group-call/space-in/dialplan/parse	"Err"
+ep/group-call/space-in/api-tilde/render	"${group_call(a b c@example.com+E)}"
+ep/group-call/space-in/api-tilde/parse	"Err"
+ep/portaudio/space-in/api/render	"'portaudio/a b c'"
+ep/portaudio/space-in/dialplan/render	"'portaudio/a b c'"
+ep/portaudio/space-in/api-tilde/render	"\\'portaudio/a b c\\'"
+ep/pulseaudio/space-in/api/render	"'pulseaudio/a b c'"
+ep/pulseaudio/space-in/dialplan/render	"'pulseaudio/a b c'"
+ep/pulseaudio/space-in/api-tilde/render	"\\'pulseaudio/a b c\\'"
+ep/alsa/space-in/api/render	"'alsa/a b c'"
+ep/alsa/space-in/dialplan/render	"'alsa/a b c'"
+ep/alsa/space-in/api-tilde/render	"\\'alsa/a b c\\'"
+ep/sofia/dollar/api/render	"sofia/pbx/a$b"
+ep/sofia/dollar/dialplan/render	"sofia/pbx/a$b"
+ep/sofia/dollar/api-tilde/render	"sofia/pbx/a$b"
+ep/sofia-gateway/dollar/api/render	"sofia/gateway/internal::gw1/a$b"
+ep/sofia-gateway/dollar/dialplan/render	"sofia/gateway/internal::gw1/a$b"
+ep/sofia-gateway/dollar/api-tilde/render	"sofia/gateway/internal::gw1/a$b"
+ep/loopback/dollar/api/render	"loopback/a$b/ctx"
+ep/loopback/dollar/dialplan/render	"loopback/a$b/ctx"
+ep/loopback/dollar/api-tilde/render	"loopback/a$b/ctx"
+ep/user/dollar/api/render	"user/a$b@example.com"
+ep/user/dollar/dialplan/render	"user/a$b@example.com"
+ep/user/dollar/api-tilde/render	"user/a$b@example.com"
+ep/sofia-contact/dollar/api/render	"${sofia_contact(internal/a$b@example.com)}"
+ep/sofia-contact/dollar/dialplan/render	"${sofia_contact(internal/a$b@example.com)}"
+ep/sofia-contact/dollar/api-tilde/render	"${sofia_contact(internal/a$b@example.com)}"
+ep/group-call/dollar/api/render	"${group_call(a$b@example.com+E)}"
+ep/group-call/dollar/dialplan/render	"${group_call(a$b@example.com+E)}"
+ep/group-call/dollar/api-tilde/render	"${group_call(a$b@example.com+E)}"
+ep/portaudio/dollar/api/render	"portaudio/a$b"
+ep/portaudio/dollar/dialplan/render	"portaudio/a$b"
+ep/portaudio/dollar/api-tilde/render	"portaudio/a$b"
+ep/pulseaudio/dollar/api/render	"pulseaudio/a$b"
+ep/pulseaudio/dollar/dialplan/render	"pulseaudio/a$b"
+ep/pulseaudio/dollar/api-tilde/render	"pulseaudio/a$b"
+ep/alsa/dollar/api/render	"alsa/a$b"
+ep/alsa/dollar/dialplan/render	"alsa/a$b"
+ep/alsa/dollar/api-tilde/render	"alsa/a$b"
+ep/sofia/dolldoll/api/render	"sofia/pbx/a$$b"
+ep/sofia/dolldoll/dialplan/render	"\\'sofia/pbx/a\\$\\$b"
+ep/sofia/dolldoll/api-tilde/render	"sofia/pbx/a$$b"
+ep/sofia-gateway/dolldoll/api/render	"sofia/gateway/internal::gw1/a$$b"
+ep/sofia-gateway/dolldoll/dialplan/render	"\\'sofia/gateway/internal::gw1/a\\$\\$b"
+ep/sofia-gateway/dolldoll/api-tilde/render	"sofia/gateway/internal::gw1/a$$b"
+ep/loopback/dolldoll/api/render	"loopback/a$$b/ctx"
+ep/loopback/dolldoll/dialplan/render	"\\'loopback/a\\$\\$b/ctx"
+ep/loopback/dolldoll/api-tilde/render	"loopback/a$$b/ctx"
+ep/user/dolldoll/api/render	"user/a$$b@example.com"
+ep/user/dolldoll/dialplan/render	"\\'user/a\\$\\$b@example.com"
+ep/user/dolldoll/api-tilde/render	"user/a$$b@example.com"
+ep/sofia-contact/dolldoll/api/render	"${sofia_contact(internal/a$$b@example.com)}"
+ep/sofia-contact/dolldoll/dialplan/render	"${sofia_contact(internal/a$$b@example.com)}"
+ep/sofia-contact/dolldoll/api-tilde/render	"${sofia_contact(internal/a$$b@example.com)}"
+ep/group-call/dolldoll/api/render	"${group_call(a$$b@example.com+E)}"
+ep/group-call/dolldoll/dialplan/render	"${group_call(a$$b@example.com+E)}"
+ep/group-call/dolldoll/api-tilde/render	"${group_call(a$$b@example.com+E)}"
+ep/portaudio/dolldoll/api/render	"portaudio/a$$b"
+ep/portaudio/dolldoll/dialplan/render	"\\'portaudio/a\\$\\$b"
+ep/portaudio/dolldoll/api-tilde/render	"portaudio/a$$b"
+ep/pulseaudio/dolldoll/api/render	"pulseaudio/a$$b"
+ep/pulseaudio/dolldoll/dialplan/render	"\\'pulseaudio/a\\$\\$b"
+ep/pulseaudio/dolldoll/api-tilde/render	"pulseaudio/a$$b"
+ep/alsa/dolldoll/api/render	"alsa/a$$b"
+ep/alsa/dolldoll/dialplan/render	"\\'alsa/a\\$\\$b"
+ep/alsa/dolldoll/api-tilde/render	"alsa/a$$b"
+ep/sofia/varref/api/render	"sofia/pbx/${foo}"
+ep/sofia/varref/dialplan/render	"sofia/pbx/${foo}"
+ep/sofia/varref/api-tilde/render	"sofia/pbx/${foo}"
+ep/sofia-gateway/varref/api/render	"sofia/gateway/internal::gw1/${foo}"
+ep/sofia-gateway/varref/dialplan/render	"sofia/gateway/internal::gw1/${foo}"
+ep/sofia-gateway/varref/api-tilde/render	"sofia/gateway/internal::gw1/${foo}"
+ep/loopback/varref/api/render	"loopback/${foo}/ctx"
+ep/loopback/varref/dialplan/render	"loopback/${foo}/ctx"
+ep/loopback/varref/api-tilde/render	"loopback/${foo}/ctx"
+ep/user/varref/api/render	"user/${foo}@example.com"
+ep/user/varref/dialplan/render	"user/${foo}@example.com"
+ep/user/varref/api-tilde/render	"user/${foo}@example.com"
+ep/sofia-contact/varref/api/render	"${sofia_contact(internal/${foo}@example.com)}"
+ep/sofia-contact/varref/dialplan/render	"${sofia_contact(internal/${foo}@example.com)}"
+ep/sofia-contact/varref/api-tilde/render	"${sofia_contact(internal/${foo}@example.com)}"
+ep/group-call/varref/api/render	"${group_call(${foo}@example.com+E)}"
+ep/group-call/varref/dialplan/render	"${group_call(${foo}@example.com+E)}"
+ep/group-call/varref/api-tilde/render	"${group_call(${foo}@example.com+E)}"
+ep/portaudio/varref/api/render	"portaudio/${foo}"
+ep/portaudio/varref/dialplan/render	"portaudio/${foo}"
+ep/portaudio/varref/api-tilde/render	"portaudio/${foo}"
+ep/pulseaudio/varref/api/render	"pulseaudio/${foo}"
+ep/pulseaudio/varref/dialplan/render	"pulseaudio/${foo}"
+ep/pulseaudio/varref/api-tilde/render	"pulseaudio/${foo}"
+ep/alsa/varref/api/render	"alsa/${foo}"
+ep/alsa/varref/dialplan/render	"alsa/${foo}"
+ep/alsa/varref/api-tilde/render	"alsa/${foo}"
+ep/sofia/nonascii/api/render	"sofia/pbx/café☎"
+ep/sofia/nonascii/dialplan/render	"sofia/pbx/café☎"
+ep/sofia/nonascii/api-tilde/render	"sofia/pbx/café☎"
+ep/sofia-gateway/nonascii/api/render	"sofia/gateway/internal::gw1/café☎"
+ep/sofia-gateway/nonascii/dialplan/render	"sofia/gateway/internal::gw1/café☎"
+ep/sofia-gateway/nonascii/api-tilde/render	"sofia/gateway/internal::gw1/café☎"
+ep/loopback/nonascii/api/render	"loopback/café☎/ctx"
+ep/loopback/nonascii/dialplan/render	"loopback/café☎/ctx"
+ep/loopback/nonascii/api-tilde/render	"loopback/café☎/ctx"
+ep/user/nonascii/api/render	"user/café☎@example.com"
+ep/user/nonascii/dialplan/render	"user/café☎@example.com"
+ep/user/nonascii/api-tilde/render	"user/café☎@example.com"
+ep/sofia-contact/nonascii/api/render	"${sofia_contact(internal/café☎@example.com)}"
+ep/sofia-contact/nonascii/dialplan/render	"${sofia_contact(internal/café☎@example.com)}"
+ep/sofia-contact/nonascii/api-tilde/render	"${sofia_contact(internal/café☎@example.com)}"
+ep/group-call/nonascii/api/render	"${group_call(café☎@example.com+E)}"
+ep/group-call/nonascii/dialplan/render	"${group_call(café☎@example.com+E)}"
+ep/group-call/nonascii/api-tilde/render	"${group_call(café☎@example.com+E)}"
+ep/portaudio/nonascii/api/render	"portaudio/café☎"
+ep/portaudio/nonascii/dialplan/render	"portaudio/café☎"
+ep/portaudio/nonascii/api-tilde/render	"portaudio/café☎"
+ep/pulseaudio/nonascii/api/render	"pulseaudio/café☎"
+ep/pulseaudio/nonascii/dialplan/render	"pulseaudio/café☎"
+ep/pulseaudio/nonascii/api-tilde/render	"pulseaudio/café☎"
+ep/alsa/nonascii/api/render	"alsa/café☎"
+ep/alsa/nonascii/dialplan/render	"alsa/café☎"
+ep/alsa/nonascii/api-tilde/render	"alsa/café☎"
+ep/sofia/empty/api/render	"sofia/pbx/"
+ep/sofia/empty/dialplan/render	"sofia/pbx/"
+ep/sofia/empty/api-tilde/render	"sofia/pbx/"
+ep/sofia-gateway/empty/api/render	"sofia/gateway/internal::gw1/"
+ep/sofia-gateway/empty/dialplan/render	"sofia/gateway/internal::gw1/"
+ep/sofia-gateway/empty/api-tilde/render	"sofia/gateway/internal::gw1/"
+ep/loopback/empty/api/render	"loopback//ctx"
+ep/loopback/empty/dialplan/render	"loopback//ctx"
+ep/loopback/empty/api-tilde/render	"loopback//ctx"
+ep/user/empty/api/render	"user/@example.com"
+ep/user/empty/dialplan/render	"user/@example.com"
+ep/user/empty/api-tilde/render	"user/@example.com"
+ep/sofia-contact/empty/api/render	"${sofia_contact(internal/@example.com)}"
+ep/sofia-contact/empty/dialplan/render	"${sofia_contact(internal/@example.com)}"
+ep/sofia-contact/empty/api-tilde/render	"${sofia_contact(internal/@example.com)}"
+ep/group-call/empty/api/render	"${group_call(@example.com+E)}"
+ep/group-call/empty/dialplan/render	"${group_call(@example.com+E)}"
+ep/group-call/empty/api-tilde/render	"${group_call(@example.com+E)}"
+ep/portaudio/empty/api/render	"portaudio/"
+ep/portaudio/empty/api/parse	"Ok portaudio"
+ep/portaudio/empty/dialplan/render	"portaudio/"
+ep/portaudio/empty/dialplan/parse	"Ok portaudio"
+ep/portaudio/empty/api-tilde/render	"portaudio/"
+ep/portaudio/empty/api-tilde/parse	"Ok portaudio"
+ep/pulseaudio/empty/api/render	"pulseaudio/"
+ep/pulseaudio/empty/api/parse	"Ok pulseaudio"
+ep/pulseaudio/empty/dialplan/render	"pulseaudio/"
+ep/pulseaudio/empty/dialplan/parse	"Ok pulseaudio"
+ep/pulseaudio/empty/api-tilde/render	"pulseaudio/"
+ep/pulseaudio/empty/api-tilde/parse	"Ok pulseaudio"
+ep/alsa/empty/api/render	"alsa/"
+ep/alsa/empty/api/parse	"Ok alsa"
+ep/alsa/empty/dialplan/render	"alsa/"
+ep/alsa/empty/dialplan/parse	"Ok alsa"
+ep/alsa/empty/api-tilde/render	"alsa/"
+ep/alsa/empty/api-tilde/parse	"Ok alsa"
+ep/sofia/brackets/api/render	"sofia/pbx/a{b}c[d]e<f>g"
+ep/sofia/brackets/dialplan/render	"sofia/pbx/a{b}c[d]e<f>g"
+ep/sofia/brackets/api-tilde/render	"sofia/pbx/a{b}c[d]e<f>g"
+ep/sofia-gateway/brackets/api/render	"sofia/gateway/internal::gw1/a{b}c[d]e<f>g"
+ep/sofia-gateway/brackets/dialplan/render	"sofia/gateway/internal::gw1/a{b}c[d]e<f>g"
+ep/sofia-gateway/brackets/api-tilde/render	"sofia/gateway/internal::gw1/a{b}c[d]e<f>g"
+ep/loopback/brackets/api/render	"loopback/a{b}c[d]e<f>g/ctx"
+ep/loopback/brackets/dialplan/render	"loopback/a{b}c[d]e<f>g/ctx"
+ep/loopback/brackets/api-tilde/render	"loopback/a{b}c[d]e<f>g/ctx"
+ep/user/brackets/api/render	"user/a{b}c[d]e<f>g@example.com"
+ep/user/brackets/dialplan/render	"user/a{b}c[d]e<f>g@example.com"
+ep/user/brackets/api-tilde/render	"user/a{b}c[d]e<f>g@example.com"
+ep/sofia-contact/brackets/api/render	"${sofia_contact(internal/a{b}c[d]e<f>g@example.com)}"
+ep/sofia-contact/brackets/dialplan/render	"${sofia_contact(internal/a{b}c[d]e<f>g@example.com)}"
+ep/sofia-contact/brackets/api-tilde/render	"${sofia_contact(internal/a{b}c[d]e<f>g@example.com)}"
+ep/group-call/brackets/api/render	"${group_call(a{b}c[d]e<f>g@example.com+E)}"
+ep/group-call/brackets/dialplan/render	"${group_call(a{b}c[d]e<f>g@example.com+E)}"
+ep/group-call/brackets/api-tilde/render	"${group_call(a{b}c[d]e<f>g@example.com+E)}"
+ep/portaudio/brackets/api/render	"portaudio/a{b}c[d]e<f>g"
+ep/portaudio/brackets/dialplan/render	"portaudio/a{b}c[d]e<f>g"
+ep/portaudio/brackets/api-tilde/render	"portaudio/a{b}c[d]e<f>g"
+ep/pulseaudio/brackets/api/render	"pulseaudio/a{b}c[d]e<f>g"
+ep/pulseaudio/brackets/dialplan/render	"pulseaudio/a{b}c[d]e<f>g"
+ep/pulseaudio/brackets/api-tilde/render	"pulseaudio/a{b}c[d]e<f>g"
+ep/alsa/brackets/api/render	"alsa/a{b}c[d]e<f>g"
+ep/alsa/brackets/dialplan/render	"alsa/a{b}c[d]e<f>g"
+ep/alsa/brackets/api-tilde/render	"alsa/a{b}c[d]e<f>g"
+ep/loopback-app/api/render	"loopback/app=lua:script.lua"
+ep/loopback-app/dialplan/render	"loopback/app=lua:script.lua"
+ep/loopback-app/api-tilde/render	"loopback/app=lua:script.lua"
+ep/error-parse/user_busy/api	"Err"
+ep/error-parse/user_busy/dialplan	"Err"
+ep/error-parse/user_busy/api-tilde	"Err"
+ep/error-parse/USER_BUSY/api	"Ok error/USER_BUSY"
+ep/error-parse/USER_BUSY/dialplan	"Ok error/USER_BUSY"
+ep/error-parse/USER_BUSY/api-tilde	"Ok error/USER_BUSY"
+ep/error-parse/no_route_destination/api	"Err"
+ep/error-parse/no_route_destination/dialplan	"Err"
+ep/error-parse/no_route_destination/api-tilde	"Err"
+ep/error-parse/123/api	"Err"
+ep/error-parse/123/dialplan	"Err"
+ep/error-parse/123/api-tilde	"Err"
+ep/error-parse/bogus_cause_xyz/api	"Err"
+ep/error-parse/bogus_cause_xyz/dialplan	"Err"
+ep/error-parse/bogus_cause_xyz/api-tilde	"Err"
+ep/error-parse//api	"Err"
+ep/error-parse//dialplan	"Err"
+ep/error-parse//api-tilde	"Err"
+ep/sofia/with-vars/api/render	"[ov0=a\\,b,ov1=x]sofia/pbx/192.0.2.1"
+ep/sofia/with-vars/dialplan/render	"[ov0=a\\,b,ov1=x]sofia/pbx/192.0.2.1"
+ep/sofia/with-vars/api-tilde/render	"[ov0=a\\\\,b,ov1=x]sofia/pbx/192.0.2.1"
+ep/sofia-gateway/with-vars/api/render	"[ov0=a\\,b,ov1=x]sofia/gateway/gw1/18005551234"
+ep/sofia-gateway/with-vars/dialplan/render	"[ov0=a\\,b,ov1=x]sofia/gateway/gw1/18005551234"
+ep/sofia-gateway/with-vars/api-tilde/render	"[ov0=a\\\\,b,ov1=x]sofia/gateway/gw1/18005551234"
+ep/loopback/with-vars/api/render	"[ov0=a\\,b,ov1=x]loopback/9199/test"
+ep/loopback/with-vars/dialplan/render	"[ov0=a\\,b,ov1=x]loopback/9199/test"
+ep/loopback/with-vars/api-tilde/render	"[ov0=a\\\\,b,ov1=x]loopback/9199/test"
+ep/user/with-vars/api/render	"[ov0=a\\,b,ov1=x]user/bob@example.com"
+ep/user/with-vars/dialplan/render	"[ov0=a\\,b,ov1=x]user/bob@example.com"
+ep/user/with-vars/api-tilde/render	"[ov0=a\\\\,b,ov1=x]user/bob@example.com"
+ep/sofia-contact/with-vars/api/render	"[ov0=a\\,b,ov1=x]${sofia_contact(bob@example.com)}"
+ep/sofia-contact/with-vars/dialplan/render	"[ov0=a\\,b,ov1=x]${sofia_contact(bob@example.com)}"
+ep/sofia-contact/with-vars/api-tilde/render	"[ov0=a\\\\,b,ov1=x]${sofia_contact(bob@example.com)}"
+ep/group-call/with-vars/api/render	"[ov0=a\\,b,ov1=x]${group_call(support@example.com)}"
+ep/group-call/with-vars/dialplan/render	"[ov0=a\\,b,ov1=x]${group_call(support@example.com)}"
+ep/group-call/with-vars/api-tilde/render	"[ov0=a\\\\,b,ov1=x]${group_call(support@example.com)}"
+ep/error/with-vars/api/render	"error/USER_BUSY"
+ep/error/with-vars/dialplan/render	"error/USER_BUSY"
+ep/error/with-vars/api-tilde/render	"error/USER_BUSY"
+ep/portaudio/with-vars/api/render	"[ov0=a\\,b,ov1=x]portaudio"
+ep/portaudio/with-vars/dialplan/render	"[ov0=a\\,b,ov1=x]portaudio"
+ep/portaudio/with-vars/api-tilde/render	"[ov0=a\\\\,b,ov1=x]portaudio"
+ep/alsa/with-vars/api/render	"[ov0=a\\,b,ov1=x]alsa"
+ep/alsa/with-vars/dialplan/render	"[ov0=a\\,b,ov1=x]alsa"
+ep/alsa/with-vars/api-tilde/render	"[ov0=a\\\\,b,ov1=x]alsa"
+orig/extension-plain/display	"originate loopback/9199/test 1000"
+orig/extension-hostile/display	"originate loopback/9199/test 'it\\'s,weird|1000'"
+orig/application-park/display	"originate loopback/9199/test &park()"
+orig/application-args/display	"originate loopback/9199/test '&set(k=it\\'s v)'"
+orig/inline-two-apps/display	"originate loopback/9199/test 'park,set:v=a\\\\,b' inline"
+orig/inline-with-delim/display	"originate loopback/9199/test 'm:;:park;set:v=a\\\\;b' inline"
+orig/inline-xml-conflict/build-err	"Err"
+orig/dialplan-xml/display	"originate loopback/9199/test 1000 XML"
+orig/dialplan-raw/display	"originate loopback/9199/test 1000 custom_dialplan"
+orig/positionals-none/display	"originate loopback/9199/test 1000"
+orig/positionals-empty-context/display	"originate loopback/9199/test 1000 undef ''"
+orig/positionals-spaced/display	"originate loopback/9199/test 1000 undef undef 'Jane Doe' 5551234567"
+orig/positionals-quoted/display	"originate loopback/9199/test 1000 undef undef 'it\\'s \"quoted\"'"
+orig/positionals-backslash/display	"originate loopback/9199/test 1000 undef undef 'a\\\\b'"
+orig/positionals-literal-undef/display	"originate loopback/9199/test 1000 undef undef"
+orig/positionals-literal-undef/roundtrip	"Ok originate loopback/9199/test 1000"
+orig/positionals-gap-undef/display	"originate loopback/9199/test 1000 undef undef undef 5551234567"
+orig/timeout/display	"originate loopback/9199/test 1000 undef undef undef undef 45"
+orig/extension-plain-argv-tilde/display	"originate ^^~loopback/9199/test~1000"
+orig/extension-hostile-argv-tilde/display	"originate ^^~loopback/9199/test~it\\'s,weird|1000"
+orig/application-park-argv-tilde/display	"originate ^^~loopback/9199/test~&park()"
+orig/application-args-argv-tilde/display	"originate ^^~loopback/9199/test~&set(k=it\\'s v)"
+orig/inline-two-apps-argv-tilde/display	"originate ^^~loopback/9199/test~park,set:v=a\\\\,b~inline"
+orig/inline-with-delim-argv-tilde/display	"originate ^^~loopback/9199/test~m:;:park;set:v=a\\\\;b~inline"
+orig/inline-xml-conflict-argv-tilde/build-err	"Err"
+orig/dialplan-xml-argv-tilde/display	"originate ^^~loopback/9199/test~1000~XML"
+orig/dialplan-raw-argv-tilde/display	"originate ^^~loopback/9199/test~1000~custom_dialplan"
+orig/positionals-none-argv-tilde/display	"originate ^^~loopback/9199/test~1000"
+orig/positionals-empty-context-argv-tilde/display	"originate ^^~loopback/9199/test~1000~undef~''"
+orig/positionals-spaced-argv-tilde/display	"originate ^^~loopback/9199/test~1000~undef~undef~Jane Doe~5551234567"
+orig/positionals-quoted-argv-tilde/display	"originate ^^~loopback/9199/test~1000~undef~undef~it\\'s \"quoted\""
+orig/positionals-backslash-argv-tilde/display	"originate ^^~loopback/9199/test~1000~undef~undef~a\\\\b"
+orig/positionals-literal-undef-argv-tilde/display	"originate ^^~loopback/9199/test~1000~undef~undef"
+orig/positionals-literal-undef-argv-tilde/roundtrip	"Ok originate ^^~loopback/9199/test~1000"
+orig/positionals-gap-undef-argv-tilde/display	"originate ^^~loopback/9199/test~1000~undef~undef~undef~5551234567"
+orig/timeout-argv-tilde/display	"originate ^^~loopback/9199/test~1000~undef~undef~undef~undef~45"
+bridge/basic/display	"{hangup_after_bridge=true}sofia/gateway/gw-a/it\\\\\\\\\\\\'s\\,weird,sofia/gateway/gw-b/a\\|b\\\\\\\\\\\\\\\\c|error/NO_ROUTE_DESTINATION"
+bridge/unescaped-comma-in-block/parse	"Err"
+quote/originate_quote/plain	"abc123"
+quote/uuid_setvar/plain	"'abc123'"
+quote/originate_quote/space-in	"'a b c'"
+quote/uuid_setvar/space-in	"'a b c'"
+quote/originate_quote/space-lead	"' abc'"
+quote/uuid_setvar/space-lead	"' abc'"
+quote/originate_quote/space-trail	"'abc '"
+quote/uuid_setvar/space-trail	"'abc '"
+quote/originate_quote/quote	"'it\\'s'"
+quote/uuid_setvar/quote	"'it\\'s'"
+quote/originate_quote/dquote	"'he said \"hi\"'"
+quote/uuid_setvar/dquote	"'he said \"hi\"'"
+quote/originate_quote/backslash	"'a\\\\b'"
+quote/uuid_setvar/backslash	"'a\\\\b'"
+quote/originate_quote/backslash2	"'a\\\\\\\\b'"
+quote/uuid_setvar/backslash2	"'a\\\\\\\\b'"
+quote/originate_quote/comma	"a,b"
+quote/uuid_setvar/comma	"'a,b'"
+quote/originate_quote/pipe	"a|b"
+quote/uuid_setvar/pipe	"'a|b'"
+quote/originate_quote/equals	"a=b"
+quote/uuid_setvar/equals	"'a=b'"
+quote/originate_quote/brackets	"a{b}c[d]e<f>g"
+quote/uuid_setvar/brackets	"'a{b}c[d]e<f>g'"
+quote/originate_quote/dollar	"a$b"
+quote/uuid_setvar/dollar	"'a$b'"
+quote/originate_quote/dolldoll	"a$$b"
+quote/uuid_setvar/dolldoll	"'a$$b'"
+quote/originate_quote/varref	"${foo}"
+quote/uuid_setvar/varref	"'${foo}'"
+quote/originate_quote/caret	"a^^b"
+quote/uuid_setvar/caret	"'a^^b'"
+quote/originate_quote/newline	"'a\nb'"
+quote/uuid_setvar/newline	"'a\nb'"
+quote/originate_quote/tab	"'a\tb'"
+quote/uuid_setvar/tab	"'a\tb'"
+quote/originate_quote/nonascii	"café☎"
+quote/uuid_setvar/nonascii	"'café☎'"
+quote/originate_quote/empty	"''"
+quote/uuid_setvar/empty	"''"
+quote/originate_split/quoted-app/ 	["loopback/9199/test", "'&socket(127.0.0.1:8040 async full)'"]
+quote/originate_split/quoted-app/~	["loopback/9199/test '&socket(127.0.0.1:8040 async full)'"]
+quote/originate_split/argv-tilde/ 	["loopback/9199/test", "&park()"]
+quote/originate_split/argv-tilde/~	["loopback/9199/test", "&park()"]
+quote/originate_split/unterminated-quote/ 	"Err"
+quote/originate_split/unterminated-quote/~	["unterminated 'quote"]
+quote/originate_split/empty/ 	[]
+quote/originate_split/empty/~	[]
+quote/originate_split/trailing-backslash-space/ 	["a\\ b"]
+quote/originate_split/trailing-backslash-space/~	["a\\ b"]
+escape/api/plain	"Some \"abc123\""
+escape/api/space-in	"Some \"a\\\\sb\\\\sc\""
+escape/api/space-lead	"Some \"\\\\sabc\""
+escape/api/space-trail	"Some \"abc\\\\s\""
+escape/api/quote	"Some \"it\\\\'s\""
+escape/api/dquote	"Some \"he\\\\ssaid\\\\s\\\"hi\\\"\""
+escape/api/backslash	"Some \"a\\\\\\\\b\""
+escape/api/backslash2	"Some \"a\\\\\\\\\\\\\\\\b\""
+escape/api/comma	"Some \"a,b\""
+escape/api/pipe	"Some \"a|b\""
+escape/api/equals	"Some \"a=b\""
+escape/api/brackets	"Some \"a{b}c[d]e<f>g\""
+escape/api/dollar	"Some \"a$b\""
+escape/api/dolldoll	"Some \"a$$b\""
+escape/api/varref	"Some \"${foo}\""
+escape/api/caret	"Some \"a^^b\""
+escape/api/newline	"Some \"a\\\\nb\""
+escape/api/tab	"Some \"a\\\\tb\""
+escape/api/nonascii	"Some \"café☎\""
+escape/api/empty	"Some \"''\""
+escape/dialplan/plain	"None"
+escape/dialplan/space-in	"None"
+escape/dialplan/space-lead	"None"
+escape/dialplan/space-trail	"None"
+escape/dialplan/quote	"None"
+escape/dialplan/dquote	"None"
+escape/dialplan/backslash	"None"
+escape/dialplan/backslash2	"None"
+escape/dialplan/comma	"None"
+escape/dialplan/pipe	"None"
+escape/dialplan/equals	"None"
+escape/dialplan/brackets	"None"
+escape/dialplan/dollar	"None"
+escape/dialplan/dolldoll	"None"
+escape/dialplan/varref	"None"
+escape/dialplan/caret	"None"
+escape/dialplan/newline	"None"
+escape/dialplan/tab	"None"
+escape/dialplan/nonascii	"None"
+escape/dialplan/empty	"None"
+escape/api-tilde/plain	"Some \"abc123\""
+escape/api-tilde/space-in	"Some \"a b c\""
+escape/api-tilde/space-lead	"Some \"\\\\sabc\""
+escape/api-tilde/space-trail	"Some \"abc\\\\s\""
+escape/api-tilde/quote	"Some \"it\\\\'s\""
+escape/api-tilde/dquote	"Some \"he said \\\"hi\\\"\""
+escape/api-tilde/backslash	"Some \"a\\\\\\\\b\""
+escape/api-tilde/backslash2	"Some \"a\\\\\\\\\\\\\\\\b\""
+escape/api-tilde/comma	"Some \"a,b\""
+escape/api-tilde/pipe	"Some \"a|b\""
+escape/api-tilde/equals	"Some \"a=b\""
+escape/api-tilde/brackets	"Some \"a{b}c[d]e<f>g\""
+escape/api-tilde/dollar	"Some \"a$b\""
+escape/api-tilde/dolldoll	"Some \"a$$b\""
+escape/api-tilde/varref	"Some \"${foo}\""
+escape/api-tilde/caret	"Some \"a^^b\""
+escape/api-tilde/newline	"Some \"a\\\\nb\""
+escape/api-tilde/tab	"Some \"a\\\\tb\""
+escape/api-tilde/nonascii	"Some \"café☎\""
+escape/api-tilde/empty	"Some \"''\""
+escape/api-bang/plain	"Some \"abc123\""
+escape/api-bang/space-in	"Some \"a b c\""
+escape/api-bang/space-lead	"Some \"\\\\sabc\""
+escape/api-bang/space-trail	"Some \"abc\\\\s\""
+escape/api-bang/quote	"Some \"it\\\\'s\""
+escape/api-bang/dquote	"Some \"he said \\\"hi\\\"\""
+escape/api-bang/backslash	"Some \"a\\\\\\\\b\""
+escape/api-bang/backslash2	"Some \"a\\\\\\\\\\\\\\\\b\""
+escape/api-bang/comma	"Some \"a,b\""
+escape/api-bang/pipe	"Some \"a|b\""
+escape/api-bang/equals	"Some \"a=b\""
+escape/api-bang/brackets	"Some \"a{b}c[d]e<f>g\""
+escape/api-bang/dollar	"Some \"a$b\""
+escape/api-bang/dolldoll	"Some \"a$$b\""
+escape/api-bang/varref	"Some \"${foo}\""
+escape/api-bang/caret	"Some \"a^^b\""
+escape/api-bang/newline	"Some \"a\\\\nb\""
+escape/api-bang/tab	"Some \"a\\\\tb\""
+escape/api-bang/nonascii	"Some \"café☎\""
+escape/api-bang/empty	"Some \"''\""
+flat/flattened-probe.A.txt/api/raw	"[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test,[^^:sip_invite_domain=pbx.example.com:presence_id=fp-unreg@pbx.example.com]error/user_not_registered,[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-b@192.0.2.1:5080;transport=udp;gw=fp-reg-b,[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-a@192.0.2.1:5080;transport=udp;gw=fp-reg-a,[presence_id=fp-err-lower@pbx.example.com]error/user_busy,user/fp-nodial@pbx.example.com"
+flat/flattened-probe.A.txt/api/leg0	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test", "presence_id=fp-static@pbx.example.com"]
+flat/flattened-probe.A.txt/api/leg1	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-unreg@pbx.example.com]error/user_not_registered", "presence_id=fp-unreg@pbx.example.com", "cause=user_not_registered", "name=USER_NOT_REGISTERED/806"]
+flat/flattened-probe.A.txt/api/leg2	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-b@192.0.2.1:5080;transport=udp;gw=fp-reg-b", "presence_id=fp-reg@pbx.example.com"]
+flat/flattened-probe.A.txt/api/leg3	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-a@192.0.2.1:5080;transport=udp;gw=fp-reg-a", "presence_id=fp-reg@pbx.example.com"]
+flat/flattened-probe.A.txt/api/leg4	["raw=[presence_id=fp-err-lower@pbx.example.com]error/user_busy", "presence_id=fp-err-lower@pbx.example.com", "cause=user_busy", "name=USER_BUSY/17"]
+flat/flattened-probe.A.txt/api/leg5	["raw=user/fp-nodial@pbx.example.com"]
+flat/flattened-probe.AF.txt/api/raw	"[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test|[^^:sip_invite_domain=pbx.example.com:presence_id=fp-unreg@pbx.example.com]error/user_not_registered|[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-b@192.0.2.1:5080;transport=udp;gw=fp-reg-b,[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-a@192.0.2.1:5080;transport=udp;gw=fp-reg-a|[presence_id=fp-err-lower@pbx.example.com]error/user_busy|user/fp-nodial@pbx.example.com"
+flat/flattened-probe.AF.txt/api/leg0	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test", "presence_id=fp-static@pbx.example.com"]
+flat/flattened-probe.AF.txt/api/leg1	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-unreg@pbx.example.com]error/user_not_registered", "presence_id=fp-unreg@pbx.example.com", "cause=user_not_registered", "name=USER_NOT_REGISTERED/806"]
+flat/flattened-probe.AF.txt/api/leg2	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-b@192.0.2.1:5080;transport=udp;gw=fp-reg-b", "presence_id=fp-reg@pbx.example.com"]
+flat/flattened-probe.AF.txt/api/leg3	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-a@192.0.2.1:5080;transport=udp;gw=fp-reg-a", "presence_id=fp-reg@pbx.example.com"]
+flat/flattened-probe.AF.txt/api/leg4	["raw=[presence_id=fp-err-lower@pbx.example.com]error/user_busy", "presence_id=fp-err-lower@pbx.example.com", "cause=user_busy", "name=USER_BUSY/17"]
+flat/flattened-probe.AF.txt/api/leg5	["raw=user/fp-nodial@pbx.example.com"]
+flat/flattened-probe.E.txt/api/raw	"[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test:_:[^^:sip_invite_domain=pbx.example.com:presence_id=fp-unreg@pbx.example.com]error/user_not_registered:_:[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-b@192.0.2.1:5080;transport=udp;gw=fp-reg-b,[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-a@192.0.2.1:5080;transport=udp;gw=fp-reg-a:_:[presence_id=fp-err-lower@pbx.example.com]error/user_busy:_:user/fp-nodial@pbx.example.com"
+flat/flattened-probe.E.txt/api/leg0	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test", "presence_id=fp-static@pbx.example.com"]
+flat/flattened-probe.E.txt/api/leg1	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-unreg@pbx.example.com]error/user_not_registered", "presence_id=fp-unreg@pbx.example.com", "cause=user_not_registered", "name=USER_NOT_REGISTERED/806"]
+flat/flattened-probe.E.txt/api/leg2	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-b@192.0.2.1:5080;transport=udp;gw=fp-reg-b", "presence_id=fp-reg@pbx.example.com"]
+flat/flattened-probe.E.txt/api/leg3	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-a@192.0.2.1:5080;transport=udp;gw=fp-reg-a", "presence_id=fp-reg@pbx.example.com"]
+flat/flattened-probe.E.txt/api/leg4	["raw=[presence_id=fp-err-lower@pbx.example.com]error/user_busy", "presence_id=fp-err-lower@pbx.example.com", "cause=user_busy", "name=USER_BUSY/17"]
+flat/flattened-probe.E.txt/api/leg5	["raw=user/fp-nodial@pbx.example.com"]
+flat/flattened-probe.F.txt/api/raw	"[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test|[^^:sip_invite_domain=pbx.example.com:presence_id=fp-unreg@pbx.example.com]error/user_not_registered|[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-b@192.0.2.1:5080;transport=udp;gw=fp-reg-b,[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-a@192.0.2.1:5080;transport=udp;gw=fp-reg-a|[presence_id=fp-err-lower@pbx.example.com]error/user_busy|user/fp-nodial@pbx.example.com"
+flat/flattened-probe.F.txt/api/leg0	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test", "presence_id=fp-static@pbx.example.com"]
+flat/flattened-probe.F.txt/api/leg1	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-unreg@pbx.example.com]error/user_not_registered", "presence_id=fp-unreg@pbx.example.com", "cause=user_not_registered", "name=USER_NOT_REGISTERED/806"]
+flat/flattened-probe.F.txt/api/leg2	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-b@192.0.2.1:5080;transport=udp;gw=fp-reg-b", "presence_id=fp-reg@pbx.example.com"]
+flat/flattened-probe.F.txt/api/leg3	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-a@192.0.2.1:5080;transport=udp;gw=fp-reg-a", "presence_id=fp-reg@pbx.example.com"]
+flat/flattened-probe.F.txt/api/leg4	["raw=[presence_id=fp-err-lower@pbx.example.com]error/user_busy", "presence_id=fp-err-lower@pbx.example.com", "cause=user_busy", "name=USER_BUSY/17"]
+flat/flattened-probe.F.txt/api/leg5	["raw=user/fp-nodial@pbx.example.com"]
+flat/flattened-probe.none.txt/api/raw	"[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test,[^^:sip_invite_domain=pbx.example.com:presence_id=fp-unreg@pbx.example.com]error/user_not_registered,[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-b@192.0.2.1:5080;transport=udp;gw=fp-reg-b,[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-a@192.0.2.1:5080;transport=udp;gw=fp-reg-a,[presence_id=fp-err-lower@pbx.example.com]error/user_busy,user/fp-nodial@pbx.example.com"
+flat/flattened-probe.none.txt/api/leg0	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test", "presence_id=fp-static@pbx.example.com"]
+flat/flattened-probe.none.txt/api/leg1	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-unreg@pbx.example.com]error/user_not_registered", "presence_id=fp-unreg@pbx.example.com", "cause=user_not_registered", "name=USER_NOT_REGISTERED/806"]
+flat/flattened-probe.none.txt/api/leg2	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-b@192.0.2.1:5080;transport=udp;gw=fp-reg-b", "presence_id=fp-reg@pbx.example.com"]
+flat/flattened-probe.none.txt/api/leg3	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-a@192.0.2.1:5080;transport=udp;gw=fp-reg-a", "presence_id=fp-reg@pbx.example.com"]
+flat/flattened-probe.none.txt/api/leg4	["raw=[presence_id=fp-err-lower@pbx.example.com]error/user_busy", "presence_id=fp-err-lower@pbx.example.com", "cause=user_busy", "name=USER_BUSY/17"]
+flat/flattened-probe.none.txt/api/leg5	["raw=user/fp-nodial@pbx.example.com"]
+flat/fp-all-empty.A.txt/api/raw	","
+flat/fp-all-empty.A.txt/api/for	""
+flat/fp-all-empty.A.txt/api/leg0	["raw="]
+flat/fp-all-empty.AF.txt/api/err	"Err"
+flat/fp-all-empty.E.txt/api/err	"Err"
+flat/fp-all-empty.F.txt/api/err	"Err"
+flat/fp-all-empty.none.txt/api/raw	","
+flat/fp-all-empty.none.txt/api/for	""
+flat/fp-all-empty.none.txt/api/leg0	["raw="]
+flat/fp-inline.A.txt/api/raw	"[presence_id=fp-inline@pbx.example.com]loopback/9199/test"
+flat/fp-inline.A.txt/api/leg0	["raw=[presence_id=fp-inline@pbx.example.com]loopback/9199/test", "presence_id=fp-inline@pbx.example.com"]
+flat/fp-inline.AF.txt/api/raw	"[presence_id=fp-inline@pbx.example.com]loopback/9199/test"
+flat/fp-inline.AF.txt/api/leg0	["raw=[presence_id=fp-inline@pbx.example.com]loopback/9199/test", "presence_id=fp-inline@pbx.example.com"]
+flat/fp-inline.E.txt/api/raw	"[presence_id=fp-inline@pbx.example.com]loopback/9199/test"
+flat/fp-inline.E.txt/api/leg0	["raw=[presence_id=fp-inline@pbx.example.com]loopback/9199/test", "presence_id=fp-inline@pbx.example.com"]
+flat/fp-inline.F.txt/api/raw	"[presence_id=fp-inline@pbx.example.com]loopback/9199/test"
+flat/fp-inline.F.txt/api/leg0	["raw=[presence_id=fp-inline@pbx.example.com]loopback/9199/test", "presence_id=fp-inline@pbx.example.com"]
+flat/fp-inline.none.txt/api/raw	"[presence_id=fp-inline@pbx.example.com]loopback/9199/test"
+flat/fp-inline.none.txt/api/leg0	["raw=[presence_id=fp-inline@pbx.example.com]loopback/9199/test", "presence_id=fp-inline@pbx.example.com"]
+flat/fp-missing-pointer.A.txt/api/raw	"user/fp-does-not-exist@pbx.example.com"
+flat/fp-missing-pointer.A.txt/api/leg0	["raw=user/fp-does-not-exist@pbx.example.com"]
+flat/fp-missing-pointer.AF.txt/api/raw	"user/fp-does-not-exist@pbx.example.com"
+flat/fp-missing-pointer.AF.txt/api/leg0	["raw=user/fp-does-not-exist@pbx.example.com"]
+flat/fp-missing-pointer.E.txt/api/raw	"user/fp-does-not-exist@pbx.example.com"
+flat/fp-missing-pointer.E.txt/api/leg0	["raw=user/fp-does-not-exist@pbx.example.com"]
+flat/fp-missing-pointer.F.txt/api/raw	"user/fp-does-not-exist@pbx.example.com"
+flat/fp-missing-pointer.F.txt/api/leg0	["raw=user/fp-does-not-exist@pbx.example.com"]
+flat/fp-missing-pointer.none.txt/api/raw	"user/fp-does-not-exist@pbx.example.com"
+flat/fp-missing-pointer.none.txt/api/leg0	["raw=user/fp-does-not-exist@pbx.example.com"]
+flat/fp-none.A.txt/api/raw	"error/NO_ROUTE_DESTINATION"
+flat/fp-none.A.txt/api/leg0	["raw=error/NO_ROUTE_DESTINATION", "cause=NO_ROUTE_DESTINATION", "name=NO_ROUTE_DESTINATION/3"]
+flat/fp-none.AF.txt/api/raw	"error/NO_ROUTE_DESTINATION"
+flat/fp-none.AF.txt/api/leg0	["raw=error/NO_ROUTE_DESTINATION", "cause=NO_ROUTE_DESTINATION", "name=NO_ROUTE_DESTINATION/3"]
+flat/fp-none.E.txt/api/raw	"error/NO_ROUTE_DESTINATION"
+flat/fp-none.E.txt/api/leg0	["raw=error/NO_ROUTE_DESTINATION", "cause=NO_ROUTE_DESTINATION", "name=NO_ROUTE_DESTINATION/3"]
+flat/fp-none.F.txt/api/raw	"error/NO_ROUTE_DESTINATION"
+flat/fp-none.F.txt/api/leg0	["raw=error/NO_ROUTE_DESTINATION", "cause=NO_ROUTE_DESTINATION", "name=NO_ROUTE_DESTINATION/3"]
+flat/fp-none.none.txt/api/raw	"error/NO_ROUTE_DESTINATION"
+flat/fp-none.none.txt/api/leg0	["raw=error/NO_ROUTE_DESTINATION", "cause=NO_ROUTE_DESTINATION", "name=NO_ROUTE_DESTINATION/3"]
+flat/fp-one-empty.A.txt/api/raw	"[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test,,[presence_id=fp-err-upper@pbx.example.com]error/USER_BUSY"
+flat/fp-one-empty.A.txt/api/leg0	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test", "presence_id=fp-static@pbx.example.com"]
+flat/fp-one-empty.A.txt/api/leg1	["raw="]
+flat/fp-one-empty.A.txt/api/leg2	["raw=[presence_id=fp-err-upper@pbx.example.com]error/USER_BUSY", "presence_id=fp-err-upper@pbx.example.com", "cause=USER_BUSY", "name=USER_BUSY/17"]
+flat/fp-one-empty.AF.txt/api/raw	"[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test||[presence_id=fp-err-upper@pbx.example.com]error/USER_BUSY"
+flat/fp-one-empty.AF.txt/api/for	"[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test|[presence_id=fp-err-upper@pbx.example.com]error/USER_BUSY"
+flat/fp-one-empty.AF.txt/api/leg0	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test", "presence_id=fp-static@pbx.example.com"]
+flat/fp-one-empty.AF.txt/api/leg1	["raw=[presence_id=fp-err-upper@pbx.example.com]error/USER_BUSY", "presence_id=fp-err-upper@pbx.example.com", "cause=USER_BUSY", "name=USER_BUSY/17"]
+flat/fp-one-empty.E.txt/api/err	"Err"
+flat/fp-one-empty.F.txt/api/raw	"[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test||[presence_id=fp-err-upper@pbx.example.com]error/USER_BUSY"
+flat/fp-one-empty.F.txt/api/for	"[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test|[presence_id=fp-err-upper@pbx.example.com]error/USER_BUSY"
+flat/fp-one-empty.F.txt/api/leg0	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test", "presence_id=fp-static@pbx.example.com"]
+flat/fp-one-empty.F.txt/api/leg1	["raw=[presence_id=fp-err-upper@pbx.example.com]error/USER_BUSY", "presence_id=fp-err-upper@pbx.example.com", "cause=USER_BUSY", "name=USER_BUSY/17"]
+flat/fp-one-empty.none.txt/api/raw	"[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test,,[presence_id=fp-err-upper@pbx.example.com]error/USER_BUSY"
+flat/fp-one-empty.none.txt/api/leg0	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test", "presence_id=fp-static@pbx.example.com"]
+flat/fp-one-empty.none.txt/api/leg1	["raw="]
+flat/fp-one-empty.none.txt/api/leg2	["raw=[presence_id=fp-err-upper@pbx.example.com]error/USER_BUSY", "presence_id=fp-err-upper@pbx.example.com", "cause=USER_BUSY", "name=USER_BUSY/17"]
+flat/g-fp-argv-apos2.A.txt/api/raw	"[presence_id=fp-argv-apos2@pbx.example.com,v=it's o'k,sentinel=s]loopback/9199/test"
+flat/g-fp-argv-apos2.A.txt/api/for	"[presence_id=fp-argv-apos2@pbx.example.com,v='its ok',sentinel=s]loopback/9199/test"
+flat/g-fp-argv-apos2.A.txt/api/leg0	["raw=[presence_id=fp-argv-apos2@pbx.example.com,v=it's o'k,sentinel=s]loopback/9199/test", "presence_id=fp-argv-apos2@pbx.example.com"]
+flat/g-fp-argv-apos2.A.txt/argv-tilde/raw	"[presence_id=fp-argv-apos2@pbx.example.com,v=it\\'s o\\'k,sentinel=s]loopback/9199/test"
+flat/g-fp-argv-apos2.A.txt/argv-tilde/for	"[presence_id=fp-argv-apos2@pbx.example.com,v=\\'its ok\\',sentinel=s]loopback/9199/test"
+flat/g-fp-argv-bsbs.A.txt/api/raw	"[presence_id=fp-argv-bsbs@pbx.example.com,v=a\\b,sentinel=s]loopback/9199/test"
+flat/g-fp-argv-bsbs.A.txt/api/for	"[presence_id=fp-argv-bsbs@pbx.example.com,v=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b,sentinel=s]loopback/9199/test"
+flat/g-fp-argv-bsbs.A.txt/api/leg0	["raw=[presence_id=fp-argv-bsbs@pbx.example.com,v=a\\b,sentinel=s]loopback/9199/test", "presence_id=fp-argv-bsbs@pbx.example.com"]
+flat/g-fp-argv-bsbs.A.txt/argv-tilde/raw	"[presence_id=fp-argv-bsbs@pbx.example.com,v=a\\\\b,sentinel=s]loopback/9199/test"
+flat/g-fp-argv-bsn.A.txt/api/raw	"[presence_id=fp-argv-bsn@pbx.example.com,v=a\\nb,sentinel=s]loopback/9199/test"
+flat/g-fp-argv-bsn.A.txt/api/for	"[presence_id=fp-argv-bsn@pbx.example.com,v=a\nb,sentinel=s]loopback/9199/test"
+flat/g-fp-argv-bsn.A.txt/api/leg0	["raw=[presence_id=fp-argv-bsn@pbx.example.com,v=a\\nb,sentinel=s]loopback/9199/test", "presence_id=fp-argv-bsn@pbx.example.com"]
+flat/g-fp-argv-bsn.A.txt/argv-tilde/raw	"[presence_id=fp-argv-bsn@pbx.example.com,v=a\\\\nb,sentinel=s]loopback/9199/test"
+flat/g-fp-argv-bsn.A.txt/argv-tilde/for	"[presence_id=fp-argv-bsn@pbx.example.com,v=a\\nb,sentinel=s]loopback/9199/test"
+flat/g-fp-argv-bsq.A.txt/api/raw	"[presence_id=fp-argv-bsq@pbx.example.com,v=ab,sentinel=s]loopback/9199/test"
+flat/g-fp-argv-bsq.A.txt/api/leg0	["raw=[presence_id=fp-argv-bsq@pbx.example.com,v=ab,sentinel=s]loopback/9199/test", "presence_id=fp-argv-bsq@pbx.example.com"]
+flat/g-fp-argv-bss.A.txt/api/raw	"[presence_id=fp-argv-bss@pbx.example.com,v=a\\sb,sentinel=s]loopback/9199/test"
+flat/g-fp-argv-bss.A.txt/api/for	"[presence_id=fp-argv-bss@pbx.example.com,v='a b',sentinel=s]loopback/9199/test"
+flat/g-fp-argv-bss.A.txt/api/leg0	["raw=[presence_id=fp-argv-bss@pbx.example.com,v=a\\sb,sentinel=s]loopback/9199/test", "presence_id=fp-argv-bss@pbx.example.com"]
+flat/g-fp-argv-bss.A.txt/argv-tilde/raw	"[presence_id=fp-argv-bss@pbx.example.com,v=a\\\\sb,sentinel=s]loopback/9199/test"
+flat/g-fp-argv-bss.A.txt/argv-tilde/for	"[presence_id=fp-argv-bss@pbx.example.com,v=\\'a b\\',sentinel=s]loopback/9199/test"
+flat/g-fp-argv-bstilde.A.txt/api/raw	"[presence_id=fp-argv-bstilde@pbx.example.com,v=a\\~b,sentinel=s]loopback/9199/test"
+flat/g-fp-argv-bstilde.A.txt/api/for	"[presence_id=fp-argv-bstilde@pbx.example.com,v=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\~b,sentinel=s]loopback/9199/test"
+flat/g-fp-argv-bstilde.A.txt/api/leg0	["raw=[presence_id=fp-argv-bstilde@pbx.example.com,v=a\\~b,sentinel=s]loopback/9199/test", "presence_id=fp-argv-bstilde@pbx.example.com"]
+flat/g-fp-argv-bstilde.A.txt/argv-tilde/raw	"[presence_id=fp-argv-bstilde@pbx.example.com,v=a\\\\\\~b,sentinel=s]loopback/9199/test"
+flat/g-fp-argv-bstilde.A.txt/argv-tilde/for	"[presence_id=fp-argv-bstilde@pbx.example.com,v=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\~b,sentinel=s]loopback/9199/test"
+flat/g-fp-argv-caret.A.txt/api/raw	"[^^:presence_id=fp-argv-caret@pbx.example.com:sentinel=s:k=a:j=b]loopback/9199/test"
+flat/g-fp-argv-caret.A.txt/api/leg0	["raw=[^^:presence_id=fp-argv-caret@pbx.example.com:sentinel=s:k=a:j=b]loopback/9199/test", "presence_id=fp-argv-caret@pbx.example.com"]
+flat/g-fp-argv-epbs.A.txt/api/raw	"[presence_id=fp-argv-epbs@pbx.example.com,sentinel=s]loopback/9199/test\\,[presence_id=fp-argv-epbs@pbx.example.com,sentinel=s2]loopback/9199/test"
+flat/g-fp-argv-epbs.A.txt/api/for	"[presence_id=fp-argv-epbs@pbx.example.com,sentinel=s]loopback/9199/test\\,[presence_id=fp-argv-epbs@pbx.example.com\u{2}sentinel=s2]loopback/9199/test"
+flat/g-fp-argv-epbs.A.txt/api/leg0	["raw=[presence_id=fp-argv-epbs@pbx.example.com,sentinel=s]loopback/9199/test\\,[presence_id=fp-argv-epbs@pbx.example.com,sentinel=s2]loopback/9199/test", "presence_id=fp-argv-epbs@pbx.example.com"]
+flat/g-fp-argv-epbs.A.txt/argv-tilde/raw	"[presence_id=fp-argv-epbs@pbx.example.com,sentinel=s]loopback/9199/test\\\\,[presence_id=fp-argv-epbs@pbx.example.com,sentinel=s2]loopback/9199/test"
+flat/g-fp-argv-epbs.A.txt/argv-tilde/for	"[presence_id=fp-argv-epbs@pbx.example.com,sentinel=s]loopback/9199/test\\\\,[presence_id=fp-argv-epbs@pbx.example.com\u{2}sentinel=s2]loopback/9199/test"
+flat/g-fp-argv-lastesc.A.txt/api/raw	"[presence_id=fp-argv-lastesc@pbx.example.com,sentinel=s,v=x\\~]loopback/9199/test,[presence_id=fp-argv-lastesc@pbx.example.com,sentinel=s2]loopback/9199/test"
+flat/g-fp-argv-lastesc.A.txt/api/for	"[presence_id=fp-argv-lastesc@pbx.example.com,sentinel=s,v=x\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\~]loopback/9199/test,[presence_id=fp-argv-lastesc@pbx.example.com,sentinel=s2]loopback/9199/test"
+flat/g-fp-argv-lastesc.A.txt/api/leg0	["raw=[presence_id=fp-argv-lastesc@pbx.example.com,sentinel=s,v=x\\~]loopback/9199/test", "presence_id=fp-argv-lastesc@pbx.example.com"]
+flat/g-fp-argv-lastesc.A.txt/api/leg1	["raw=[presence_id=fp-argv-lastesc@pbx.example.com,sentinel=s2]loopback/9199/test", "presence_id=fp-argv-lastesc@pbx.example.com"]
+flat/g-fp-argv-lastesc.A.txt/argv-tilde/raw	"[presence_id=fp-argv-lastesc@pbx.example.com,sentinel=s,v=x\\\\\\~]loopback/9199/test,[presence_id=fp-argv-lastesc@pbx.example.com,sentinel=s2]loopback/9199/test"
+flat/g-fp-argv-lastesc.A.txt/argv-tilde/for	"[presence_id=fp-argv-lastesc@pbx.example.com,sentinel=s,v=x\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\~]loopback/9199/test,[presence_id=fp-argv-lastesc@pbx.example.com,sentinel=s2]loopback/9199/test"
+flat/g-fp-argv-leg2.A.txt/api/err	"Err"
+flat/g-fp-argv-leg2.A.txt/dialplan/raw	"[presence_id=fp-argv-leg2@pbx.example.com,v=a b~c\\d,sentinel=s]loopback/9199/test,[presence_id=fp-argv-leg2@pbx.example.com,sentinel=s2]loopback/9199/test"
+flat/g-fp-argv-leg2.A.txt/dialplan/for	"[presence_id=fp-argv-leg2@pbx.example.com,v='a b~c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\d',sentinel=s]loopback/9199/test,[presence_id=fp-argv-leg2@pbx.example.com,sentinel=s2]loopback/9199/test"
+flat/g-fp-argv-leg2.A.txt/dialplan/leg0	["raw=[presence_id=fp-argv-leg2@pbx.example.com,v=a b~c\\d,sentinel=s]loopback/9199/test", "presence_id=fp-argv-leg2@pbx.example.com"]
+flat/g-fp-argv-leg2.A.txt/dialplan/leg1	["raw=[presence_id=fp-argv-leg2@pbx.example.com,sentinel=s2]loopback/9199/test", "presence_id=fp-argv-leg2@pbx.example.com"]
+flat/g-fp-argv-leg2.A.txt/argv-tilde/raw	"[presence_id=fp-argv-leg2@pbx.example.com,v=a b\\~c\\\\d,sentinel=s]loopback/9199/test,[presence_id=fp-argv-leg2@pbx.example.com,sentinel=s2]loopback/9199/test"
+flat/g-fp-argv-leg2.A.txt/argv-tilde/for	"[presence_id=fp-argv-leg2@pbx.example.com,v=\\'a b\\~c\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\d\\',sentinel=s]loopback/9199/test,[presence_id=fp-argv-leg2@pbx.example.com,sentinel=s2]loopback/9199/test"
+flat/g-fp-argv-space.A.txt/api/err	"Err"
+flat/g-fp-argv-space.A.txt/dialplan/raw	"[presence_id=fp-argv-space@pbx.example.com,v=a b,sentinel=s]loopback/9199/test"
+flat/g-fp-argv-space.A.txt/dialplan/for	"[presence_id=fp-argv-space@pbx.example.com,v='a b',sentinel=s]loopback/9199/test"
+flat/g-fp-argv-space.A.txt/dialplan/leg0	["raw=[presence_id=fp-argv-space@pbx.example.com,v=a b,sentinel=s]loopback/9199/test", "presence_id=fp-argv-space@pbx.example.com"]
+flat/g-fp-argv-space.A.txt/argv-tilde/raw	"[presence_id=fp-argv-space@pbx.example.com,v=a b,sentinel=s]loopback/9199/test"
+flat/g-fp-argv-space.A.txt/argv-tilde/for	"[presence_id=fp-argv-space@pbx.example.com,v=\\'a b\\',sentinel=s]loopback/9199/test"
+flat/g-fp-argv-tilde.A.txt/api/raw	"[presence_id=fp-argv-tilde@pbx.example.com,v=x~y,sentinel=s]loopback/9199/test"
+flat/g-fp-argv-tilde.A.txt/api/leg0	["raw=[presence_id=fp-argv-tilde@pbx.example.com,v=x~y,sentinel=s]loopback/9199/test", "presence_id=fp-argv-tilde@pbx.example.com"]
+flat/g-fp-argv-tilde.A.txt/argv-tilde/raw	"[presence_id=fp-argv-tilde@pbx.example.com,v=x\\~y,sentinel=s]loopback/9199/test"
+flat/g-fp-argv-tilde.A.txt/argv-tilde/for	"[presence_id=fp-argv-tilde@pbx.example.com,v=x\\~y,sentinel=s]loopback/9199/test"
+flat/g-fp-argv-trail-last.A.txt/api/raw	"[presence_id=fp-argv-trail-last@pbx.example.com,sentinel=s,v=end\\]loopback/9199/test"
+flat/g-fp-argv-trail-last.A.txt/api/for	"[presence_id=fp-argv-trail-last@pbx.example.com,sentinel=s,v=end\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'\\\\\\']loopback/9199/test"
+flat/g-fp-argv-trail-last.A.txt/api/leg0	["raw=[presence_id=fp-argv-trail-last@pbx.example.com,sentinel=s,v=end\\]loopback/9199/test", "presence_id=fp-argv-trail-last@pbx.example.com"]
+flat/g-fp-argv-trail-last.A.txt/dialplan/for	"[presence_id=fp-argv-trail-last@pbx.example.com,sentinel=s,v=end\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'\\\\']loopback/9199/test"
+flat/g-fp-argv-trail-last.A.txt/argv-tilde/raw	"[presence_id=fp-argv-trail-last@pbx.example.com,sentinel=s,v=end\\\\]loopback/9199/test"
+flat/g-fp-argv-trail-mid.A.txt/api/raw	"[presence_id=fp-argv-trail-mid@pbx.example.com,v=end\\,sentinel=s]loopback/9199/test"
+flat/g-fp-argv-trail-mid.A.txt/api/leg0	["raw=[presence_id=fp-argv-trail-mid@pbx.example.com,v=end\\,sentinel=s]loopback/9199/test", "presence_id=fp-argv-trail-mid@pbx.example.com"]
+flat/g-fp-argv-trail-mid.A.txt/argv-tilde/raw	"[presence_id=fp-argv-trail-mid@pbx.example.com,v=end\\\\,sentinel=s]loopback/9199/test"
+flat/g-fp-argv-trail-mid.A.txt/argv-tilde/for	"[presence_id=fp-argv-trail-mid@pbx.example.com,v=end\\\\,sentinel=s]loopback/9199/test"
+flat/g-fp-ent.A.txt/api/raw	"[presence_id=fp-ent@pbx.example.com]loopback/9199/test:_:loopback/9199/test,[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test"
+flat/g-fp-ent.A.txt/api/leg0	["raw=[presence_id=fp-ent@pbx.example.com]loopback/9199/test", "presence_id=fp-ent@pbx.example.com"]
+flat/g-fp-ent.A.txt/api/leg1	["raw=loopback/9199/test"]
+flat/g-fp-ent.A.txt/api/leg2	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test", "presence_id=fp-static@pbx.example.com"]
+flat/g-fp-ent.AF.txt/api/raw	"[presence_id=fp-ent@pbx.example.com]loopback/9199/test:_:loopback/9199/test|[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test"
+flat/g-fp-ent.AF.txt/api/leg0	["raw=[presence_id=fp-ent@pbx.example.com]loopback/9199/test", "presence_id=fp-ent@pbx.example.com"]
+flat/g-fp-ent.AF.txt/api/leg1	["raw=loopback/9199/test"]
+flat/g-fp-ent.AF.txt/api/leg2	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test", "presence_id=fp-static@pbx.example.com"]
+flat/g-fp-ent.E.txt/api/raw	"[presence_id=fp-ent@pbx.example.com]loopback/9199/test:_:loopback/9199/test:_:[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test"
+flat/g-fp-ent.E.txt/api/leg0	["raw=[presence_id=fp-ent@pbx.example.com]loopback/9199/test", "presence_id=fp-ent@pbx.example.com"]
+flat/g-fp-ent.E.txt/api/leg1	["raw=loopback/9199/test"]
+flat/g-fp-ent.E.txt/api/leg2	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test", "presence_id=fp-static@pbx.example.com"]
+flat/g-fp-ent.F.txt/api/raw	"[presence_id=fp-ent@pbx.example.com]loopback/9199/test:_:loopback/9199/test|[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test"
+flat/g-fp-ent.F.txt/api/leg0	["raw=[presence_id=fp-ent@pbx.example.com]loopback/9199/test", "presence_id=fp-ent@pbx.example.com"]
+flat/g-fp-ent.F.txt/api/leg1	["raw=loopback/9199/test"]
+flat/g-fp-ent.F.txt/api/leg2	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test", "presence_id=fp-static@pbx.example.com"]
+flat/g-fp-ent.none.txt/api/raw	"[presence_id=fp-ent@pbx.example.com]loopback/9199/test:_:loopback/9199/test,[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test"
+flat/g-fp-ent.none.txt/api/leg0	["raw=[presence_id=fp-ent@pbx.example.com]loopback/9199/test", "presence_id=fp-ent@pbx.example.com"]
+flat/g-fp-ent.none.txt/api/leg1	["raw=loopback/9199/test"]
+flat/g-fp-ent.none.txt/api/leg2	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test", "presence_id=fp-static@pbx.example.com"]
+flat/g-fp-err-bogus.A.txt/api/raw	"[presence_id=fp-err-bogus@pbx.example.com]error/NOT_A_CAUSE"
+flat/g-fp-err-bogus.A.txt/api/leg0	["raw=[presence_id=fp-err-bogus@pbx.example.com]error/NOT_A_CAUSE", "presence_id=fp-err-bogus@pbx.example.com", "cause=NOT_A_CAUSE", "unrecognized"]
+flat/g-fp-err-bogus.AF.txt/api/raw	"[presence_id=fp-err-bogus@pbx.example.com]error/NOT_A_CAUSE"
+flat/g-fp-err-bogus.AF.txt/api/leg0	["raw=[presence_id=fp-err-bogus@pbx.example.com]error/NOT_A_CAUSE", "presence_id=fp-err-bogus@pbx.example.com", "cause=NOT_A_CAUSE", "unrecognized"]
+flat/g-fp-err-bogus.E.txt/api/raw	"[presence_id=fp-err-bogus@pbx.example.com]error/NOT_A_CAUSE"
+flat/g-fp-err-bogus.E.txt/api/leg0	["raw=[presence_id=fp-err-bogus@pbx.example.com]error/NOT_A_CAUSE", "presence_id=fp-err-bogus@pbx.example.com", "cause=NOT_A_CAUSE", "unrecognized"]
+flat/g-fp-err-bogus.F.txt/api/raw	"[presence_id=fp-err-bogus@pbx.example.com]error/NOT_A_CAUSE"
+flat/g-fp-err-bogus.F.txt/api/leg0	["raw=[presence_id=fp-err-bogus@pbx.example.com]error/NOT_A_CAUSE", "presence_id=fp-err-bogus@pbx.example.com", "cause=NOT_A_CAUSE", "unrecognized"]
+flat/g-fp-err-bogus.none.txt/api/raw	"[presence_id=fp-err-bogus@pbx.example.com]error/NOT_A_CAUSE"
+flat/g-fp-err-bogus.none.txt/api/leg0	["raw=[presence_id=fp-err-bogus@pbx.example.com]error/NOT_A_CAUSE", "presence_id=fp-err-bogus@pbx.example.com", "cause=NOT_A_CAUSE", "unrecognized"]
+flat/g-fp-err-empty.A.txt/api/raw	"[presence_id=fp-err-empty@pbx.example.com]error/"
+flat/g-fp-err-empty.A.txt/api/leg0	["raw=[presence_id=fp-err-empty@pbx.example.com]error/", "presence_id=fp-err-empty@pbx.example.com", "cause=", "unrecognized"]
+flat/g-fp-err-empty.AF.txt/api/raw	"[presence_id=fp-err-empty@pbx.example.com]error/"
+flat/g-fp-err-empty.AF.txt/api/leg0	["raw=[presence_id=fp-err-empty@pbx.example.com]error/", "presence_id=fp-err-empty@pbx.example.com", "cause=", "unrecognized"]
+flat/g-fp-err-empty.E.txt/api/raw	"[presence_id=fp-err-empty@pbx.example.com]error/"
+flat/g-fp-err-empty.E.txt/api/leg0	["raw=[presence_id=fp-err-empty@pbx.example.com]error/", "presence_id=fp-err-empty@pbx.example.com", "cause=", "unrecognized"]
+flat/g-fp-err-empty.F.txt/api/raw	"[presence_id=fp-err-empty@pbx.example.com]error/"
+flat/g-fp-err-empty.F.txt/api/leg0	["raw=[presence_id=fp-err-empty@pbx.example.com]error/", "presence_id=fp-err-empty@pbx.example.com", "cause=", "unrecognized"]
+flat/g-fp-err-empty.none.txt/api/raw	"[presence_id=fp-err-empty@pbx.example.com]error/"
+flat/g-fp-err-empty.none.txt/api/leg0	["raw=[presence_id=fp-err-empty@pbx.example.com]error/", "presence_id=fp-err-empty@pbx.example.com", "cause=", "unrecognized"]
+flat/g-fp-err-lower.A.txt/api/raw	"[presence_id=fp-err-lower@pbx.example.com]error/user_busy"
+flat/g-fp-err-lower.A.txt/api/leg0	["raw=[presence_id=fp-err-lower@pbx.example.com]error/user_busy", "presence_id=fp-err-lower@pbx.example.com", "cause=user_busy", "name=USER_BUSY/17"]
+flat/g-fp-err-lower.AF.txt/api/raw	"[presence_id=fp-err-lower@pbx.example.com]error/user_busy"
+flat/g-fp-err-lower.AF.txt/api/leg0	["raw=[presence_id=fp-err-lower@pbx.example.com]error/user_busy", "presence_id=fp-err-lower@pbx.example.com", "cause=user_busy", "name=USER_BUSY/17"]
+flat/g-fp-err-lower.E.txt/api/raw	"[presence_id=fp-err-lower@pbx.example.com]error/user_busy"
+flat/g-fp-err-lower.E.txt/api/leg0	["raw=[presence_id=fp-err-lower@pbx.example.com]error/user_busy", "presence_id=fp-err-lower@pbx.example.com", "cause=user_busy", "name=USER_BUSY/17"]
+flat/g-fp-err-lower.F.txt/api/raw	"[presence_id=fp-err-lower@pbx.example.com]error/user_busy"
+flat/g-fp-err-lower.F.txt/api/leg0	["raw=[presence_id=fp-err-lower@pbx.example.com]error/user_busy", "presence_id=fp-err-lower@pbx.example.com", "cause=user_busy", "name=USER_BUSY/17"]
+flat/g-fp-err-lower.none.txt/api/raw	"[presence_id=fp-err-lower@pbx.example.com]error/user_busy"
+flat/g-fp-err-lower.none.txt/api/leg0	["raw=[presence_id=fp-err-lower@pbx.example.com]error/user_busy", "presence_id=fp-err-lower@pbx.example.com", "cause=user_busy", "name=USER_BUSY/17"]
+flat/g-fp-err-num.A.txt/api/raw	"[presence_id=fp-err-num@pbx.example.com]error/17"
+flat/g-fp-err-num.A.txt/api/leg0	["raw=[presence_id=fp-err-num@pbx.example.com]error/17", "presence_id=fp-err-num@pbx.example.com", "cause=17", "number=17"]
+flat/g-fp-err-num.AF.txt/api/raw	"[presence_id=fp-err-num@pbx.example.com]error/17"
+flat/g-fp-err-num.AF.txt/api/leg0	["raw=[presence_id=fp-err-num@pbx.example.com]error/17", "presence_id=fp-err-num@pbx.example.com", "cause=17", "number=17"]
+flat/g-fp-err-num.E.txt/api/raw	"[presence_id=fp-err-num@pbx.example.com]error/17"
+flat/g-fp-err-num.E.txt/api/leg0	["raw=[presence_id=fp-err-num@pbx.example.com]error/17", "presence_id=fp-err-num@pbx.example.com", "cause=17", "number=17"]
+flat/g-fp-err-num.F.txt/api/raw	"[presence_id=fp-err-num@pbx.example.com]error/17"
+flat/g-fp-err-num.F.txt/api/leg0	["raw=[presence_id=fp-err-num@pbx.example.com]error/17", "presence_id=fp-err-num@pbx.example.com", "cause=17", "number=17"]
+flat/g-fp-err-num.none.txt/api/raw	"[presence_id=fp-err-num@pbx.example.com]error/17"
+flat/g-fp-err-num.none.txt/api/leg0	["raw=[presence_id=fp-err-num@pbx.example.com]error/17", "presence_id=fp-err-num@pbx.example.com", "cause=17", "number=17"]
+flat/g-fp-err-prefix.A.txt/api/raw	"[presence_id=fp-err-prefix@pbx.example.com]error/17abc"
+flat/g-fp-err-prefix.A.txt/api/leg0	["raw=[presence_id=fp-err-prefix@pbx.example.com]error/17abc", "presence_id=fp-err-prefix@pbx.example.com", "cause=17abc", "number=17"]
+flat/g-fp-err-prefix.AF.txt/api/raw	"[presence_id=fp-err-prefix@pbx.example.com]error/17abc"
+flat/g-fp-err-prefix.AF.txt/api/leg0	["raw=[presence_id=fp-err-prefix@pbx.example.com]error/17abc", "presence_id=fp-err-prefix@pbx.example.com", "cause=17abc", "number=17"]
+flat/g-fp-err-prefix.E.txt/api/raw	"[presence_id=fp-err-prefix@pbx.example.com]error/17abc"
+flat/g-fp-err-prefix.E.txt/api/leg0	["raw=[presence_id=fp-err-prefix@pbx.example.com]error/17abc", "presence_id=fp-err-prefix@pbx.example.com", "cause=17abc", "number=17"]
+flat/g-fp-err-prefix.F.txt/api/raw	"[presence_id=fp-err-prefix@pbx.example.com]error/17abc"
+flat/g-fp-err-prefix.F.txt/api/leg0	["raw=[presence_id=fp-err-prefix@pbx.example.com]error/17abc", "presence_id=fp-err-prefix@pbx.example.com", "cause=17abc", "number=17"]
+flat/g-fp-err-prefix.none.txt/api/raw	"[presence_id=fp-err-prefix@pbx.example.com]error/17abc"
+flat/g-fp-err-prefix.none.txt/api/leg0	["raw=[presence_id=fp-err-prefix@pbx.example.com]error/17abc", "presence_id=fp-err-prefix@pbx.example.com", "cause=17abc", "number=17"]
+flat/g-fp-err-upper.A.txt/api/raw	"[presence_id=fp-err-upper@pbx.example.com]error/USER_BUSY"
+flat/g-fp-err-upper.A.txt/api/leg0	["raw=[presence_id=fp-err-upper@pbx.example.com]error/USER_BUSY", "presence_id=fp-err-upper@pbx.example.com", "cause=USER_BUSY", "name=USER_BUSY/17"]
+flat/g-fp-err-upper.AF.txt/api/raw	"[presence_id=fp-err-upper@pbx.example.com]error/USER_BUSY"
+flat/g-fp-err-upper.AF.txt/api/leg0	["raw=[presence_id=fp-err-upper@pbx.example.com]error/USER_BUSY", "presence_id=fp-err-upper@pbx.example.com", "cause=USER_BUSY", "name=USER_BUSY/17"]
+flat/g-fp-err-upper.E.txt/api/raw	"[presence_id=fp-err-upper@pbx.example.com]error/USER_BUSY"
+flat/g-fp-err-upper.E.txt/api/leg0	["raw=[presence_id=fp-err-upper@pbx.example.com]error/USER_BUSY", "presence_id=fp-err-upper@pbx.example.com", "cause=USER_BUSY", "name=USER_BUSY/17"]
+flat/g-fp-err-upper.F.txt/api/raw	"[presence_id=fp-err-upper@pbx.example.com]error/USER_BUSY"
+flat/g-fp-err-upper.F.txt/api/leg0	["raw=[presence_id=fp-err-upper@pbx.example.com]error/USER_BUSY", "presence_id=fp-err-upper@pbx.example.com", "cause=USER_BUSY", "name=USER_BUSY/17"]
+flat/g-fp-err-upper.none.txt/api/raw	"[presence_id=fp-err-upper@pbx.example.com]error/USER_BUSY"
+flat/g-fp-err-upper.none.txt/api/leg0	["raw=[presence_id=fp-err-upper@pbx.example.com]error/USER_BUSY", "presence_id=fp-err-upper@pbx.example.com", "cause=USER_BUSY", "name=USER_BUSY/17"]
+flat/g-fp-err-zero.A.txt/api/raw	"[presence_id=fp-err-zero@pbx.example.com]error/0"
+flat/g-fp-err-zero.A.txt/api/leg0	["raw=[presence_id=fp-err-zero@pbx.example.com]error/0", "presence_id=fp-err-zero@pbx.example.com", "cause=0", "number=0"]
+flat/g-fp-err-zero.AF.txt/api/raw	"[presence_id=fp-err-zero@pbx.example.com]error/0"
+flat/g-fp-err-zero.AF.txt/api/leg0	["raw=[presence_id=fp-err-zero@pbx.example.com]error/0", "presence_id=fp-err-zero@pbx.example.com", "cause=0", "number=0"]
+flat/g-fp-err-zero.E.txt/api/raw	"[presence_id=fp-err-zero@pbx.example.com]error/0"
+flat/g-fp-err-zero.E.txt/api/leg0	["raw=[presence_id=fp-err-zero@pbx.example.com]error/0", "presence_id=fp-err-zero@pbx.example.com", "cause=0", "number=0"]
+flat/g-fp-err-zero.F.txt/api/raw	"[presence_id=fp-err-zero@pbx.example.com]error/0"
+flat/g-fp-err-zero.F.txt/api/leg0	["raw=[presence_id=fp-err-zero@pbx.example.com]error/0", "presence_id=fp-err-zero@pbx.example.com", "cause=0", "number=0"]
+flat/g-fp-err-zero.none.txt/api/raw	"[presence_id=fp-err-zero@pbx.example.com]error/0"
+flat/g-fp-err-zero.none.txt/api/leg0	["raw=[presence_id=fp-err-zero@pbx.example.com]error/0", "presence_id=fp-err-zero@pbx.example.com", "cause=0", "number=0"]
+flat/g-fp-esc-bracket.A.txt/api/raw	"[presence_id=fp-esc-bracket@pbx.example.com,p=x]y]loopback/9199/test"
+flat/g-fp-esc-bracket.A.txt/api/leg0	["raw=[presence_id=fp-esc-bracket@pbx.example.com,p=x]y]loopback/9199/test", "presence_id=fp-esc-bracket@pbx.example.com"]
+flat/g-fp-esc-bracket.AF.txt/api/raw	"[presence_id=fp-esc-bracket@pbx.example.com,p=x]y]loopback/9199/test"
+flat/g-fp-esc-bracket.AF.txt/api/leg0	["raw=[presence_id=fp-esc-bracket@pbx.example.com,p=x]y]loopback/9199/test", "presence_id=fp-esc-bracket@pbx.example.com"]
+flat/g-fp-esc-bracket.E.txt/api/raw	"[presence_id=fp-esc-bracket@pbx.example.com,p=x]y]loopback/9199/test"
+flat/g-fp-esc-bracket.E.txt/api/leg0	["raw=[presence_id=fp-esc-bracket@pbx.example.com,p=x]y]loopback/9199/test", "presence_id=fp-esc-bracket@pbx.example.com"]
+flat/g-fp-esc-bracket.F.txt/api/raw	"[presence_id=fp-esc-bracket@pbx.example.com,p=x]y]loopback/9199/test"
+flat/g-fp-esc-bracket.F.txt/api/leg0	["raw=[presence_id=fp-esc-bracket@pbx.example.com,p=x]y]loopback/9199/test", "presence_id=fp-esc-bracket@pbx.example.com"]
+flat/g-fp-esc-bracket.none.txt/api/raw	"[presence_id=fp-esc-bracket@pbx.example.com,p=x]y]loopback/9199/test"
+flat/g-fp-esc-bracket.none.txt/api/leg0	["raw=[presence_id=fp-esc-bracket@pbx.example.com,p=x]y]loopback/9199/test", "presence_id=fp-esc-bracket@pbx.example.com"]
+flat/g-fp-esc-bs-exp.A.txt/api/raw	"[presence_id=fp-esc-bs-exp@pbx.example.com,path=a\\b]loopback/9199/test"
+flat/g-fp-esc-bs-exp.A.txt/api/for	"[presence_id=fp-esc-bs-exp@pbx.example.com,path=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b]loopback/9199/test"
+flat/g-fp-esc-bs-exp.A.txt/api/leg0	["raw=[presence_id=fp-esc-bs-exp@pbx.example.com,path=a\\b]loopback/9199/test", "presence_id=fp-esc-bs-exp@pbx.example.com"]
+flat/g-fp-esc-bs-exp.A.txt/argv-tilde/raw	"[presence_id=fp-esc-bs-exp@pbx.example.com,path=a\\\\b]loopback/9199/test"
+flat/g-fp-esc-bs-exp.AF.txt/api/raw	"[presence_id=fp-esc-bs-exp@pbx.example.com,path=a\\b]loopback/9199/test"
+flat/g-fp-esc-bs-exp.AF.txt/api/for	"[presence_id=fp-esc-bs-exp@pbx.example.com,path=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b]loopback/9199/test"
+flat/g-fp-esc-bs-exp.AF.txt/api/leg0	["raw=[presence_id=fp-esc-bs-exp@pbx.example.com,path=a\\b]loopback/9199/test", "presence_id=fp-esc-bs-exp@pbx.example.com"]
+flat/g-fp-esc-bs-exp.AF.txt/argv-tilde/raw	"[presence_id=fp-esc-bs-exp@pbx.example.com,path=a\\\\b]loopback/9199/test"
+flat/g-fp-esc-bs-exp.E.txt/api/raw	"[presence_id=fp-esc-bs-exp@pbx.example.com,path=a\\b]loopback/9199/test"
+flat/g-fp-esc-bs-exp.E.txt/api/for	"[presence_id=fp-esc-bs-exp@pbx.example.com,path=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b]loopback/9199/test"
+flat/g-fp-esc-bs-exp.E.txt/api/leg0	["raw=[presence_id=fp-esc-bs-exp@pbx.example.com,path=a\\b]loopback/9199/test", "presence_id=fp-esc-bs-exp@pbx.example.com"]
+flat/g-fp-esc-bs-exp.E.txt/argv-tilde/raw	"[presence_id=fp-esc-bs-exp@pbx.example.com,path=a\\\\b]loopback/9199/test"
+flat/g-fp-esc-bs-exp.F.txt/api/raw	"[presence_id=fp-esc-bs-exp@pbx.example.com,path=a\\b]loopback/9199/test"
+flat/g-fp-esc-bs-exp.F.txt/api/for	"[presence_id=fp-esc-bs-exp@pbx.example.com,path=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b]loopback/9199/test"
+flat/g-fp-esc-bs-exp.F.txt/api/leg0	["raw=[presence_id=fp-esc-bs-exp@pbx.example.com,path=a\\b]loopback/9199/test", "presence_id=fp-esc-bs-exp@pbx.example.com"]
+flat/g-fp-esc-bs-exp.F.txt/argv-tilde/raw	"[presence_id=fp-esc-bs-exp@pbx.example.com,path=a\\\\b]loopback/9199/test"
+flat/g-fp-esc-bs-exp.none.txt/api/raw	"[presence_id=fp-esc-bs-exp@pbx.example.com,path=a\\b]loopback/9199/test"
+flat/g-fp-esc-bs-exp.none.txt/api/for	"[presence_id=fp-esc-bs-exp@pbx.example.com,path=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b]loopback/9199/test"
+flat/g-fp-esc-bs-exp.none.txt/api/leg0	["raw=[presence_id=fp-esc-bs-exp@pbx.example.com,path=a\\b]loopback/9199/test", "presence_id=fp-esc-bs-exp@pbx.example.com"]
+flat/g-fp-esc-bs-exp.none.txt/argv-tilde/raw	"[presence_id=fp-esc-bs-exp@pbx.example.com,path=a\\\\b]loopback/9199/test"
+flat/g-fp-esc-bs-noexp.A.txt/api/raw	"[presence_id=fp-esc-bs-noexp@pbx.example.com,path=a\\b]loopback/9199/test"
+flat/g-fp-esc-bs-noexp.A.txt/api/for	"[presence_id=fp-esc-bs-noexp@pbx.example.com,path=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b]loopback/9199/test"
+flat/g-fp-esc-bs-noexp.A.txt/api/leg0	["raw=[presence_id=fp-esc-bs-noexp@pbx.example.com,path=a\\b]loopback/9199/test", "presence_id=fp-esc-bs-noexp@pbx.example.com"]
+flat/g-fp-esc-bs-noexp.A.txt/argv-tilde/raw	"[presence_id=fp-esc-bs-noexp@pbx.example.com,path=a\\\\b]loopback/9199/test"
+flat/g-fp-esc-bs-noexp.AF.txt/api/raw	"[presence_id=fp-esc-bs-noexp@pbx.example.com,path=a\\b]loopback/9199/test"
+flat/g-fp-esc-bs-noexp.AF.txt/api/for	"[presence_id=fp-esc-bs-noexp@pbx.example.com,path=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b]loopback/9199/test"
+flat/g-fp-esc-bs-noexp.AF.txt/api/leg0	["raw=[presence_id=fp-esc-bs-noexp@pbx.example.com,path=a\\b]loopback/9199/test", "presence_id=fp-esc-bs-noexp@pbx.example.com"]
+flat/g-fp-esc-bs-noexp.AF.txt/argv-tilde/raw	"[presence_id=fp-esc-bs-noexp@pbx.example.com,path=a\\\\b]loopback/9199/test"
+flat/g-fp-esc-bs-noexp.E.txt/api/raw	"[presence_id=fp-esc-bs-noexp@pbx.example.com,path=a\\b]loopback/9199/test"
+flat/g-fp-esc-bs-noexp.E.txt/api/for	"[presence_id=fp-esc-bs-noexp@pbx.example.com,path=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b]loopback/9199/test"
+flat/g-fp-esc-bs-noexp.E.txt/api/leg0	["raw=[presence_id=fp-esc-bs-noexp@pbx.example.com,path=a\\b]loopback/9199/test", "presence_id=fp-esc-bs-noexp@pbx.example.com"]
+flat/g-fp-esc-bs-noexp.E.txt/argv-tilde/raw	"[presence_id=fp-esc-bs-noexp@pbx.example.com,path=a\\\\b]loopback/9199/test"
+flat/g-fp-esc-bs-noexp.F.txt/api/raw	"[presence_id=fp-esc-bs-noexp@pbx.example.com,path=a\\b]loopback/9199/test"
+flat/g-fp-esc-bs-noexp.F.txt/api/for	"[presence_id=fp-esc-bs-noexp@pbx.example.com,path=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b]loopback/9199/test"
+flat/g-fp-esc-bs-noexp.F.txt/api/leg0	["raw=[presence_id=fp-esc-bs-noexp@pbx.example.com,path=a\\b]loopback/9199/test", "presence_id=fp-esc-bs-noexp@pbx.example.com"]
+flat/g-fp-esc-bs-noexp.F.txt/argv-tilde/raw	"[presence_id=fp-esc-bs-noexp@pbx.example.com,path=a\\\\b]loopback/9199/test"
+flat/g-fp-esc-bs-noexp.none.txt/api/raw	"[presence_id=fp-esc-bs-noexp@pbx.example.com,path=a\\b]loopback/9199/test"
+flat/g-fp-esc-bs-noexp.none.txt/api/for	"[presence_id=fp-esc-bs-noexp@pbx.example.com,path=a\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\b]loopback/9199/test"
+flat/g-fp-esc-bs-noexp.none.txt/api/leg0	["raw=[presence_id=fp-esc-bs-noexp@pbx.example.com,path=a\\b]loopback/9199/test", "presence_id=fp-esc-bs-noexp@pbx.example.com"]
+flat/g-fp-esc-bs-noexp.none.txt/argv-tilde/raw	"[presence_id=fp-esc-bs-noexp@pbx.example.com,path=a\\\\b]loopback/9199/test"
+flat/g-fp-esc-bs-plain.A.txt/api/raw	"[presence_id=fp-esc-bs-plain@pbx.example.com,path=a/b]loopback/9199/test"
+flat/g-fp-esc-bs-plain.A.txt/api/leg0	["raw=[presence_id=fp-esc-bs-plain@pbx.example.com,path=a/b]loopback/9199/test", "presence_id=fp-esc-bs-plain@pbx.example.com"]
+flat/g-fp-esc-bs-plain.AF.txt/api/raw	"[presence_id=fp-esc-bs-plain@pbx.example.com,path=a/b]loopback/9199/test"
+flat/g-fp-esc-bs-plain.AF.txt/api/leg0	["raw=[presence_id=fp-esc-bs-plain@pbx.example.com,path=a/b]loopback/9199/test", "presence_id=fp-esc-bs-plain@pbx.example.com"]
+flat/g-fp-esc-bs-plain.E.txt/api/raw	"[presence_id=fp-esc-bs-plain@pbx.example.com,path=a/b]loopback/9199/test"
+flat/g-fp-esc-bs-plain.E.txt/api/leg0	["raw=[presence_id=fp-esc-bs-plain@pbx.example.com,path=a/b]loopback/9199/test", "presence_id=fp-esc-bs-plain@pbx.example.com"]
+flat/g-fp-esc-bs-plain.F.txt/api/raw	"[presence_id=fp-esc-bs-plain@pbx.example.com,path=a/b]loopback/9199/test"
+flat/g-fp-esc-bs-plain.F.txt/api/leg0	["raw=[presence_id=fp-esc-bs-plain@pbx.example.com,path=a/b]loopback/9199/test", "presence_id=fp-esc-bs-plain@pbx.example.com"]
+flat/g-fp-esc-bs-plain.none.txt/api/raw	"[presence_id=fp-esc-bs-plain@pbx.example.com,path=a/b]loopback/9199/test"
+flat/g-fp-esc-bs-plain.none.txt/api/leg0	["raw=[presence_id=fp-esc-bs-plain@pbx.example.com,path=a/b]loopback/9199/test", "presence_id=fp-esc-bs-plain@pbx.example.com"]
+flat/g-fp-esc-comma.A.txt/api/raw	"[^^:presence_id=fp-esc-comma@pbx.example.com:codecs=PCMA,PCMU]loopback/9199/test"
+flat/g-fp-esc-comma.A.txt/api/leg0	["raw=[^^:presence_id=fp-esc-comma@pbx.example.com:codecs=PCMA,PCMU]loopback/9199/test", "presence_id=fp-esc-comma@pbx.example.com"]
+flat/g-fp-esc-comma.AF.txt/api/raw	"[^^:presence_id=fp-esc-comma@pbx.example.com:codecs=PCMA,PCMU]loopback/9199/test"
+flat/g-fp-esc-comma.AF.txt/api/leg0	["raw=[^^:presence_id=fp-esc-comma@pbx.example.com:codecs=PCMA,PCMU]loopback/9199/test", "presence_id=fp-esc-comma@pbx.example.com"]
+flat/g-fp-esc-comma.E.txt/api/raw	"[^^:presence_id=fp-esc-comma@pbx.example.com:codecs=PCMA,PCMU]loopback/9199/test"
+flat/g-fp-esc-comma.E.txt/api/leg0	["raw=[^^:presence_id=fp-esc-comma@pbx.example.com:codecs=PCMA,PCMU]loopback/9199/test", "presence_id=fp-esc-comma@pbx.example.com"]
+flat/g-fp-esc-comma.F.txt/api/raw	"[^^:presence_id=fp-esc-comma@pbx.example.com:codecs=PCMA,PCMU]loopback/9199/test"
+flat/g-fp-esc-comma.F.txt/api/leg0	["raw=[^^:presence_id=fp-esc-comma@pbx.example.com:codecs=PCMA,PCMU]loopback/9199/test", "presence_id=fp-esc-comma@pbx.example.com"]
+flat/g-fp-esc-comma.none.txt/api/raw	"[^^:presence_id=fp-esc-comma@pbx.example.com:codecs=PCMA,PCMU]loopback/9199/test"
+flat/g-fp-esc-comma.none.txt/api/leg0	["raw=[^^:presence_id=fp-esc-comma@pbx.example.com:codecs=PCMA,PCMU]loopback/9199/test", "presence_id=fp-esc-comma@pbx.example.com"]
+flat/g-fp-esc-emptyval.A.txt/api/raw	"[presence_id=fp-esc-emptyval@pbx.example.com,sentinel=s,k=]loopback/9199/test"
+flat/g-fp-esc-emptyval.A.txt/api/for	"[presence_id=fp-esc-emptyval@pbx.example.com,sentinel=s]loopback/9199/test"
+flat/g-fp-esc-emptyval.A.txt/api/leg0	["raw=[presence_id=fp-esc-emptyval@pbx.example.com,sentinel=s,k=]loopback/9199/test", "presence_id=fp-esc-emptyval@pbx.example.com"]
+flat/g-fp-esc-emptyval.AF.txt/api/raw	"[presence_id=fp-esc-emptyval@pbx.example.com,sentinel=s,k=]loopback/9199/test"
+flat/g-fp-esc-emptyval.AF.txt/api/for	"[presence_id=fp-esc-emptyval@pbx.example.com,sentinel=s]loopback/9199/test"
+flat/g-fp-esc-emptyval.AF.txt/api/leg0	["raw=[presence_id=fp-esc-emptyval@pbx.example.com,sentinel=s,k=]loopback/9199/test", "presence_id=fp-esc-emptyval@pbx.example.com"]
+flat/g-fp-esc-emptyval.E.txt/api/raw	"[presence_id=fp-esc-emptyval@pbx.example.com,sentinel=s,k=]loopback/9199/test"
+flat/g-fp-esc-emptyval.E.txt/api/for	"[presence_id=fp-esc-emptyval@pbx.example.com,sentinel=s]loopback/9199/test"
+flat/g-fp-esc-emptyval.E.txt/api/leg0	["raw=[presence_id=fp-esc-emptyval@pbx.example.com,sentinel=s,k=]loopback/9199/test", "presence_id=fp-esc-emptyval@pbx.example.com"]
+flat/g-fp-esc-emptyval.F.txt/api/raw	"[presence_id=fp-esc-emptyval@pbx.example.com,sentinel=s,k=]loopback/9199/test"
+flat/g-fp-esc-emptyval.F.txt/api/for	"[presence_id=fp-esc-emptyval@pbx.example.com,sentinel=s]loopback/9199/test"
+flat/g-fp-esc-emptyval.F.txt/api/leg0	["raw=[presence_id=fp-esc-emptyval@pbx.example.com,sentinel=s,k=]loopback/9199/test", "presence_id=fp-esc-emptyval@pbx.example.com"]
+flat/g-fp-esc-emptyval.none.txt/api/raw	"[presence_id=fp-esc-emptyval@pbx.example.com,sentinel=s,k=]loopback/9199/test"
+flat/g-fp-esc-emptyval.none.txt/api/for	"[presence_id=fp-esc-emptyval@pbx.example.com,sentinel=s]loopback/9199/test"
+flat/g-fp-esc-emptyval.none.txt/api/leg0	["raw=[presence_id=fp-esc-emptyval@pbx.example.com,sentinel=s,k=]loopback/9199/test", "presence_id=fp-esc-emptyval@pbx.example.com"]
+flat/g-fp-esc-nested.A.txt/api/raw	"[presence_id=fp-esc-nested@pbx.example.com,sentinel=s,nv=${fp_x}]loopback/9199/test"
+flat/g-fp-esc-nested.A.txt/api/leg0	["raw=[presence_id=fp-esc-nested@pbx.example.com,sentinel=s,nv=${fp_x}]loopback/9199/test", "presence_id=fp-esc-nested@pbx.example.com"]
+flat/g-fp-esc-nested.AF.txt/api/raw	"[presence_id=fp-esc-nested@pbx.example.com,sentinel=s,nv=${fp_x}]loopback/9199/test"
+flat/g-fp-esc-nested.AF.txt/api/leg0	["raw=[presence_id=fp-esc-nested@pbx.example.com,sentinel=s,nv=${fp_x}]loopback/9199/test", "presence_id=fp-esc-nested@pbx.example.com"]
+flat/g-fp-esc-nested.E.txt/api/raw	"[presence_id=fp-esc-nested@pbx.example.com,sentinel=s,nv=${fp_x}]loopback/9199/test"
+flat/g-fp-esc-nested.E.txt/api/leg0	["raw=[presence_id=fp-esc-nested@pbx.example.com,sentinel=s,nv=${fp_x}]loopback/9199/test", "presence_id=fp-esc-nested@pbx.example.com"]
+flat/g-fp-esc-nested.F.txt/api/raw	"[presence_id=fp-esc-nested@pbx.example.com,sentinel=s,nv=${fp_x}]loopback/9199/test"
+flat/g-fp-esc-nested.F.txt/api/leg0	["raw=[presence_id=fp-esc-nested@pbx.example.com,sentinel=s,nv=${fp_x}]loopback/9199/test", "presence_id=fp-esc-nested@pbx.example.com"]
+flat/g-fp-esc-nested.none.txt/api/raw	"[presence_id=fp-esc-nested@pbx.example.com,sentinel=s,nv=${fp_x}]loopback/9199/test"
+flat/g-fp-esc-nested.none.txt/api/leg0	["raw=[presence_id=fp-esc-nested@pbx.example.com,sentinel=s,nv=${fp_x}]loopback/9199/test", "presence_id=fp-esc-nested@pbx.example.com"]
+flat/g-fp-esc-pipe.A.txt/api/err	"Err"
+flat/g-fp-esc-pipe.AF.txt/api/err	"Err"
+flat/g-fp-esc-pipe.E.txt/api/err	"Err"
+flat/g-fp-esc-pipe.F.txt/api/err	"Err"
+flat/g-fp-esc-pipe.none.txt/api/err	"Err"
+flat/g-fp-esc-quotedempty.A.txt/api/raw	"[presence_id=fp-esc-quotedempty@pbx.example.com,k=1][sentinel=s,k='']loopback/9199/test"
+flat/g-fp-esc-quotedempty.A.txt/api/for	"[presence_id=fp-esc-quotedempty@pbx.example.com,k=1][sentinel=s]loopback/9199/test"
+flat/g-fp-esc-quotedempty.A.txt/api/leg0	["raw=[presence_id=fp-esc-quotedempty@pbx.example.com,k=1][sentinel=s,k='']loopback/9199/test", "presence_id=fp-esc-quotedempty@pbx.example.com"]
+flat/g-fp-esc-quotedempty.A.txt/argv-tilde/raw	"[presence_id=fp-esc-quotedempty@pbx.example.com,k=1][sentinel=s,k=\\'\\']loopback/9199/test"
+flat/g-fp-esc-quotedempty.AF.txt/api/raw	"[presence_id=fp-esc-quotedempty@pbx.example.com,k=1][sentinel=s,k='']loopback/9199/test"
+flat/g-fp-esc-quotedempty.AF.txt/api/for	"[presence_id=fp-esc-quotedempty@pbx.example.com,k=1][sentinel=s]loopback/9199/test"
+flat/g-fp-esc-quotedempty.AF.txt/api/leg0	["raw=[presence_id=fp-esc-quotedempty@pbx.example.com,k=1][sentinel=s,k='']loopback/9199/test", "presence_id=fp-esc-quotedempty@pbx.example.com"]
+flat/g-fp-esc-quotedempty.AF.txt/argv-tilde/raw	"[presence_id=fp-esc-quotedempty@pbx.example.com,k=1][sentinel=s,k=\\'\\']loopback/9199/test"
+flat/g-fp-esc-quotedempty.E.txt/api/raw	"[presence_id=fp-esc-quotedempty@pbx.example.com,k=1][sentinel=s,k='']loopback/9199/test"
+flat/g-fp-esc-quotedempty.E.txt/api/for	"[presence_id=fp-esc-quotedempty@pbx.example.com,k=1][sentinel=s]loopback/9199/test"
+flat/g-fp-esc-quotedempty.E.txt/api/leg0	["raw=[presence_id=fp-esc-quotedempty@pbx.example.com,k=1][sentinel=s,k='']loopback/9199/test", "presence_id=fp-esc-quotedempty@pbx.example.com"]
+flat/g-fp-esc-quotedempty.E.txt/argv-tilde/raw	"[presence_id=fp-esc-quotedempty@pbx.example.com,k=1][sentinel=s,k=\\'\\']loopback/9199/test"
+flat/g-fp-esc-quotedempty.F.txt/api/raw	"[presence_id=fp-esc-quotedempty@pbx.example.com,k=1][sentinel=s,k='']loopback/9199/test"
+flat/g-fp-esc-quotedempty.F.txt/api/for	"[presence_id=fp-esc-quotedempty@pbx.example.com,k=1][sentinel=s]loopback/9199/test"
+flat/g-fp-esc-quotedempty.F.txt/api/leg0	["raw=[presence_id=fp-esc-quotedempty@pbx.example.com,k=1][sentinel=s,k='']loopback/9199/test", "presence_id=fp-esc-quotedempty@pbx.example.com"]
+flat/g-fp-esc-quotedempty.F.txt/argv-tilde/raw	"[presence_id=fp-esc-quotedempty@pbx.example.com,k=1][sentinel=s,k=\\'\\']loopback/9199/test"
+flat/g-fp-esc-quotedempty.none.txt/api/raw	"[presence_id=fp-esc-quotedempty@pbx.example.com,k=1][sentinel=s,k='']loopback/9199/test"
+flat/g-fp-esc-quotedempty.none.txt/api/for	"[presence_id=fp-esc-quotedempty@pbx.example.com,k=1][sentinel=s]loopback/9199/test"
+flat/g-fp-esc-quotedempty.none.txt/api/leg0	["raw=[presence_id=fp-esc-quotedempty@pbx.example.com,k=1][sentinel=s,k='']loopback/9199/test", "presence_id=fp-esc-quotedempty@pbx.example.com"]
+flat/g-fp-esc-quotedempty.none.txt/argv-tilde/raw	"[presence_id=fp-esc-quotedempty@pbx.example.com,k=1][sentinel=s,k=\\'\\']loopback/9199/test"
+flat/g-fp-esc-space.A.txt/api/err	"Err"
+flat/g-fp-esc-space.A.txt/dialplan/raw	"[presence_id=fp-esc-space@pbx.example.com,greet=a b]loopback/9199/test"
+flat/g-fp-esc-space.A.txt/dialplan/for	"[presence_id=fp-esc-space@pbx.example.com,greet='a b']loopback/9199/test"
+flat/g-fp-esc-space.A.txt/dialplan/leg0	["raw=[presence_id=fp-esc-space@pbx.example.com,greet=a b]loopback/9199/test", "presence_id=fp-esc-space@pbx.example.com"]
+flat/g-fp-esc-space.A.txt/argv-tilde/raw	"[presence_id=fp-esc-space@pbx.example.com,greet=a b]loopback/9199/test"
+flat/g-fp-esc-space.A.txt/argv-tilde/for	"[presence_id=fp-esc-space@pbx.example.com,greet=\\'a b\\']loopback/9199/test"
+flat/g-fp-esc-space.AF.txt/api/err	"Err"
+flat/g-fp-esc-space.AF.txt/dialplan/raw	"[presence_id=fp-esc-space@pbx.example.com,greet=a b]loopback/9199/test"
+flat/g-fp-esc-space.AF.txt/dialplan/for	"[presence_id=fp-esc-space@pbx.example.com,greet='a b']loopback/9199/test"
+flat/g-fp-esc-space.AF.txt/dialplan/leg0	["raw=[presence_id=fp-esc-space@pbx.example.com,greet=a b]loopback/9199/test", "presence_id=fp-esc-space@pbx.example.com"]
+flat/g-fp-esc-space.AF.txt/argv-tilde/raw	"[presence_id=fp-esc-space@pbx.example.com,greet=a b]loopback/9199/test"
+flat/g-fp-esc-space.AF.txt/argv-tilde/for	"[presence_id=fp-esc-space@pbx.example.com,greet=\\'a b\\']loopback/9199/test"
+flat/g-fp-esc-space.E.txt/api/err	"Err"
+flat/g-fp-esc-space.E.txt/dialplan/raw	"[presence_id=fp-esc-space@pbx.example.com,greet=a b]loopback/9199/test"
+flat/g-fp-esc-space.E.txt/dialplan/for	"[presence_id=fp-esc-space@pbx.example.com,greet='a b']loopback/9199/test"
+flat/g-fp-esc-space.E.txt/dialplan/leg0	["raw=[presence_id=fp-esc-space@pbx.example.com,greet=a b]loopback/9199/test", "presence_id=fp-esc-space@pbx.example.com"]
+flat/g-fp-esc-space.E.txt/argv-tilde/raw	"[presence_id=fp-esc-space@pbx.example.com,greet=a b]loopback/9199/test"
+flat/g-fp-esc-space.E.txt/argv-tilde/for	"[presence_id=fp-esc-space@pbx.example.com,greet=\\'a b\\']loopback/9199/test"
+flat/g-fp-esc-space.F.txt/api/err	"Err"
+flat/g-fp-esc-space.F.txt/dialplan/raw	"[presence_id=fp-esc-space@pbx.example.com,greet=a b]loopback/9199/test"
+flat/g-fp-esc-space.F.txt/dialplan/for	"[presence_id=fp-esc-space@pbx.example.com,greet='a b']loopback/9199/test"
+flat/g-fp-esc-space.F.txt/dialplan/leg0	["raw=[presence_id=fp-esc-space@pbx.example.com,greet=a b]loopback/9199/test", "presence_id=fp-esc-space@pbx.example.com"]
+flat/g-fp-esc-space.F.txt/argv-tilde/raw	"[presence_id=fp-esc-space@pbx.example.com,greet=a b]loopback/9199/test"
+flat/g-fp-esc-space.F.txt/argv-tilde/for	"[presence_id=fp-esc-space@pbx.example.com,greet=\\'a b\\']loopback/9199/test"
+flat/g-fp-esc-space.none.txt/api/err	"Err"
+flat/g-fp-esc-space.none.txt/dialplan/raw	"[presence_id=fp-esc-space@pbx.example.com,greet=a b]loopback/9199/test"
+flat/g-fp-esc-space.none.txt/dialplan/for	"[presence_id=fp-esc-space@pbx.example.com,greet='a b']loopback/9199/test"
+flat/g-fp-esc-space.none.txt/dialplan/leg0	["raw=[presence_id=fp-esc-space@pbx.example.com,greet=a b]loopback/9199/test", "presence_id=fp-esc-space@pbx.example.com"]
+flat/g-fp-esc-space.none.txt/argv-tilde/raw	"[presence_id=fp-esc-space@pbx.example.com,greet=a b]loopback/9199/test"
+flat/g-fp-esc-space.none.txt/argv-tilde/for	"[presence_id=fp-esc-space@pbx.example.com,greet=\\'a b\\']loopback/9199/test"
+flat/g-fp-gds.A.txt/api/raw	"[presence_id=fp-gds@pbx.example.com,from=group-dial-string]loopback/9199/test"
+flat/g-fp-gds.A.txt/api/leg0	["raw=[presence_id=fp-gds@pbx.example.com,from=group-dial-string]loopback/9199/test", "presence_id=fp-gds@pbx.example.com"]
+flat/g-fp-gds.AF.txt/api/raw	"[presence_id=fp-gds@pbx.example.com,from=group-dial-string]loopback/9199/test"
+flat/g-fp-gds.AF.txt/api/leg0	["raw=[presence_id=fp-gds@pbx.example.com,from=group-dial-string]loopback/9199/test", "presence_id=fp-gds@pbx.example.com"]
+flat/g-fp-gds.E.txt/api/raw	"[presence_id=fp-gds@pbx.example.com,from=group-dial-string]loopback/9199/test"
+flat/g-fp-gds.E.txt/api/leg0	["raw=[presence_id=fp-gds@pbx.example.com,from=group-dial-string]loopback/9199/test", "presence_id=fp-gds@pbx.example.com"]
+flat/g-fp-gds.F.txt/api/raw	"[presence_id=fp-gds@pbx.example.com,from=group-dial-string]loopback/9199/test"
+flat/g-fp-gds.F.txt/api/leg0	["raw=[presence_id=fp-gds@pbx.example.com,from=group-dial-string]loopback/9199/test", "presence_id=fp-gds@pbx.example.com"]
+flat/g-fp-gds.none.txt/api/raw	"[presence_id=fp-gds@pbx.example.com,from=group-dial-string]loopback/9199/test"
+flat/g-fp-gds.none.txt/api/leg0	["raw=[presence_id=fp-gds@pbx.example.com,from=group-dial-string]loopback/9199/test", "presence_id=fp-gds@pbx.example.com"]
+flat/g-fp-nodial.A.txt/api/raw	"user/fp-nodial@pbx.example.com"
+flat/g-fp-nodial.A.txt/api/leg0	["raw=user/fp-nodial@pbx.example.com"]
+flat/g-fp-nodial.AF.txt/api/raw	"user/fp-nodial@pbx.example.com"
+flat/g-fp-nodial.AF.txt/api/leg0	["raw=user/fp-nodial@pbx.example.com"]
+flat/g-fp-nodial.E.txt/api/raw	"user/fp-nodial@pbx.example.com"
+flat/g-fp-nodial.E.txt/api/leg0	["raw=user/fp-nodial@pbx.example.com"]
+flat/g-fp-nodial.F.txt/api/raw	"user/fp-nodial@pbx.example.com"
+flat/g-fp-nodial.F.txt/api/leg0	["raw=user/fp-nodial@pbx.example.com"]
+flat/g-fp-nodial.none.txt/api/raw	"user/fp-nodial@pbx.example.com"
+flat/g-fp-nodial.none.txt/api/leg0	["raw=user/fp-nodial@pbx.example.com"]
+flat/g-fp-pipe.A.txt/api/raw	"[presence_id=fp-pipe@pbx.example.com]loopback/9199/test|[presence_id=fp-pipe@pbx.example.com]loopback/9199/test,[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test"
+flat/g-fp-pipe.A.txt/api/leg0	["raw=[presence_id=fp-pipe@pbx.example.com]loopback/9199/test", "presence_id=fp-pipe@pbx.example.com"]
+flat/g-fp-pipe.A.txt/api/leg1	["raw=[presence_id=fp-pipe@pbx.example.com]loopback/9199/test", "presence_id=fp-pipe@pbx.example.com"]
+flat/g-fp-pipe.A.txt/api/leg2	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test", "presence_id=fp-static@pbx.example.com"]
+flat/g-fp-pipe.AF.txt/api/raw	"[presence_id=fp-pipe@pbx.example.com]loopback/9199/test|[presence_id=fp-pipe@pbx.example.com]loopback/9199/test|[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test"
+flat/g-fp-pipe.AF.txt/api/leg0	["raw=[presence_id=fp-pipe@pbx.example.com]loopback/9199/test", "presence_id=fp-pipe@pbx.example.com"]
+flat/g-fp-pipe.AF.txt/api/leg1	["raw=[presence_id=fp-pipe@pbx.example.com]loopback/9199/test", "presence_id=fp-pipe@pbx.example.com"]
+flat/g-fp-pipe.AF.txt/api/leg2	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test", "presence_id=fp-static@pbx.example.com"]
+flat/g-fp-pipe.E.txt/api/raw	"[presence_id=fp-pipe@pbx.example.com]loopback/9199/test|[presence_id=fp-pipe@pbx.example.com]loopback/9199/test:_:[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test"
+flat/g-fp-pipe.E.txt/api/leg0	["raw=[presence_id=fp-pipe@pbx.example.com]loopback/9199/test", "presence_id=fp-pipe@pbx.example.com"]
+flat/g-fp-pipe.E.txt/api/leg1	["raw=[presence_id=fp-pipe@pbx.example.com]loopback/9199/test", "presence_id=fp-pipe@pbx.example.com"]
+flat/g-fp-pipe.E.txt/api/leg2	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test", "presence_id=fp-static@pbx.example.com"]
+flat/g-fp-pipe.F.txt/api/raw	"[presence_id=fp-pipe@pbx.example.com]loopback/9199/test|[presence_id=fp-pipe@pbx.example.com]loopback/9199/test|[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test"
+flat/g-fp-pipe.F.txt/api/leg0	["raw=[presence_id=fp-pipe@pbx.example.com]loopback/9199/test", "presence_id=fp-pipe@pbx.example.com"]
+flat/g-fp-pipe.F.txt/api/leg1	["raw=[presence_id=fp-pipe@pbx.example.com]loopback/9199/test", "presence_id=fp-pipe@pbx.example.com"]
+flat/g-fp-pipe.F.txt/api/leg2	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test", "presence_id=fp-static@pbx.example.com"]
+flat/g-fp-pipe.none.txt/api/raw	"[presence_id=fp-pipe@pbx.example.com]loopback/9199/test|[presence_id=fp-pipe@pbx.example.com]loopback/9199/test,[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test"
+flat/g-fp-pipe.none.txt/api/leg0	["raw=[presence_id=fp-pipe@pbx.example.com]loopback/9199/test", "presence_id=fp-pipe@pbx.example.com"]
+flat/g-fp-pipe.none.txt/api/leg1	["raw=[presence_id=fp-pipe@pbx.example.com]loopback/9199/test", "presence_id=fp-pipe@pbx.example.com"]
+flat/g-fp-pipe.none.txt/api/leg2	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test", "presence_id=fp-static@pbx.example.com"]
+flat/g-fp-quote-first.A.txt/api/err	"Err"
+flat/g-fp-quote-first.A.txt/dialplan/raw	"[presence_id=fp-quote-first@pbx.example.com,q=it's]loopback/9199/test,[presence_id=fp-quote-first@pbx.example.com,sentinel=s]loopback/9199/test"
+flat/g-fp-quote-first.A.txt/dialplan/for	"[presence_id=fp-quote-first@pbx.example.com,q=it\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'s]loopback/9199/test,[presence_id=fp-quote-first@pbx.example.com,sentinel=s]loopback/9199/test"
+flat/g-fp-quote-first.A.txt/dialplan/leg0	["raw=[presence_id=fp-quote-first@pbx.example.com,q=it's]loopback/9199/test", "presence_id=fp-quote-first@pbx.example.com"]
+flat/g-fp-quote-first.A.txt/dialplan/leg1	["raw=[presence_id=fp-quote-first@pbx.example.com,sentinel=s]loopback/9199/test", "presence_id=fp-quote-first@pbx.example.com"]
+flat/g-fp-quote-first.A.txt/argv-tilde/raw	"[presence_id=fp-quote-first@pbx.example.com,q=it\\'s]loopback/9199/test,[presence_id=fp-quote-first@pbx.example.com,sentinel=s]loopback/9199/test"
+flat/g-fp-quote-first.A.txt/argv-tilde/for	"[presence_id=fp-quote-first@pbx.example.com,q=it\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'s]loopback/9199/test,[presence_id=fp-quote-first@pbx.example.com,sentinel=s]loopback/9199/test"
+flat/g-fp-quote-first.AF.txt/api/err	"Err"
+flat/g-fp-quote-first.AF.txt/dialplan/raw	"[presence_id=fp-quote-first@pbx.example.com,q=it's]loopback/9199/test,[presence_id=fp-quote-first@pbx.example.com,sentinel=s]loopback/9199/test"
+flat/g-fp-quote-first.AF.txt/dialplan/for	"[presence_id=fp-quote-first@pbx.example.com,q=it\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'s]loopback/9199/test,[presence_id=fp-quote-first@pbx.example.com,sentinel=s]loopback/9199/test"
+flat/g-fp-quote-first.AF.txt/dialplan/leg0	["raw=[presence_id=fp-quote-first@pbx.example.com,q=it's]loopback/9199/test", "presence_id=fp-quote-first@pbx.example.com"]
+flat/g-fp-quote-first.AF.txt/dialplan/leg1	["raw=[presence_id=fp-quote-first@pbx.example.com,sentinel=s]loopback/9199/test", "presence_id=fp-quote-first@pbx.example.com"]
+flat/g-fp-quote-first.AF.txt/argv-tilde/raw	"[presence_id=fp-quote-first@pbx.example.com,q=it\\'s]loopback/9199/test,[presence_id=fp-quote-first@pbx.example.com,sentinel=s]loopback/9199/test"
+flat/g-fp-quote-first.AF.txt/argv-tilde/for	"[presence_id=fp-quote-first@pbx.example.com,q=it\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'s]loopback/9199/test,[presence_id=fp-quote-first@pbx.example.com,sentinel=s]loopback/9199/test"
+flat/g-fp-quote-first.E.txt/api/err	"Err"
+flat/g-fp-quote-first.E.txt/dialplan/raw	"[presence_id=fp-quote-first@pbx.example.com,q=it's]loopback/9199/test,[presence_id=fp-quote-first@pbx.example.com,sentinel=s]loopback/9199/test"
+flat/g-fp-quote-first.E.txt/dialplan/for	"[presence_id=fp-quote-first@pbx.example.com,q=it\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'s]loopback/9199/test,[presence_id=fp-quote-first@pbx.example.com,sentinel=s]loopback/9199/test"
+flat/g-fp-quote-first.E.txt/dialplan/leg0	["raw=[presence_id=fp-quote-first@pbx.example.com,q=it's]loopback/9199/test", "presence_id=fp-quote-first@pbx.example.com"]
+flat/g-fp-quote-first.E.txt/dialplan/leg1	["raw=[presence_id=fp-quote-first@pbx.example.com,sentinel=s]loopback/9199/test", "presence_id=fp-quote-first@pbx.example.com"]
+flat/g-fp-quote-first.E.txt/argv-tilde/raw	"[presence_id=fp-quote-first@pbx.example.com,q=it\\'s]loopback/9199/test,[presence_id=fp-quote-first@pbx.example.com,sentinel=s]loopback/9199/test"
+flat/g-fp-quote-first.E.txt/argv-tilde/for	"[presence_id=fp-quote-first@pbx.example.com,q=it\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'s]loopback/9199/test,[presence_id=fp-quote-first@pbx.example.com,sentinel=s]loopback/9199/test"
+flat/g-fp-quote-first.F.txt/api/err	"Err"
+flat/g-fp-quote-first.F.txt/dialplan/raw	"[presence_id=fp-quote-first@pbx.example.com,q=it's]loopback/9199/test,[presence_id=fp-quote-first@pbx.example.com,sentinel=s]loopback/9199/test"
+flat/g-fp-quote-first.F.txt/dialplan/for	"[presence_id=fp-quote-first@pbx.example.com,q=it\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'s]loopback/9199/test,[presence_id=fp-quote-first@pbx.example.com,sentinel=s]loopback/9199/test"
+flat/g-fp-quote-first.F.txt/dialplan/leg0	["raw=[presence_id=fp-quote-first@pbx.example.com,q=it's]loopback/9199/test", "presence_id=fp-quote-first@pbx.example.com"]
+flat/g-fp-quote-first.F.txt/dialplan/leg1	["raw=[presence_id=fp-quote-first@pbx.example.com,sentinel=s]loopback/9199/test", "presence_id=fp-quote-first@pbx.example.com"]
+flat/g-fp-quote-first.F.txt/argv-tilde/raw	"[presence_id=fp-quote-first@pbx.example.com,q=it\\'s]loopback/9199/test,[presence_id=fp-quote-first@pbx.example.com,sentinel=s]loopback/9199/test"
+flat/g-fp-quote-first.F.txt/argv-tilde/for	"[presence_id=fp-quote-first@pbx.example.com,q=it\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'s]loopback/9199/test,[presence_id=fp-quote-first@pbx.example.com,sentinel=s]loopback/9199/test"
+flat/g-fp-quote-first.none.txt/api/err	"Err"
+flat/g-fp-quote-first.none.txt/dialplan/raw	"[presence_id=fp-quote-first@pbx.example.com,q=it's]loopback/9199/test,[presence_id=fp-quote-first@pbx.example.com,sentinel=s]loopback/9199/test"
+flat/g-fp-quote-first.none.txt/dialplan/for	"[presence_id=fp-quote-first@pbx.example.com,q=it\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'s]loopback/9199/test,[presence_id=fp-quote-first@pbx.example.com,sentinel=s]loopback/9199/test"
+flat/g-fp-quote-first.none.txt/dialplan/leg0	["raw=[presence_id=fp-quote-first@pbx.example.com,q=it's]loopback/9199/test", "presence_id=fp-quote-first@pbx.example.com"]
+flat/g-fp-quote-first.none.txt/dialplan/leg1	["raw=[presence_id=fp-quote-first@pbx.example.com,sentinel=s]loopback/9199/test", "presence_id=fp-quote-first@pbx.example.com"]
+flat/g-fp-quote-first.none.txt/argv-tilde/raw	"[presence_id=fp-quote-first@pbx.example.com,q=it\\'s]loopback/9199/test,[presence_id=fp-quote-first@pbx.example.com,sentinel=s]loopback/9199/test"
+flat/g-fp-quote-first.none.txt/argv-tilde/for	"[presence_id=fp-quote-first@pbx.example.com,q=it\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'s]loopback/9199/test,[presence_id=fp-quote-first@pbx.example.com,sentinel=s]loopback/9199/test"
+flat/g-fp-quote-last.A.txt/api/err	"Err"
+flat/g-fp-quote-last.A.txt/dialplan/raw	"[presence_id=fp-quote-last@pbx.example.com,sentinel=s]loopback/9199/test,[presence_id=fp-quote-last@pbx.example.com,q=it's]loopback/9199/test"
+flat/g-fp-quote-last.A.txt/dialplan/for	"[presence_id=fp-quote-last@pbx.example.com,sentinel=s]loopback/9199/test,[presence_id=fp-quote-last@pbx.example.com,q=it\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'s]loopback/9199/test"
+flat/g-fp-quote-last.A.txt/dialplan/leg0	["raw=[presence_id=fp-quote-last@pbx.example.com,sentinel=s]loopback/9199/test", "presence_id=fp-quote-last@pbx.example.com"]
+flat/g-fp-quote-last.A.txt/dialplan/leg1	["raw=[presence_id=fp-quote-last@pbx.example.com,q=it's]loopback/9199/test", "presence_id=fp-quote-last@pbx.example.com"]
+flat/g-fp-quote-last.A.txt/argv-tilde/raw	"[presence_id=fp-quote-last@pbx.example.com,sentinel=s]loopback/9199/test,[presence_id=fp-quote-last@pbx.example.com,q=it\\'s]loopback/9199/test"
+flat/g-fp-quote-last.A.txt/argv-tilde/for	"[presence_id=fp-quote-last@pbx.example.com,sentinel=s]loopback/9199/test,[presence_id=fp-quote-last@pbx.example.com,q=it\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'s]loopback/9199/test"
+flat/g-fp-quote-last.AF.txt/api/err	"Err"
+flat/g-fp-quote-last.AF.txt/dialplan/raw	"[presence_id=fp-quote-last@pbx.example.com,sentinel=s]loopback/9199/test,[presence_id=fp-quote-last@pbx.example.com,q=it's]loopback/9199/test"
+flat/g-fp-quote-last.AF.txt/dialplan/for	"[presence_id=fp-quote-last@pbx.example.com,sentinel=s]loopback/9199/test,[presence_id=fp-quote-last@pbx.example.com,q=it\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'s]loopback/9199/test"
+flat/g-fp-quote-last.AF.txt/dialplan/leg0	["raw=[presence_id=fp-quote-last@pbx.example.com,sentinel=s]loopback/9199/test", "presence_id=fp-quote-last@pbx.example.com"]
+flat/g-fp-quote-last.AF.txt/dialplan/leg1	["raw=[presence_id=fp-quote-last@pbx.example.com,q=it's]loopback/9199/test", "presence_id=fp-quote-last@pbx.example.com"]
+flat/g-fp-quote-last.AF.txt/argv-tilde/raw	"[presence_id=fp-quote-last@pbx.example.com,sentinel=s]loopback/9199/test,[presence_id=fp-quote-last@pbx.example.com,q=it\\'s]loopback/9199/test"
+flat/g-fp-quote-last.AF.txt/argv-tilde/for	"[presence_id=fp-quote-last@pbx.example.com,sentinel=s]loopback/9199/test,[presence_id=fp-quote-last@pbx.example.com,q=it\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'s]loopback/9199/test"
+flat/g-fp-quote-last.E.txt/api/err	"Err"
+flat/g-fp-quote-last.E.txt/dialplan/raw	"[presence_id=fp-quote-last@pbx.example.com,sentinel=s]loopback/9199/test,[presence_id=fp-quote-last@pbx.example.com,q=it's]loopback/9199/test"
+flat/g-fp-quote-last.E.txt/dialplan/for	"[presence_id=fp-quote-last@pbx.example.com,sentinel=s]loopback/9199/test,[presence_id=fp-quote-last@pbx.example.com,q=it\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'s]loopback/9199/test"
+flat/g-fp-quote-last.E.txt/dialplan/leg0	["raw=[presence_id=fp-quote-last@pbx.example.com,sentinel=s]loopback/9199/test", "presence_id=fp-quote-last@pbx.example.com"]
+flat/g-fp-quote-last.E.txt/dialplan/leg1	["raw=[presence_id=fp-quote-last@pbx.example.com,q=it's]loopback/9199/test", "presence_id=fp-quote-last@pbx.example.com"]
+flat/g-fp-quote-last.E.txt/argv-tilde/raw	"[presence_id=fp-quote-last@pbx.example.com,sentinel=s]loopback/9199/test,[presence_id=fp-quote-last@pbx.example.com,q=it\\'s]loopback/9199/test"
+flat/g-fp-quote-last.E.txt/argv-tilde/for	"[presence_id=fp-quote-last@pbx.example.com,sentinel=s]loopback/9199/test,[presence_id=fp-quote-last@pbx.example.com,q=it\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'s]loopback/9199/test"
+flat/g-fp-quote-last.F.txt/api/err	"Err"
+flat/g-fp-quote-last.F.txt/dialplan/raw	"[presence_id=fp-quote-last@pbx.example.com,sentinel=s]loopback/9199/test,[presence_id=fp-quote-last@pbx.example.com,q=it's]loopback/9199/test"
+flat/g-fp-quote-last.F.txt/dialplan/for	"[presence_id=fp-quote-last@pbx.example.com,sentinel=s]loopback/9199/test,[presence_id=fp-quote-last@pbx.example.com,q=it\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'s]loopback/9199/test"
+flat/g-fp-quote-last.F.txt/dialplan/leg0	["raw=[presence_id=fp-quote-last@pbx.example.com,sentinel=s]loopback/9199/test", "presence_id=fp-quote-last@pbx.example.com"]
+flat/g-fp-quote-last.F.txt/dialplan/leg1	["raw=[presence_id=fp-quote-last@pbx.example.com,q=it's]loopback/9199/test", "presence_id=fp-quote-last@pbx.example.com"]
+flat/g-fp-quote-last.F.txt/argv-tilde/raw	"[presence_id=fp-quote-last@pbx.example.com,sentinel=s]loopback/9199/test,[presence_id=fp-quote-last@pbx.example.com,q=it\\'s]loopback/9199/test"
+flat/g-fp-quote-last.F.txt/argv-tilde/for	"[presence_id=fp-quote-last@pbx.example.com,sentinel=s]loopback/9199/test,[presence_id=fp-quote-last@pbx.example.com,q=it\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'s]loopback/9199/test"
+flat/g-fp-quote-last.none.txt/api/err	"Err"
+flat/g-fp-quote-last.none.txt/dialplan/raw	"[presence_id=fp-quote-last@pbx.example.com,sentinel=s]loopback/9199/test,[presence_id=fp-quote-last@pbx.example.com,q=it's]loopback/9199/test"
+flat/g-fp-quote-last.none.txt/dialplan/for	"[presence_id=fp-quote-last@pbx.example.com,sentinel=s]loopback/9199/test,[presence_id=fp-quote-last@pbx.example.com,q=it\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'s]loopback/9199/test"
+flat/g-fp-quote-last.none.txt/dialplan/leg0	["raw=[presence_id=fp-quote-last@pbx.example.com,sentinel=s]loopback/9199/test", "presence_id=fp-quote-last@pbx.example.com"]
+flat/g-fp-quote-last.none.txt/dialplan/leg1	["raw=[presence_id=fp-quote-last@pbx.example.com,q=it's]loopback/9199/test", "presence_id=fp-quote-last@pbx.example.com"]
+flat/g-fp-quote-last.none.txt/argv-tilde/raw	"[presence_id=fp-quote-last@pbx.example.com,sentinel=s]loopback/9199/test,[presence_id=fp-quote-last@pbx.example.com,q=it\\'s]loopback/9199/test"
+flat/g-fp-quote-last.none.txt/argv-tilde/for	"[presence_id=fp-quote-last@pbx.example.com,sentinel=s]loopback/9199/test,[presence_id=fp-quote-last@pbx.example.com,q=it\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\'s]loopback/9199/test"
+flat/g-fp-quote-member.A.txt/api/raw	"[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test"
+flat/g-fp-quote-member.A.txt/api/for	"[presence_id=fp-quote-member@pbx.example.com,q=its]loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=its]loopback/9199/test"
+flat/g-fp-quote-member.A.txt/api/leg0	["raw=[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test", "presence_id=fp-quote-member@pbx.example.com"]
+flat/g-fp-quote-member.A.txt/api/leg1	["raw=[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test", "presence_id=fp-quote-member@pbx.example.com"]
+flat/g-fp-quote-member.A.txt/argv-tilde/raw	"[presence_id=fp-quote-member@pbx.example.com,q=it\\'s]loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=it\\'s]loopback/9199/test"
+flat/g-fp-quote-member.AF.txt/api/raw	"[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test"
+flat/g-fp-quote-member.AF.txt/api/for	"[presence_id=fp-quote-member@pbx.example.com,q=its]loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=its]loopback/9199/test"
+flat/g-fp-quote-member.AF.txt/api/leg0	["raw=[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test", "presence_id=fp-quote-member@pbx.example.com"]
+flat/g-fp-quote-member.AF.txt/api/leg1	["raw=[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test", "presence_id=fp-quote-member@pbx.example.com"]
+flat/g-fp-quote-member.AF.txt/argv-tilde/raw	"[presence_id=fp-quote-member@pbx.example.com,q=it\\'s]loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=it\\'s]loopback/9199/test"
+flat/g-fp-quote-member.E.txt/api/raw	"[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test"
+flat/g-fp-quote-member.E.txt/api/for	"[presence_id=fp-quote-member@pbx.example.com,q=its]loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=its]loopback/9199/test"
+flat/g-fp-quote-member.E.txt/api/leg0	["raw=[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test", "presence_id=fp-quote-member@pbx.example.com"]
+flat/g-fp-quote-member.E.txt/api/leg1	["raw=[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test", "presence_id=fp-quote-member@pbx.example.com"]
+flat/g-fp-quote-member.E.txt/argv-tilde/raw	"[presence_id=fp-quote-member@pbx.example.com,q=it\\'s]loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=it\\'s]loopback/9199/test"
+flat/g-fp-quote-member.F.txt/api/raw	"[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test"
+flat/g-fp-quote-member.F.txt/api/for	"[presence_id=fp-quote-member@pbx.example.com,q=its]loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=its]loopback/9199/test"
+flat/g-fp-quote-member.F.txt/api/leg0	["raw=[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test", "presence_id=fp-quote-member@pbx.example.com"]
+flat/g-fp-quote-member.F.txt/api/leg1	["raw=[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test", "presence_id=fp-quote-member@pbx.example.com"]
+flat/g-fp-quote-member.F.txt/argv-tilde/raw	"[presence_id=fp-quote-member@pbx.example.com,q=it\\'s]loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=it\\'s]loopback/9199/test"
+flat/g-fp-quote-member.none.txt/api/raw	"[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test"
+flat/g-fp-quote-member.none.txt/api/for	"[presence_id=fp-quote-member@pbx.example.com,q=its]loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=its]loopback/9199/test"
+flat/g-fp-quote-member.none.txt/api/leg0	["raw=[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test", "presence_id=fp-quote-member@pbx.example.com"]
+flat/g-fp-quote-member.none.txt/api/leg1	["raw=[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test", "presence_id=fp-quote-member@pbx.example.com"]
+flat/g-fp-quote-member.none.txt/argv-tilde/raw	"[presence_id=fp-quote-member@pbx.example.com,q=it\\'s]loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=it\\'s]loopback/9199/test"
+flat/g-fp-quote-pair.A.txt/api/raw	"[presence_id=fp-quote-wrap@pbx.example.com,q='a b']loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test"
+flat/g-fp-quote-pair.A.txt/api/for	"[presence_id=fp-quote-wrap@pbx.example.com,q='a b']loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=its]loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=its]loopback/9199/test"
+flat/g-fp-quote-pair.A.txt/api/leg0	["raw=[presence_id=fp-quote-wrap@pbx.example.com,q='a b']loopback/9199/test", "presence_id=fp-quote-wrap@pbx.example.com"]
+flat/g-fp-quote-pair.A.txt/api/leg1	["raw=[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test", "presence_id=fp-quote-member@pbx.example.com"]
+flat/g-fp-quote-pair.A.txt/api/leg2	["raw=[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test", "presence_id=fp-quote-member@pbx.example.com"]
+flat/g-fp-quote-pair.A.txt/argv-tilde/raw	"[presence_id=fp-quote-wrap@pbx.example.com,q=\\'a b\\']loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=it\\'s]loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=it\\'s]loopback/9199/test"
+flat/g-fp-quote-pair.A.txt/argv-tilde/for	"[presence_id=fp-quote-wrap@pbx.example.com,q=\\'a b\\']loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=its]loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=its]loopback/9199/test"
+flat/g-fp-quote-pair.AF.txt/api/raw	"[presence_id=fp-quote-wrap@pbx.example.com,q='a b']loopback/9199/test|[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test"
+flat/g-fp-quote-pair.AF.txt/api/for	"[presence_id=fp-quote-wrap@pbx.example.com,q='a b']loopback/9199/test|[presence_id=fp-quote-member@pbx.example.com,q=its]loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=its]loopback/9199/test"
+flat/g-fp-quote-pair.AF.txt/api/leg0	["raw=[presence_id=fp-quote-wrap@pbx.example.com,q='a b']loopback/9199/test", "presence_id=fp-quote-wrap@pbx.example.com"]
+flat/g-fp-quote-pair.AF.txt/api/leg1	["raw=[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test", "presence_id=fp-quote-member@pbx.example.com"]
+flat/g-fp-quote-pair.AF.txt/api/leg2	["raw=[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test", "presence_id=fp-quote-member@pbx.example.com"]
+flat/g-fp-quote-pair.AF.txt/argv-tilde/raw	"[presence_id=fp-quote-wrap@pbx.example.com,q=\\'a b\\']loopback/9199/test|[presence_id=fp-quote-member@pbx.example.com,q=it\\'s]loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=it\\'s]loopback/9199/test"
+flat/g-fp-quote-pair.AF.txt/argv-tilde/for	"[presence_id=fp-quote-wrap@pbx.example.com,q=\\'a b\\']loopback/9199/test|[presence_id=fp-quote-member@pbx.example.com,q=its]loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=its]loopback/9199/test"
+flat/g-fp-quote-pair.E.txt/api/raw	"[presence_id=fp-quote-wrap@pbx.example.com,q='a b']loopback/9199/test:_:[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test"
+flat/g-fp-quote-pair.E.txt/api/for	"[presence_id=fp-quote-wrap@pbx.example.com,q='a b']loopback/9199/test:_:[presence_id=fp-quote-member@pbx.example.com,q=its]loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=its]loopback/9199/test"
+flat/g-fp-quote-pair.E.txt/api/leg0	["raw=[presence_id=fp-quote-wrap@pbx.example.com,q='a b']loopback/9199/test", "presence_id=fp-quote-wrap@pbx.example.com"]
+flat/g-fp-quote-pair.E.txt/api/leg1	["raw=[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test", "presence_id=fp-quote-member@pbx.example.com"]
+flat/g-fp-quote-pair.E.txt/api/leg2	["raw=[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test", "presence_id=fp-quote-member@pbx.example.com"]
+flat/g-fp-quote-pair.E.txt/argv-tilde/raw	"[presence_id=fp-quote-wrap@pbx.example.com,q=\\'a b\\']loopback/9199/test:_:[presence_id=fp-quote-member@pbx.example.com,q=it\\'s]loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=it\\'s]loopback/9199/test"
+flat/g-fp-quote-pair.E.txt/argv-tilde/for	"[presence_id=fp-quote-wrap@pbx.example.com,q=\\'a b\\']loopback/9199/test:_:[presence_id=fp-quote-member@pbx.example.com,q=its]loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=its]loopback/9199/test"
+flat/g-fp-quote-pair.F.txt/api/raw	"[presence_id=fp-quote-wrap@pbx.example.com,q='a b']loopback/9199/test|[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test"
+flat/g-fp-quote-pair.F.txt/api/for	"[presence_id=fp-quote-wrap@pbx.example.com,q='a b']loopback/9199/test|[presence_id=fp-quote-member@pbx.example.com,q=its]loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=its]loopback/9199/test"
+flat/g-fp-quote-pair.F.txt/api/leg0	["raw=[presence_id=fp-quote-wrap@pbx.example.com,q='a b']loopback/9199/test", "presence_id=fp-quote-wrap@pbx.example.com"]
+flat/g-fp-quote-pair.F.txt/api/leg1	["raw=[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test", "presence_id=fp-quote-member@pbx.example.com"]
+flat/g-fp-quote-pair.F.txt/api/leg2	["raw=[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test", "presence_id=fp-quote-member@pbx.example.com"]
+flat/g-fp-quote-pair.F.txt/argv-tilde/raw	"[presence_id=fp-quote-wrap@pbx.example.com,q=\\'a b\\']loopback/9199/test|[presence_id=fp-quote-member@pbx.example.com,q=it\\'s]loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=it\\'s]loopback/9199/test"
+flat/g-fp-quote-pair.F.txt/argv-tilde/for	"[presence_id=fp-quote-wrap@pbx.example.com,q=\\'a b\\']loopback/9199/test|[presence_id=fp-quote-member@pbx.example.com,q=its]loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=its]loopback/9199/test"
+flat/g-fp-quote-pair.none.txt/api/raw	"[presence_id=fp-quote-wrap@pbx.example.com,q='a b']loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test"
+flat/g-fp-quote-pair.none.txt/api/for	"[presence_id=fp-quote-wrap@pbx.example.com,q='a b']loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=its]loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=its]loopback/9199/test"
+flat/g-fp-quote-pair.none.txt/api/leg0	["raw=[presence_id=fp-quote-wrap@pbx.example.com,q='a b']loopback/9199/test", "presence_id=fp-quote-wrap@pbx.example.com"]
+flat/g-fp-quote-pair.none.txt/api/leg1	["raw=[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test", "presence_id=fp-quote-member@pbx.example.com"]
+flat/g-fp-quote-pair.none.txt/api/leg2	["raw=[presence_id=fp-quote-member@pbx.example.com,q=it's]loopback/9199/test", "presence_id=fp-quote-member@pbx.example.com"]
+flat/g-fp-quote-pair.none.txt/argv-tilde/raw	"[presence_id=fp-quote-wrap@pbx.example.com,q=\\'a b\\']loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=it\\'s]loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=it\\'s]loopback/9199/test"
+flat/g-fp-quote-pair.none.txt/argv-tilde/for	"[presence_id=fp-quote-wrap@pbx.example.com,q=\\'a b\\']loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=its]loopback/9199/test,[presence_id=fp-quote-member@pbx.example.com,q=its]loopback/9199/test"
+flat/g-fp-quote-wrap.A.txt/api/raw	"[presence_id=fp-quote-wrap@pbx.example.com,q='a b']loopback/9199/test"
+flat/g-fp-quote-wrap.A.txt/api/leg0	["raw=[presence_id=fp-quote-wrap@pbx.example.com,q='a b']loopback/9199/test", "presence_id=fp-quote-wrap@pbx.example.com"]
+flat/g-fp-quote-wrap.A.txt/argv-tilde/raw	"[presence_id=fp-quote-wrap@pbx.example.com,q=\\'a b\\']loopback/9199/test"
+flat/g-fp-quote-wrap.A.txt/argv-tilde/for	"[presence_id=fp-quote-wrap@pbx.example.com,q=\\'a b\\']loopback/9199/test"
+flat/g-fp-quote-wrap.AF.txt/api/raw	"[presence_id=fp-quote-wrap@pbx.example.com,q='a b']loopback/9199/test"
+flat/g-fp-quote-wrap.AF.txt/api/leg0	["raw=[presence_id=fp-quote-wrap@pbx.example.com,q='a b']loopback/9199/test", "presence_id=fp-quote-wrap@pbx.example.com"]
+flat/g-fp-quote-wrap.AF.txt/argv-tilde/raw	"[presence_id=fp-quote-wrap@pbx.example.com,q=\\'a b\\']loopback/9199/test"
+flat/g-fp-quote-wrap.AF.txt/argv-tilde/for	"[presence_id=fp-quote-wrap@pbx.example.com,q=\\'a b\\']loopback/9199/test"
+flat/g-fp-quote-wrap.E.txt/api/raw	"[presence_id=fp-quote-wrap@pbx.example.com,q='a b']loopback/9199/test"
+flat/g-fp-quote-wrap.E.txt/api/leg0	["raw=[presence_id=fp-quote-wrap@pbx.example.com,q='a b']loopback/9199/test", "presence_id=fp-quote-wrap@pbx.example.com"]
+flat/g-fp-quote-wrap.E.txt/argv-tilde/raw	"[presence_id=fp-quote-wrap@pbx.example.com,q=\\'a b\\']loopback/9199/test"
+flat/g-fp-quote-wrap.E.txt/argv-tilde/for	"[presence_id=fp-quote-wrap@pbx.example.com,q=\\'a b\\']loopback/9199/test"
+flat/g-fp-quote-wrap.F.txt/api/raw	"[presence_id=fp-quote-wrap@pbx.example.com,q='a b']loopback/9199/test"
+flat/g-fp-quote-wrap.F.txt/api/leg0	["raw=[presence_id=fp-quote-wrap@pbx.example.com,q='a b']loopback/9199/test", "presence_id=fp-quote-wrap@pbx.example.com"]
+flat/g-fp-quote-wrap.F.txt/argv-tilde/raw	"[presence_id=fp-quote-wrap@pbx.example.com,q=\\'a b\\']loopback/9199/test"
+flat/g-fp-quote-wrap.F.txt/argv-tilde/for	"[presence_id=fp-quote-wrap@pbx.example.com,q=\\'a b\\']loopback/9199/test"
+flat/g-fp-quote-wrap.none.txt/api/raw	"[presence_id=fp-quote-wrap@pbx.example.com,q='a b']loopback/9199/test"
+flat/g-fp-quote-wrap.none.txt/api/leg0	["raw=[presence_id=fp-quote-wrap@pbx.example.com,q='a b']loopback/9199/test", "presence_id=fp-quote-wrap@pbx.example.com"]
+flat/g-fp-quote-wrap.none.txt/argv-tilde/raw	"[presence_id=fp-quote-wrap@pbx.example.com,q=\\'a b\\']loopback/9199/test"
+flat/g-fp-quote-wrap.none.txt/argv-tilde/for	"[presence_id=fp-quote-wrap@pbx.example.com,q=\\'a b\\']loopback/9199/test"
+flat/g-fp-reg.A.txt/api/raw	"[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-b@192.0.2.1:5080;transport=udp;gw=fp-reg-b,[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-a@192.0.2.1:5080;transport=udp;gw=fp-reg-a"
+flat/g-fp-reg.A.txt/api/leg0	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-b@192.0.2.1:5080;transport=udp;gw=fp-reg-b", "presence_id=fp-reg@pbx.example.com"]
+flat/g-fp-reg.A.txt/api/leg1	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-a@192.0.2.1:5080;transport=udp;gw=fp-reg-a", "presence_id=fp-reg@pbx.example.com"]
+flat/g-fp-reg.AF.txt/api/raw	"[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-b@192.0.2.1:5080;transport=udp;gw=fp-reg-b,[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-a@192.0.2.1:5080;transport=udp;gw=fp-reg-a"
+flat/g-fp-reg.AF.txt/api/leg0	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-b@192.0.2.1:5080;transport=udp;gw=fp-reg-b", "presence_id=fp-reg@pbx.example.com"]
+flat/g-fp-reg.AF.txt/api/leg1	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-a@192.0.2.1:5080;transport=udp;gw=fp-reg-a", "presence_id=fp-reg@pbx.example.com"]
+flat/g-fp-reg.E.txt/api/raw	"[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-b@192.0.2.1:5080;transport=udp;gw=fp-reg-b,[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-a@192.0.2.1:5080;transport=udp;gw=fp-reg-a"
+flat/g-fp-reg.E.txt/api/leg0	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-b@192.0.2.1:5080;transport=udp;gw=fp-reg-b", "presence_id=fp-reg@pbx.example.com"]
+flat/g-fp-reg.E.txt/api/leg1	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-a@192.0.2.1:5080;transport=udp;gw=fp-reg-a", "presence_id=fp-reg@pbx.example.com"]
+flat/g-fp-reg.F.txt/api/raw	"[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-b@192.0.2.1:5080;transport=udp;gw=fp-reg-b,[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-a@192.0.2.1:5080;transport=udp;gw=fp-reg-a"
+flat/g-fp-reg.F.txt/api/leg0	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-b@192.0.2.1:5080;transport=udp;gw=fp-reg-b", "presence_id=fp-reg@pbx.example.com"]
+flat/g-fp-reg.F.txt/api/leg1	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-a@192.0.2.1:5080;transport=udp;gw=fp-reg-a", "presence_id=fp-reg@pbx.example.com"]
+flat/g-fp-reg.none.txt/api/raw	"[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-b@192.0.2.1:5080;transport=udp;gw=fp-reg-b,[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-a@192.0.2.1:5080;transport=udp;gw=fp-reg-a"
+flat/g-fp-reg.none.txt/api/leg0	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-b@192.0.2.1:5080;transport=udp;gw=fp-reg-b", "presence_id=fp-reg@pbx.example.com"]
+flat/g-fp-reg.none.txt/api/leg1	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-reg@pbx.example.com]sofia/lab-lo/sip:gw+fp-reg-a@192.0.2.1:5080;transport=udp;gw=fp-reg-a", "presence_id=fp-reg@pbx.example.com"]
+flat/g-fp-scopes-all.A.txt/api/raw	"[k=e,pe=fp-scopes-all][k=l,b=1][k=a,local_var_clobber=true]loopback/9199/test"
+flat/g-fp-scopes-all.A.txt/api/leg0	["raw=[k=e,pe=fp-scopes-all][k=l,b=1][k=a,local_var_clobber=true]loopback/9199/test"]
+flat/g-fp-scopes-all.AF.txt/api/raw	"[k=e,pe=fp-scopes-all][k=l,b=1][k=a,local_var_clobber=true]loopback/9199/test"
+flat/g-fp-scopes-all.AF.txt/api/leg0	["raw=[k=e,pe=fp-scopes-all][k=l,b=1][k=a,local_var_clobber=true]loopback/9199/test"]
+flat/g-fp-scopes-all.E.txt/api/raw	"[k=e,pe=fp-scopes-all][k=l,b=1][k=a,local_var_clobber=true]loopback/9199/test"
+flat/g-fp-scopes-all.E.txt/api/leg0	["raw=[k=e,pe=fp-scopes-all][k=l,b=1][k=a,local_var_clobber=true]loopback/9199/test"]
+flat/g-fp-scopes-all.F.txt/api/raw	"[k=e,pe=fp-scopes-all][k=l,b=1][k=a,local_var_clobber=true]loopback/9199/test"
+flat/g-fp-scopes-all.F.txt/api/leg0	["raw=[k=e,pe=fp-scopes-all][k=l,b=1][k=a,local_var_clobber=true]loopback/9199/test"]
+flat/g-fp-scopes-all.none.txt/api/raw	"[k=e,pe=fp-scopes-all][k=l,b=1][k=a,local_var_clobber=true]loopback/9199/test"
+flat/g-fp-scopes-all.none.txt/api/leg0	["raw=[k=e,pe=fp-scopes-all][k=l,b=1][k=a,local_var_clobber=true]loopback/9199/test"]
+flat/g-fp-scopes-both.A.txt/api/raw	"[k=l,b=1][k=a,local_var_clobber=true][k=e,local_var_clobber=true]loopback/9199/test"
+flat/g-fp-scopes-both.A.txt/api/leg0	["raw=[k=l,b=1][k=a,local_var_clobber=true][k=e,local_var_clobber=true]loopback/9199/test"]
+flat/g-fp-scopes-both.AF.txt/api/raw	"[k=l,b=1][k=a,local_var_clobber=true][k=e,local_var_clobber=true]loopback/9199/test"
+flat/g-fp-scopes-both.AF.txt/api/leg0	["raw=[k=l,b=1][k=a,local_var_clobber=true][k=e,local_var_clobber=true]loopback/9199/test"]
+flat/g-fp-scopes-both.E.txt/api/raw	"[k=l,b=1][k=a,local_var_clobber=true][k=e,local_var_clobber=true]loopback/9199/test"
+flat/g-fp-scopes-both.E.txt/api/leg0	["raw=[k=l,b=1][k=a,local_var_clobber=true][k=e,local_var_clobber=true]loopback/9199/test"]
+flat/g-fp-scopes-both.F.txt/api/raw	"[k=l,b=1][k=a,local_var_clobber=true][k=e,local_var_clobber=true]loopback/9199/test"
+flat/g-fp-scopes-both.F.txt/api/leg0	["raw=[k=l,b=1][k=a,local_var_clobber=true][k=e,local_var_clobber=true]loopback/9199/test"]
+flat/g-fp-scopes-both.none.txt/api/raw	"[k=l,b=1][k=a,local_var_clobber=true][k=e,local_var_clobber=true]loopback/9199/test"
+flat/g-fp-scopes-both.none.txt/api/leg0	["raw=[k=l,b=1][k=a,local_var_clobber=true][k=e,local_var_clobber=true]loopback/9199/test"]
+flat/g-fp-scopes-ent.A.txt/api/raw	"[k=a,pa=fp-scopes-ent][k=l,b=1][k=e,local_var_clobber=true]loopback/9199/test"
+flat/g-fp-scopes-ent.A.txt/api/leg0	["raw=[k=a,pa=fp-scopes-ent][k=l,b=1][k=e,local_var_clobber=true]loopback/9199/test"]
+flat/g-fp-scopes-ent.AF.txt/api/raw	"[k=a,pa=fp-scopes-ent][k=l,b=1][k=e,local_var_clobber=true]loopback/9199/test"
+flat/g-fp-scopes-ent.AF.txt/api/leg0	["raw=[k=a,pa=fp-scopes-ent][k=l,b=1][k=e,local_var_clobber=true]loopback/9199/test"]
+flat/g-fp-scopes-ent.E.txt/api/raw	"[k=a,pa=fp-scopes-ent][k=l,b=1][k=e,local_var_clobber=true]loopback/9199/test"
+flat/g-fp-scopes-ent.E.txt/api/leg0	["raw=[k=a,pa=fp-scopes-ent][k=l,b=1][k=e,local_var_clobber=true]loopback/9199/test"]
+flat/g-fp-scopes-ent.F.txt/api/raw	"[k=a,pa=fp-scopes-ent][k=l,b=1][k=e,local_var_clobber=true]loopback/9199/test"
+flat/g-fp-scopes-ent.F.txt/api/leg0	["raw=[k=a,pa=fp-scopes-ent][k=l,b=1][k=e,local_var_clobber=true]loopback/9199/test"]
+flat/g-fp-scopes-ent.none.txt/api/raw	"[k=a,pa=fp-scopes-ent][k=l,b=1][k=e,local_var_clobber=true]loopback/9199/test"
+flat/g-fp-scopes-ent.none.txt/api/leg0	["raw=[k=a,pa=fp-scopes-ent][k=l,b=1][k=e,local_var_clobber=true]loopback/9199/test"]
+flat/g-fp-scopes-noleg.A.txt/api/raw	"[k=a][k=e,pe=fp-scopes-noleg]loopback/9199/test"
+flat/g-fp-scopes-noleg.A.txt/api/leg0	["raw=[k=a][k=e,pe=fp-scopes-noleg]loopback/9199/test"]
+flat/g-fp-scopes-noleg.AF.txt/api/raw	"[k=a][k=e,pe=fp-scopes-noleg]loopback/9199/test"
+flat/g-fp-scopes-noleg.AF.txt/api/leg0	["raw=[k=a][k=e,pe=fp-scopes-noleg]loopback/9199/test"]
+flat/g-fp-scopes-noleg.E.txt/api/raw	"[k=a][k=e,pe=fp-scopes-noleg]loopback/9199/test"
+flat/g-fp-scopes-noleg.E.txt/api/leg0	["raw=[k=a][k=e,pe=fp-scopes-noleg]loopback/9199/test"]
+flat/g-fp-scopes-noleg.F.txt/api/raw	"[k=a][k=e,pe=fp-scopes-noleg]loopback/9199/test"
+flat/g-fp-scopes-noleg.F.txt/api/leg0	["raw=[k=a][k=e,pe=fp-scopes-noleg]loopback/9199/test"]
+flat/g-fp-scopes-noleg.none.txt/api/raw	"[k=a][k=e,pe=fp-scopes-noleg]loopback/9199/test"
+flat/g-fp-scopes-noleg.none.txt/api/leg0	["raw=[k=a][k=e,pe=fp-scopes-noleg]loopback/9199/test"]
+flat/g-fp-scopes-none.A.txt/api/raw	"[k=e,pe=fp-scopes-none][k=a,pa=fp-scopes-none][b=1]loopback/9199/test"
+flat/g-fp-scopes-none.A.txt/api/leg0	["raw=[k=e,pe=fp-scopes-none][k=a,pa=fp-scopes-none][b=1]loopback/9199/test"]
+flat/g-fp-scopes-none.AF.txt/api/raw	"[k=e,pe=fp-scopes-none][k=a,pa=fp-scopes-none][b=1]loopback/9199/test"
+flat/g-fp-scopes-none.AF.txt/api/leg0	["raw=[k=e,pe=fp-scopes-none][k=a,pa=fp-scopes-none][b=1]loopback/9199/test"]
+flat/g-fp-scopes-none.E.txt/api/raw	"[k=e,pe=fp-scopes-none][k=a,pa=fp-scopes-none][b=1]loopback/9199/test"
+flat/g-fp-scopes-none.E.txt/api/leg0	["raw=[k=e,pe=fp-scopes-none][k=a,pa=fp-scopes-none][b=1]loopback/9199/test"]
+flat/g-fp-scopes-none.F.txt/api/raw	"[k=e,pe=fp-scopes-none][k=a,pa=fp-scopes-none][b=1]loopback/9199/test"
+flat/g-fp-scopes-none.F.txt/api/leg0	["raw=[k=e,pe=fp-scopes-none][k=a,pa=fp-scopes-none][b=1]loopback/9199/test"]
+flat/g-fp-scopes-none.none.txt/api/raw	"[k=e,pe=fp-scopes-none][k=a,pa=fp-scopes-none][b=1]loopback/9199/test"
+flat/g-fp-scopes-none.none.txt/api/leg0	["raw=[k=e,pe=fp-scopes-none][k=a,pa=fp-scopes-none][b=1]loopback/9199/test"]
+flat/g-fp-static.A.txt/api/raw	"[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test"
+flat/g-fp-static.A.txt/api/leg0	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test", "presence_id=fp-static@pbx.example.com"]
+flat/g-fp-static.AF.txt/api/raw	"[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test"
+flat/g-fp-static.AF.txt/api/leg0	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test", "presence_id=fp-static@pbx.example.com"]
+flat/g-fp-static.E.txt/api/raw	"[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test"
+flat/g-fp-static.E.txt/api/leg0	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test", "presence_id=fp-static@pbx.example.com"]
+flat/g-fp-static.F.txt/api/raw	"[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test"
+flat/g-fp-static.F.txt/api/leg0	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test", "presence_id=fp-static@pbx.example.com"]
+flat/g-fp-static.none.txt/api/raw	"[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test"
+flat/g-fp-static.none.txt/api/leg0	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-static@pbx.example.com]loopback/9199/test", "presence_id=fp-static@pbx.example.com"]
+flat/g-fp-unreg.A.txt/api/raw	"[^^:sip_invite_domain=pbx.example.com:presence_id=fp-unreg@pbx.example.com]error/user_not_registered"
+flat/g-fp-unreg.A.txt/api/leg0	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-unreg@pbx.example.com]error/user_not_registered", "presence_id=fp-unreg@pbx.example.com", "cause=user_not_registered", "name=USER_NOT_REGISTERED/806"]
+flat/g-fp-unreg.AF.txt/api/raw	"[^^:sip_invite_domain=pbx.example.com:presence_id=fp-unreg@pbx.example.com]error/user_not_registered"
+flat/g-fp-unreg.AF.txt/api/leg0	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-unreg@pbx.example.com]error/user_not_registered", "presence_id=fp-unreg@pbx.example.com", "cause=user_not_registered", "name=USER_NOT_REGISTERED/806"]
+flat/g-fp-unreg.E.txt/api/raw	"[^^:sip_invite_domain=pbx.example.com:presence_id=fp-unreg@pbx.example.com]error/user_not_registered"
+flat/g-fp-unreg.E.txt/api/leg0	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-unreg@pbx.example.com]error/user_not_registered", "presence_id=fp-unreg@pbx.example.com", "cause=user_not_registered", "name=USER_NOT_REGISTERED/806"]
+flat/g-fp-unreg.F.txt/api/raw	"[^^:sip_invite_domain=pbx.example.com:presence_id=fp-unreg@pbx.example.com]error/user_not_registered"
+flat/g-fp-unreg.F.txt/api/leg0	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-unreg@pbx.example.com]error/user_not_registered", "presence_id=fp-unreg@pbx.example.com", "cause=user_not_registered", "name=USER_NOT_REGISTERED/806"]
+flat/g-fp-unreg.none.txt/api/raw	"[^^:sip_invite_domain=pbx.example.com:presence_id=fp-unreg@pbx.example.com]error/user_not_registered"
+flat/g-fp-unreg.none.txt/api/leg0	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=fp-unreg@pbx.example.com]error/user_not_registered", "presence_id=fp-unreg@pbx.example.com", "cause=user_not_registered", "name=USER_NOT_REGISTERED/806"]
+flat/pbx-calltakers.A.txt/api/raw	"[^^:sip_invite_domain=pbx.example.com:presence_id=1697@pbx.example.com]error/user_not_registered,[^^:sip_invite_domain=pbx.example.com:presence_id=1698@pbx.example.com]error/user_not_registered,[^^:sip_invite_domain=pbx.example.com:presence_id=1699@pbx.example.com]error/user_not_registered,[^^:sip_invite_domain=pbx.example.com:presence_id=1436@pbx.example.com]sofia/internalv6/sip:gw+softphone-v6@[2001:db8:2220:33:b17a:8818:d0f7:212d]:43620;transport=tcp;gw=softphone-v6;fs_nat=yes,[^^:sip_invite_domain=pbx.example.com:presence_id=1436@pbx.example.com]sofia/internal/sip:gw+pbx-b@192.0.2.100:48755;transport=tcp;gw=pbx-b;fs_nat=yes,[^^:sip_invite_domain=pbx.example.com:presence_id=1433@pbx.example.com]sofia/internalv6/sip:gw+softphone-v6@[2001:db8:2220::57]:53122;transport=tcp;gw=softphone-v6;fs_nat=yes,[^^:sip_invite_domain=pbx.example.com:presence_id=1433@pbx.example.com]sofia/internal/sip:gw+pbx-b@192.0.2.57:49507;transport=tcp;gw=pbx-b;fs_nat=yes,[^^:sip_invite_domain=pbx.example.com:presence_id=1411@pbx.example.com]sofia/internalv6/sip:gw+softphone-v6@[2001:db8:63ce::10]:5060;transport=tcp;gw=softphone-v6,[^^:sip_invite_domain=pbx.example.com:presence_id=1411@pbx.example.com]sofia/internal/sip:gw+pbx-b@192.0.2.44:5060;transport=tcp;gw=pbx-b,[^^:sip_invite_domain=pbx.example.com:presence_id=1301@pbx.example.com]error/user_not_registered,[^^:sip_invite_domain=pbx.example.com:presence_id=1300@pbx.example.com]sofia/internal/sip:gw+pbx-3@192.0.2.44:52353;transport=tcp;gw=pbx-3;fs_nat=yes"
+flat/pbx-calltakers.A.txt/api/leg0	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=1697@pbx.example.com]error/user_not_registered", "presence_id=1697@pbx.example.com", "cause=user_not_registered", "name=USER_NOT_REGISTERED/806"]
+flat/pbx-calltakers.A.txt/api/leg1	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=1698@pbx.example.com]error/user_not_registered", "presence_id=1698@pbx.example.com", "cause=user_not_registered", "name=USER_NOT_REGISTERED/806"]
+flat/pbx-calltakers.A.txt/api/leg2	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=1699@pbx.example.com]error/user_not_registered", "presence_id=1699@pbx.example.com", "cause=user_not_registered", "name=USER_NOT_REGISTERED/806"]
+flat/pbx-calltakers.A.txt/api/leg3	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=1436@pbx.example.com]sofia/internalv6/sip:gw+softphone-v6@[2001:db8:2220:33:b17a:8818:d0f7:212d]:43620;transport=tcp;gw=softphone-v6;fs_nat=yes", "presence_id=1436@pbx.example.com"]
+flat/pbx-calltakers.A.txt/api/leg4	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=1436@pbx.example.com]sofia/internal/sip:gw+pbx-b@192.0.2.100:48755;transport=tcp;gw=pbx-b;fs_nat=yes", "presence_id=1436@pbx.example.com"]
+flat/pbx-calltakers.A.txt/api/leg5	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=1433@pbx.example.com]sofia/internalv6/sip:gw+softphone-v6@[2001:db8:2220::57]:53122;transport=tcp;gw=softphone-v6;fs_nat=yes", "presence_id=1433@pbx.example.com"]
+flat/pbx-calltakers.A.txt/api/leg6	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=1433@pbx.example.com]sofia/internal/sip:gw+pbx-b@192.0.2.57:49507;transport=tcp;gw=pbx-b;fs_nat=yes", "presence_id=1433@pbx.example.com"]
+flat/pbx-calltakers.A.txt/api/leg7	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=1411@pbx.example.com]sofia/internalv6/sip:gw+softphone-v6@[2001:db8:63ce::10]:5060;transport=tcp;gw=softphone-v6", "presence_id=1411@pbx.example.com"]
+flat/pbx-calltakers.A.txt/api/leg8	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=1411@pbx.example.com]sofia/internal/sip:gw+pbx-b@192.0.2.44:5060;transport=tcp;gw=pbx-b", "presence_id=1411@pbx.example.com"]
+flat/pbx-calltakers.A.txt/api/leg9	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=1301@pbx.example.com]error/user_not_registered", "presence_id=1301@pbx.example.com", "cause=user_not_registered", "name=USER_NOT_REGISTERED/806"]
+flat/pbx-calltakers.A.txt/api/leg10	["raw=[^^:sip_invite_domain=pbx.example.com:presence_id=1300@pbx.example.com]sofia/internal/sip:gw+pbx-3@192.0.2.44:52353;transport=tcp;gw=pbx-3;fs_nat=yes", "presence_id=1300@pbx.example.com"]
+serde/vars/flat-map	"Ok {k1=v1,k2=a\\,b}"
+serde/vars/scoped-channel	"Err"
+serde/vars/scoped-with-sep	"Err"
+serde/vars/bad-scope	"Err"
+serde/endpoint/sofia	"Ok sofia/internal/1000@example.com"
+serde/endpoint/loopback-app	"Ok loopback/app=lua:script.lua"
+serde/endpoint/error	"Ok error/USER_BUSY"
+serde/endpoint/error-wire-name-refused	"Err"
+serde/endpoint/error-bad-cause	"Err"
+serde/endpoint/unknown-tag	"Err"
+serde/endpoint/group-call	"Ok ${group_call(support@example.com+E)}"
+serde/originate/extension	"Err"
+serde/originate/extension-inline-dialplan-refused	"Err"
+serde/originate/empty-inline-refused	"Err"
+serde/originate/inline-under-xml-refused	"Err"
+serde/originate/missing-endpoint	"Err"
+serde/bridge/basic	"Ok sofia/internal/1000"
+serde/bridge/with-vars	"Ok {hangup_after_bridge=true}sofia/internal/1000,sofia/internal/1001"
