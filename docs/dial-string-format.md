@@ -151,7 +151,9 @@ unchecked:
   `::` or ending in `:`, and a gateway carrying `::` without a profile. The
   gateway is looked up by the whole text between `gateway/` and the next `/`, in
   a hash holding each gateway under both `name` and `profile::name`, so the key
-  does not say where a profile ends.
+  does not say where a profile ends. A profile ending `:_` or a gateway opening
+  `_:` forms `:_:` in the join, which splits the dial string into enterprise
+  threads.
 - loopback: an extension or context carrying `/`, and an empty context or
   dialplan, which `channel_outgoing_channel` replaces with `default` and `xml`.
   An extension opening `app=` in any case runs that application: a `/` may
@@ -179,10 +181,21 @@ part of a text holding `@`, and truncates the text at its last `/` when what
 follows carries a `SWITCH_URL_UNSAFE` character and no `@`, as a profile
 holding `@` or a destination with a `/` after its `@` do.
 
-A `%` in that user part is where the trees differ. Upstream `switch_url_encode`
-copies a `%` opening a valid `%XX` through, so `a%41 b` becomes `a%41%20b`,
-measured on upstream master at `b3ba603f49`. The 1.10.13 fork at
-`8bb2a39` (commit `f47ca7c`) encodes every `%`, giving `a%2541%20b`. Either
+On every tree `switch_needs_url_encode` reads only `SWITCH_URL_UNSAFE`, so a
+user part holding no byte of that set outside a valid uppercase `%XX` is sent
+as it stands, controls other than CR and LF, DEL and non-ASCII included; one
+holding such a byte has those encoded too.
+
+URL encoding is where the trees `hooks/source-refs.yaml` names differ. Upstream
+`switch_url_encode_opt` copies a `%` opening a valid uppercase `%XX` through
+when `double_encode` is false, so `a%41 b` becomes `a%41%20b`, measured on
+master at `b3ba603f49`; a lowercase `%e9` is encoded. The 1.10.13 fork
+(`8bb2a39`) encodes every `%`, giving `a%2541%20b`. Its
+`switch_core_url_encode_opt` sizes the output by the input's length, so a value
+holding a byte to encode arrives cut to that length, an encoded byte that does
+not fit dropped with everything after it: the caller-id number mod_sofia
+writes into an outbound INVITE's From, and the To user it rebuilds `sip_to_uri`
+from on an inbound one. Upstream sizes that buffer to fit the encoding. Either
 way sofia-sip canonicalises an escaped unreserved character when it sends the
 request, so upstream's Request-URI reads `aA%20b`. `sip_destination_url` holds
 the encoded form; read it from a JSON event or `uuid_getvar`, since a plain
@@ -391,7 +404,10 @@ The dialplan carrier substitutes it before the block is parsed. What reaches
 install is dropped: `switch_ivr_originate` sets each pair through
 `switch_channel_set_variable_var_check`, which refuses a value holding `${` with
 a CRIT log line unless `origination_nested_vars` is true on the list, the
-originating channel, the core, or anywhere in the dial string's text.
+originating channel or the core, or the dial string opts in per enterprise
+thread: `origination_nested_vars=true`, in any case, within that thread's own
+text, or a `<>` block ahead of the `:_:` split setting it true for every
+thread. A `{}` block in one thread lets no `${` through on another.
 
 ### The inline action list is a third carrier
 
@@ -473,6 +489,24 @@ an `originate` line.
 
 It does not help with a quoted value: the quote pairing suppresses splitting on
 whichever separator is in use, so two quoted values still merge.
+
+`switch_event_create_brackets` splits the pairs in place, and some blocks the
+switch accepts reach past their close. `FlattenedDialString` reads them as it
+does:
+
+- A block of `^^` alone splits on its terminator and reads its pairs from the
+  text after the close, rewriting that text; a backslash before the close
+  escapes the terminator and reads on the same way. The leg carries
+  `LegWarning::BlockRewritesFollowingText`, a list or thread block raises
+  `ListWarning::BlockRewritesFollowingText`, and what follows is read from the
+  rewritten text.
+- A pair opening a `^^` head that names a non-ASCII separator is split on that
+  separator's first byte, and what that installs, if anything, no string
+  carries: the pair is read as installing nothing and carries
+  `LegWarning::PairUnreadable`.
+- A group or leg opening such a head, and a block with a non-ASCII separator
+  whose content ends in a backslash, send a split on the first byte into text no
+  string carries: `FlattenedDialStringError::SplitSeparatorUnreadable`.
 
 **A `^^X` prefix on an individual value is not a general mechanism.** Writing
 `{k=^^:a:b}` sets `k` to the literal `^^:a:b` — measured on both carriers. Only

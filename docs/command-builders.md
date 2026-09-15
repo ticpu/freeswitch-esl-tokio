@@ -298,5 +298,3 @@ Key design choices:
 - Automatic dispatch (no `client.originate(cmd)` — just `client.bgapi(&cmd.to_string())`)
 - Modelling a command's output schema (`status`, `sofia status`, `show` rows)
 - SIP URI type (future extension point)
-- Enterprise originate with `:_:` separator (deferred, documented in
-  [dial-string-format.md](dial-string-format.md))
