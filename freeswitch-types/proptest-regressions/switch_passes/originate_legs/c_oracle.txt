@@ -12,3 +12,4 @@ cc fe79ef6c7f4029b28a0a7ba771ac808c56fff32ab2b293020bbecfac61a31ef7 # shrinks to
 cc 8c28f4d4cb4c9b9016c4398e0f24551741ec5c0452833a98f1789bbff10aafed # shrinks to "<^^é<>[<]:_:[>]|[^^\\>]:_:é|[|]"
 cc e1d1114a775f18fed65553d9af6c4e91cf2c1f2130f7eae821da9f970e96c705 # shrinks to "{}\t \\n'\\n}'\\n\\n,  é\\"
 cc 6144dc83083e4e33ef1be28b6f5f9c541f2eb9bad0eeda723ae4afd19eb79647 # shrinks to "<^^{^^é<}[>],[k=v]\\>|[{]"
+cc d812e523b2b5bf901ac3758c2be4d9de06284ddb609262c68b61ee361ec8dd09 # shrinks to "<^^é><<>:_:[>],é|[[]"
