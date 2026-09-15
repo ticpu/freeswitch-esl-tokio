@@ -184,8 +184,9 @@ of the event group constants (`CHANNEL_EVENTS`, `MEDIA_EVENTS`,
 `PRESENCE_EVENTS`, `SYSTEM_EVENTS`, `CONFERENCE_EVENTS`) in
 `freeswitch-types/src/event.rs` and update them accordingly.
 
-When FreeSWITCH ESL is available on `127.0.0.1:8022`, also run live tests:
-`ss -tlnp sport = :8022` to check, then `cargo test --test 'live_*' -- --ignored`.
+When a live test switch is available, also run live tests:
+`ESL_PORT=<port> cargo test --release --test 'live_*' -- --ignored`
+(`ESL_HOST` / `ESL_PORT` / `ESL_PASSWORD`, default `localhost:8022`).
 
 Live tests run in parallel against one shared switch, so a new one must
 correlate every event to its own channel UUID and reap the channels it created
@@ -194,7 +195,7 @@ for that and for what the switch must provide (dialplan, modules, users).
 
 To watch a switch by hand, use `event_listener` / `event_filter` and `fs_cli`,
 never a hand-rolled socket — `docs/live-test-switch.md` covers the flags. Both
-examples default to port 8021, so a live-switch run needs `-P 8022`; `fs_cli`
+examples default to port 8021, so a live-switch run needs `-P <port>`; `fs_cli`
 needs nothing but that port, since host and password are already its defaults.
 
 ## Documentation Style
@@ -326,7 +327,7 @@ See [docs/outbound-esl-quirks.md](docs/outbound-esl-quirks.md) for details.
   via `originate_quote()`/`originate_unquote()` in `commands/mod.rs`; with
   `Originate::with_argv_separator` the `^^<sep>` line bypasses both and escapes
   each argument for that split instead
-- `cargo run --example outbound_test` exercises outbound against real FS on port 8022
+- `cargo run --example outbound_test` exercises outbound against a live switch named by `ESL_PORT`
 
 ## Examples — Write for the New User
 

@@ -19,13 +19,18 @@ impl EslEnv {
     /// default: a typo that quietly connected somewhere else would read as
     /// FreeSWITCH refusing the connection.
     pub fn from_env() -> Result<Self, String> {
+        Self::from_env_with_port(DEFAULT_ESL_PORT)
+    }
+
+    /// [`from_env`](Self::from_env), with `default_port` when `ESL_PORT` is unset.
+    pub fn from_env_with_port(default_port: u16) -> Result<Self, String> {
         Ok(Self {
             host: std::env::var("ESL_HOST").unwrap_or_else(|_| "localhost".to_string()),
             port: match std::env::var("ESL_PORT") {
                 Ok(value) => value
                     .parse()
                     .map_err(|_| format!("ESL_PORT is not a port number: {value}"))?,
-                Err(_) => DEFAULT_ESL_PORT,
+                Err(_) => default_port,
             },
             password: std::env::var("ESL_PASSWORD")
                 .unwrap_or_else(|_| DEFAULT_ESL_PASSWORD.to_string()),

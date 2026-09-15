@@ -2,7 +2,7 @@
 //! (application/extension/inline), the channel timetable, uuid_setvar/getvar
 //! and uuid_kill round trips, and dial-string escaping per carrier.
 //!
-//! These tests require FreeSWITCH ESL on localhost:8022 with password ClueCon.
+//! These tests require a live FreeSWITCH ESL; see docs/live-test-switch.md.
 //! Run with: cargo test --test 'live_*' -- --ignored
 
 mod live_common;
@@ -60,7 +60,7 @@ async fn originate_and_reap(cmd: &Originate) {
 
 /// `&park()` holds the channel, so bgapi returns while it is still up.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_originate_application_target() {
     originate_and_reap(&Originate::application(
         test_9199(),
@@ -71,7 +71,7 @@ async fn live_originate_application_target() {
 
 /// Extension target: routed through the XML dialplan rather than an app.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_originate_extension_target() {
     let cmd = Originate::extension(test_9199(), "9199")
         .dialplan(DialplanType::Xml)
@@ -83,7 +83,7 @@ async fn live_originate_extension_target() {
 
 /// An inline dialplan, which answers and hangs up before bgapi reports.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_originate_inline_target() {
     let cmd = Originate::inline(
         test_9199(),
@@ -100,7 +100,7 @@ async fn live_originate_inline_target() {
 /// A timeout without cid_name/cid_num forces `undef` placeholders into the
 /// positional tail, which FreeSWITCH has to accept as NULL arguments.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_originate_timeout_fills_positional_gaps() {
     let cmd = Originate::application(test_9199(), Application::simple("park"))
         .timeout(Duration::from_secs(5));
@@ -129,20 +129,20 @@ type HeaderValues<'a> = &'a [(EventHeader, Option<&'a str>)];
 type VariableValues<'a> = &'a [(&'a str, Option<&'a str>)];
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_originate_argv_separator_positionals() {
     originate_positionals(Some('~')).await;
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_originate_blank_positionals() {
     originate_positionals(None).await;
 }
 
 /// `originate_function` answers usage past seven arguments on either split.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_originate_refuses_an_eighth_argument() {
     let (client, _events, _permit) = connect().await;
     for line in [
@@ -395,7 +395,7 @@ async fn unanswered_originate_elapsed(
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_originate_argv_separator_timeout_is_read() {
     let (client, _events, _permit) = connect().await;
 
@@ -420,7 +420,7 @@ async fn live_originate_argv_separator_timeout_is_read() {
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_channel_timetable_on_create() {
     let (client, mut events, _permit) = connect().await;
 
@@ -484,7 +484,7 @@ async fn live_channel_timetable_on_create() {
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_uuid_setvar_getvar_round_trip() {
     let (client, mut events, _permit) = connect().await;
 
@@ -523,7 +523,7 @@ async fn live_uuid_setvar_getvar_round_trip() {
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_uuid_kill_with_cause() {
     let (client, mut events, _permit) = connect().await;
 
@@ -646,7 +646,7 @@ fn uuid_block(uuid: &str, extra: &[(&str, &str)]) -> Variables {
 
 /// mod_loopback's A leg reports the extension and context it split the destination into.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_loopback_fields_arrive_on_either_carrier() {
     let (client, mut events, _permit) = connect().await;
     client
@@ -694,7 +694,7 @@ async fn live_loopback_fields_arrive_on_either_carrier() {
 /// mod_sofia records the URL it dials; nothing listens on the discard port, so the leg ends by
 /// itself.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_sofia_destination_arrives_on_either_carrier() {
     let (client, mut events, _permit) = connect().await;
     client
@@ -759,7 +759,7 @@ async fn wait_for_user_lookup(
 
 /// mod_dptools names the user and domain it looked up.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_user_fields_arrive_on_either_carrier() {
     let (client, mut events, _permit) = connect().await;
     client
@@ -796,7 +796,7 @@ async fn live_user_fields_arrive_on_either_carrier() {
 /// Through `bridge`, endpoint text naming a variable is left to the expansion of the executing
 /// channel, as a block value is, while a `$$` beside no reference still arrives whole.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_endpoint_text_leaves_a_reference_to_the_bridge_expansion() {
     let (client, mut events, _permit) = connect().await;
     client
@@ -980,7 +980,7 @@ async fn escaping_over_the_dialplan_carrier(separator: Option<char>, scope: Vari
 /// The `originate` API splits its argument list before the block is parsed, so
 /// this carrier needs one escaping level more than a dialplan application.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_escaping_survives_the_api_carrier() {
     escaping_over_the_api_carrier(None, VariablesType::Default).await;
 }
@@ -989,7 +989,7 @@ async fn live_escaping_survives_the_api_carrier() {
 /// one level less. Rendering with the API default here would corrupt a quoted
 /// value, which is the whole reason the carrier is nameable.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_escaping_survives_the_dialplan_carrier() {
     escaping_over_the_dialplan_carrier(None, VariablesType::Default).await;
 }
@@ -997,7 +997,7 @@ async fn live_escaping_survives_the_dialplan_carrier() {
 /// A separator the values do not contain is the only way a `${...}`-expanded
 /// value carries a comma, since substitution happens before the block is parsed.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_chosen_separator_carries_commas_unescaped() {
     let (client, _events, permit) = connect().await;
 
@@ -1034,7 +1034,7 @@ async fn live_chosen_separator_carries_commas_unescaped() {
 /// comma form, so every value that needed escaping there still needs it here.
 /// Only the comma stops being special.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_separated_escaping_survives_the_api_carrier() {
     escaping_over_the_api_carrier(Some(ESCAPING_SEPARATOR), VariablesType::Default).await;
 }
@@ -1043,7 +1043,7 @@ async fn live_separated_escaping_survives_the_api_carrier() {
 /// shape, so a rule that only holds on one carrier shows up as a difference
 /// between these two tests rather than as a passing suite.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_separated_escaping_survives_the_dialplan_carrier() {
     escaping_over_the_dialplan_carrier(Some(ESCAPING_SEPARATOR), VariablesType::Default).await;
 }
@@ -1052,14 +1052,14 @@ async fn live_separated_escaping_survives_the_dialplan_carrier() {
 /// preceded by a scan that toggles its quote state on every `'` whatever
 /// precedes it, so the same values at the same depth measure differently.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_escaping_survives_the_api_carrier_in_channel_scope() {
     escaping_over_the_api_carrier(None, VariablesType::Channel).await;
 }
 
 /// The dialplan half of the channel-scope pair.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_escaping_survives_the_dialplan_carrier_in_channel_scope() {
     escaping_over_the_dialplan_carrier(None, VariablesType::Channel).await;
 }
@@ -1073,7 +1073,7 @@ async fn live_escaping_survives_the_dialplan_carrier_in_channel_scope() {
 /// escape in that scan, and the refusal should then be revisited rather than
 /// kept.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_channel_scope_pairs_quotes_across_values() {
     let (client, _events, permit) = connect().await;
 
@@ -1116,7 +1116,7 @@ async fn live_channel_scope_pairs_quotes_across_values() {
 /// before anything the leg does — the INVITE, for a SIP leg. The value carries
 /// a space, so this also proves the hook survives the block's quoting.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_execute_on_originate_runs_before_the_leg_does() {
     let (client, _events, permit) = connect().await;
 
@@ -1158,7 +1158,7 @@ async fn live_execute_on_originate_runs_before_the_leg_does() {
 /// Failing here is good news — it would mean FreeSWITCH started honouring an
 /// empty pair, and the refusal should then be revisited rather than kept.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_empty_value_still_never_reaches_the_channel() {
     let (client, _events, permit) = connect().await;
 
@@ -1206,7 +1206,7 @@ const DUMP_IDENTITY_HEADERS: &[&str] = &[
 ];
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_channel_dump_rebuild_loop() {
     let (client, mut events, _permit) = connect().await;
 
@@ -1335,7 +1335,7 @@ async fn live_channel_dump_rebuild_loop() {
 /// The race the rebuild loop hits in production: the channel hung up before
 /// its dump.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_channel_dump_of_reaped_uuid_is_skippable() {
     let (client, mut events, _permit) = connect().await;
 
@@ -1454,7 +1454,7 @@ fn show_channel_uuids(body: &str) -> Vec<String> {
 /// CHANNEL_CREATE the switch already sent, or the example is inventing state
 /// no consumer could have got from the wire.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_show_bootstrap_rebuilds_channel_create() {
     let (client, mut events, _permit) = connect().await;
 

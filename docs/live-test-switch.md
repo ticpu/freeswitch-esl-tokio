@@ -4,8 +4,7 @@ Every `tests/live_*.rs` file runs against a real FreeSWITCH. The tests are
 `#[ignore]`d so a normal `cargo test` skips them:
 
 ```sh
-ss -tlnp sport = :8022
-cargo test --test 'live_*' -- --ignored
+ESL_PORT=<port> cargo test --release --test 'live_*' -- --ignored
 ```
 
 Everything below is what those tests assume. A missing piece shows up as one
@@ -22,11 +21,13 @@ measure.
 
 | | |
 |---|---|
-| Listener | `127.0.0.1:8022` |
-| Password | `ClueCon` (the crate's `DEFAULT_ESL_PASSWORD`) |
+| Listener | `ESL_HOST` and `ESL_PORT`, default `localhost:8022` |
+| Password | `ESL_PASSWORD`, default `ClueCon` (the crate's `DEFAULT_ESL_PASSWORD`) |
 | Concurrent connections | up to `MAX_CONCURRENT_CONNECTIONS` (5) |
 
-The suite runs tests in parallel against this one switch, so every connection
+The variables are the ones the examples read, parsed the same way: a malformed
+`ESL_PORT` fails the run rather than dialling the default. The suite runs tests
+in parallel against this one switch, so every connection
 sees every other test's events. Tests must correlate on their own channel's
 UUID; see [Writing a live test](#writing-a-live-test).
 
@@ -198,10 +199,10 @@ it cannot tell you that.
 ## Checking state by hand
 
 ```sh
-fs_cli -P 8022 -x "show channels count"
-fs_cli -P 8022 -x "fsctl sps"
-fs_cli -P 8022 -x "status"     # sessions per Sec out of max
-fs_cli -P 8022 -x "hupall NORMAL_CLEARING"
+fs_cli -P <port> -x "show channels count"
+fs_cli -P <port> -x "fsctl sps"
+fs_cli -P <port> -x "status"     # sessions per Sec out of max
+fs_cli -P <port> -x "hupall NORMAL_CLEARING"
 ```
 
 A clean switch reports `0 total.` before and after a suite run. Anything left
@@ -210,11 +211,11 @@ behind is a test that failed to reap.
 ## Watching events and logs by hand
 
 Use the crate's own examples rather than a hand-rolled socket. Both take
-`-P 8022`, since they default to the standard 8021:
+`-P <port>`, since they default to the standard 8021:
 
 ```sh
-cargo run --example event_listener -- -P 8022
-cargo run --example event_filter -- -P 8022 -e CHANNEL_EXECUTE_COMPLETE -f Unique-ID -v <uuid> -c 1
+cargo run --example event_listener -- -P <port>
+cargo run --example event_filter -- -P <port> -e CHANNEL_EXECUTE_COMPLETE -f Unique-ID -v <uuid> -c 1
 ```
 
 `event_filter` filters client-side on any header, takes `/regex/` values, and
@@ -229,7 +230,7 @@ events, so the count a `-c` needs is not knowable in advance, and a guess that
 runs over hangs until something kills it.
 
 ```sh
-cargo run --example event_filter -- -P 8022 -e ALL \
+cargo run --example event_filter -- -P <port> -e ALL \
   -f Unique-ID -v <uuid> -U Channel-State=CS_DESTROY -T 60
 ```
 
@@ -247,7 +248,7 @@ the command returns, which cuts the log off before anything interesting
 happens:
 
 ```sh
-fs_cli -P 8022 -l debug --log-file - \
+fs_cli -P <port> -l debug --log-file - \
   -X "originate null/probe &sleep(30000)" --job-timeout 35000
 ```
 

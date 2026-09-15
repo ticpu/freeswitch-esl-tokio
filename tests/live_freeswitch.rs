@@ -2,7 +2,7 @@
 //! lifecycle, liveness, command timeout, userauth, outbound connect-response
 //! case preservation, log events, and header/codec normalization.
 //!
-//! These tests require FreeSWITCH ESL on localhost:8022 with password ClueCon.
+//! These tests require a live FreeSWITCH ESL; see docs/live-test-switch.md.
 //! Run with: cargo test --test 'live_*' -- --ignored
 
 mod live_common;
@@ -15,8 +15,7 @@ use freeswitch_esl_tokio::{
     EslConnectOptions, EslError, EslEventType, EventFormat, EventHeader, HeaderLookup, Originate,
 };
 use live_common::{
-    connect, kill_channel, wait_for_own_event, ChannelReaper, CONN_SEMAPHORE, ESL_HOST,
-    ESL_PASSWORD, ESL_PORT,
+    connect, esl_env, kill_channel, wait_for_own_event, ChannelReaper, CONN_SEMAPHORE,
 };
 use std::time::Duration;
 use tokio::time::Instant;
@@ -36,7 +35,7 @@ async fn wait_disconnected(client: &EslClient) {
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_connect_and_status() {
     let (client, _events, _permit) = connect().await;
     assert!(client.is_connected());
@@ -52,7 +51,7 @@ async fn live_connect_and_status() {
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_liveness_heartbeat_resets_timer() {
     let (client, mut events, _permit) = connect().await;
 
@@ -92,7 +91,7 @@ async fn live_liveness_heartbeat_resets_timer() {
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_command_timeout_msleep() {
     let (client, _events, _permit) = connect().await;
 
@@ -128,7 +127,7 @@ async fn live_command_timeout_msleep() {
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_disconnect_status() {
     let (client, _events, _permit) = connect().await;
     assert!(client.is_connected());
@@ -156,7 +155,7 @@ async fn live_disconnect_status() {
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_reconnect_clean_state() {
     // Connect, disconnect, then reconnect and verify clean state
     let (client1, _events1, _permit1) = connect().await;
@@ -205,17 +204,22 @@ async fn live_reconnect_clean_state() {
 /// and `esl-allowed-log = false`, but the 512-byte reply buffer overflow
 /// truncates these headers (Allowed-LOG is always fully lost).
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_connect_userauth_truncated_response() {
     let permit = CONN_SEMAPHORE
         .acquire()
         .await
         .expect("semaphore closed");
     let opts = EslConnectOptions::new().with_connect_timeout(Duration::from_secs(5));
+    let env = esl_env();
     let (client, _events) = EslClient::connect_with_auth(
-        ESL_HOST,
-        ESL_PORT,
-        AuthMethod::user("many-events@default", ESL_PASSWORD),
+        &env.host,
+        env.port,
+        AuthMethod::user(
+            "many-events@default",
+            env.password
+                .as_str(),
+        ),
         opts,
     )
     .await
@@ -266,7 +270,7 @@ async fn live_connect_userauth_truncated_response() {
 ///
 /// Drives a real outbound socket against FS to verify the wire path.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_outbound_connect_response_preserves_underscored_case() {
     use tokio::net::TcpListener;
 
@@ -395,7 +399,7 @@ async fn live_outbound_connect_response_preserves_underscored_case() {
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_log_events_have_log_type() {
     let (client, mut events, _permit) = connect().await;
 
@@ -515,7 +519,7 @@ fn distinct_lowercased_keys(evt: &freeswitch_esl_tokio::EslEvent) -> Vec<String>
 /// lowercase from `switch_event.c`, so a live event is the only proof that
 /// both spellings land on one key.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_header_normalization() {
     let evt = park_and_await(EslEventType::ChannelCreate).await;
 
@@ -547,7 +551,7 @@ async fn live_header_normalization() {
 /// The same, for the event `switch_core_codec.c` writes with a casing all its
 /// own -- read codec lowercase, write codec mixed.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_codec_header_normalization() {
     let evt = park_and_await(EslEventType::Codec).await;
 

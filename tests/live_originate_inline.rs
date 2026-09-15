@@ -8,7 +8,7 @@
 //! the escaping this crate emits is undone the way `cleanup_separated_string`
 //! is expected to undo it, which is why these are not unit tests.
 //!
-//! These tests require FreeSWITCH ESL on localhost:8022 with password ClueCon.
+//! These tests require a live FreeSWITCH ESL; see docs/live-test-switch.md.
 //! Run with: cargo test --test 'live_*' -- --ignored
 
 mod live_common;
@@ -95,7 +95,7 @@ async fn run_and_read_back(cmd: &Originate, variable: &str) -> Option<String> {
 /// A comma in an argument is the case that shipped broken: the list would have
 /// become three applications, two of them fragments of a tone spec.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_inline_argument_keeps_its_commas() {
     let spec = "tone_stream://%(500,0,800)";
     let cmd = Originate::inline(
@@ -115,7 +115,7 @@ async fn live_inline_argument_keeps_its_commas() {
 
 /// The same for a separator the caller named, which the arguments also use.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_inline_argument_keeps_a_named_separator() {
     let value = "a|b|c";
     let cmd = Originate::inline_with_delimiter(
@@ -136,7 +136,7 @@ async fn live_inline_argument_keeps_a_named_separator() {
 
 /// Every separator at once, since none of them can make a list unrenderable.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_inline_argument_keeps_a_hostile_value() {
     let value = ",|;~^!";
     let cmd = Originate::inline(
@@ -157,7 +157,7 @@ async fn live_inline_argument_keeps_a_hostile_value() {
 /// The argument carries a space so the action list is wrapped in quotes, which
 /// is the case where the escaping is load-bearing rather than incidental.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_inline_argument_keeps_a_single_quote() {
     let value = "it's one value";
     let cmd = Originate::inline(
@@ -178,7 +178,7 @@ async fn live_inline_argument_keeps_a_single_quote() {
 /// The hunt's split trims a space at an action's end and reads escapes in it, so the
 /// argument is escaped for that split. No backslash: `set` expands its value itself.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_inline_argument_keeps_an_edge_space_and_a_tab() {
     let value = "a\tb it's ";
     let cmd = Originate::inline(
@@ -199,7 +199,7 @@ async fn live_inline_argument_keeps_an_edge_space_and_a_tab() {
 /// Two quotes in one value pair with each other at either split unless each is escaped
 /// for both, and a `cond` over quoted operands is the expression that pairing breaks.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_inline_argument_keeps_two_quotes() {
     for (value, want) in [
         ("x'a'y z", "x'a'y z"),
@@ -225,7 +225,7 @@ async fn live_inline_argument_keeps_two_quotes() {
 /// An argument rewritten after construction still renders correctly, which is
 /// the property that separator selection could not offer.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_inline_argument_rewritten_after_construction() {
     use freeswitch_esl_tokio::commands::originate::OriginateTarget;
 

@@ -2,7 +2,7 @@
 //! and heartbeat, the sendevent family, noevents/nixevent/filter, repeating
 //! SIP header round trips, multi-command api, reply status, and bgapi.
 //!
-//! These tests require FreeSWITCH ESL on localhost:8022 with password ClueCon.
+//! These tests require a live FreeSWITCH ESL; see docs/live-test-switch.md.
 //! Run with: cargo test --test 'live_*' -- --ignored
 
 mod live_common;
@@ -16,7 +16,7 @@ use std::time::Duration;
 use tokio::time::Instant;
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_subscribe_and_recv_heartbeat() {
     let (client, mut events, _permit) = connect().await;
 
@@ -38,7 +38,7 @@ async fn live_subscribe_and_recv_heartbeat() {
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_sendevent_with_priority() {
     let (client, _events, _permit) = connect().await;
 
@@ -59,7 +59,7 @@ async fn live_sendevent_with_priority() {
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_sendevent_with_array_header() {
     let (client, _events, _permit) = connect().await;
 
@@ -93,7 +93,7 @@ async fn live_sendevent_with_array_header() {
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_recv_custom_sendevent() {
     let (client, mut events, _permit) = connect().await;
 
@@ -116,7 +116,7 @@ async fn live_recv_custom_sendevent() {
 /// (genuinely non-UTF-8 bytes) can't be exercised here because a Rust `&str`
 /// is always valid UTF-8 -- it stays unit-tested.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_recv_custom_sendevent_percent_decoded() {
     let (client, mut events, _permit) = connect().await;
 
@@ -136,7 +136,7 @@ async fn live_recv_custom_sendevent_percent_decoded() {
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_api_multiple_commands() {
     let (client, _events, _permit) = connect().await;
 
@@ -154,7 +154,7 @@ async fn live_api_multiple_commands() {
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_reply_status_ok() {
     let (client, _events, _permit) = connect().await;
 
@@ -166,7 +166,7 @@ async fn live_reply_status_ok() {
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_reply_status_err() {
     let (client, _events, _permit) = connect().await;
 
@@ -204,7 +204,7 @@ async fn live_reply_status_err() {
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_noevents_stops_delivery() {
     let (client, mut events, _permit) = connect().await;
     let subclass = format!("esl_test::noev_{}", std::process::id());
@@ -271,7 +271,7 @@ async fn live_noevents_stops_delivery() {
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_nixevent_selective_unsubscribe() {
     let (client, mut events, _permit) = connect().await;
     let subclass = format!("esl_test::nix_{}", std::process::id());
@@ -324,7 +324,7 @@ async fn live_nixevent_selective_unsubscribe() {
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_api_err_body() {
     let (client, _events, _permit) = connect().await;
 
@@ -344,7 +344,7 @@ async fn live_api_err_body() {
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_sendevent_comma_separated_sip_header() {
     let (client, mut events, _permit) = connect().await;
 
@@ -367,7 +367,7 @@ async fn live_sendevent_comma_separated_sip_header() {
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_sendevent_array_sip_header() {
     use freeswitch_types::EslArray;
 
@@ -397,7 +397,7 @@ async fn live_sendevent_array_sip_header() {
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_sendevent_repeated_diversion_header() {
     use freeswitch_types::EslArray;
 
@@ -436,7 +436,7 @@ async fn live_sendevent_repeated_diversion_header() {
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_filter_event_name() {
     let (client, mut events, _permit) = connect().await;
 
@@ -519,7 +519,7 @@ async fn live_filter_event_name() {
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_sendevent_returns_event_uuid() {
     let (client, _events, _permit) = connect().await;
 
@@ -549,7 +549,7 @@ async fn live_sendevent_returns_event_uuid() {
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_bgapi_correlation() {
     let (client, mut events, _permit) = connect().await;
 
@@ -629,7 +629,7 @@ async fn live_bgapi_correlation() {
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_bgapi_single_round_trip() {
     let (client, mut events, _permit) = connect().await;
 
@@ -679,7 +679,7 @@ async fn live_bgapi_single_round_trip() {
 /// and nothing to reap. Both halves are asserted: the reorder must not cost the
 /// `CUSTOM` subscription it is protecting.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_custom_first_does_not_swallow_later_event_types() {
     let (client, mut events, _permit) = connect().await;
     let subclass = format!("esl_test::ordering_{}", std::process::id());
@@ -735,7 +735,7 @@ async fn live_custom_first_does_not_swallow_later_event_types() {
 /// listener's subclass hash, and only `ALL` (via `set_all_custom`) populates
 /// that hash wholesale. Subscribing `CUSTOM` with no subclass leaves it empty.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_bare_custom_delivers_no_subclassed_events() {
     let (client, mut events, _permit) = connect().await;
     let subclass = format!("esl_test::bare_{}", std::process::id());

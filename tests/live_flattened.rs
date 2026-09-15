@@ -2,7 +2,7 @@
 //! against the committed fixtures, and `FlattenedDialString`'s typed view
 //! against what each leg's channel receives, per carrier.
 //!
-//! These tests require FreeSWITCH ESL on localhost:8022 with password ClueCon
+//! These tests require a live FreeSWITCH ESL
 //! and the flattened-probe directory groups; see docs/live-test-switch.md.
 //! Run with: cargo test --test live_flattened -- --ignored
 
@@ -176,7 +176,7 @@ fn registered_legs_sorted(text: &str) -> String {
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_group_call_output_matches_the_fixtures() {
     let (client, _events, _permit) = connect().await;
 
@@ -447,7 +447,7 @@ fn assert_legs_match(label: &str, list: &FlattenedDialString, created: &[EslEven
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_typed_view_equals_what_each_leg_received_over_the_api() {
     let (client, mut events, _permit) = connect().await;
     client
@@ -485,7 +485,7 @@ async fn live_typed_view_equals_what_each_leg_received_over_the_api() {
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_typed_view_equals_what_each_leg_received_over_the_dialplan() {
     let (client, mut events, _permit) = connect().await;
     client
@@ -548,7 +548,7 @@ async fn live_typed_view_equals_what_each_leg_received_over_the_dialplan() {
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_error_legs_end_with_the_cause_the_reading_predicts() {
     let (client, _events, _permit) = connect().await;
 
@@ -763,7 +763,7 @@ async fn typed_view_against_channel(
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_empty_pairs_ignore_or_clear_by_arrival_depth() {
     let (client, _events, _permit) = connect().await;
 
@@ -821,7 +821,7 @@ async fn live_empty_pairs_ignore_or_clear_by_arrival_depth() {
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_wider_scope_wins_unless_the_leg_clobbers() {
     let (client, _events, _permit) = connect().await;
 
@@ -856,7 +856,7 @@ async fn live_wider_scope_wins_unless_the_leg_clobbers() {
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_argv_split_matches_originate_split() {
     let (client, _events, _permit) = connect().await;
 
@@ -992,37 +992,37 @@ async fn escaping_through_the_typed_view(carrier: DialStringCarrier, scope: Vari
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_typed_view_reads_escaping_depths_over_the_api() {
     escaping_through_the_typed_view(API, VariablesType::Default).await;
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_typed_view_reads_escaping_depths_over_the_dialplan() {
     escaping_through_the_typed_view(DIALPLAN, VariablesType::Default).await;
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_typed_view_reads_escaping_depths_over_the_api_in_enterprise_scope() {
     escaping_through_the_typed_view(API, VariablesType::Enterprise).await;
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_typed_view_reads_escaping_depths_over_the_dialplan_in_enterprise_scope() {
     escaping_through_the_typed_view(DIALPLAN, VariablesType::Enterprise).await;
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_typed_view_reads_escaping_depths_over_the_api_in_channel_scope() {
     escaping_through_the_typed_view(API, VariablesType::Channel).await;
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_typed_view_reads_escaping_depths_over_the_dialplan_in_channel_scope() {
     escaping_through_the_typed_view(DIALPLAN, VariablesType::Channel).await;
 }
@@ -1199,19 +1199,19 @@ async fn escaping_at_an_argv_separator(scope: VariablesType) {
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_escaping_depths_at_an_argv_separator() {
     escaping_at_an_argv_separator(VariablesType::Default).await;
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_escaping_depths_at_an_argv_separator_in_enterprise_scope() {
     escaping_at_an_argv_separator(VariablesType::Enterprise).await;
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_escaping_depths_at_an_argv_separator_in_channel_scope() {
     escaping_at_an_argv_separator(VariablesType::Channel).await;
 }
@@ -1281,7 +1281,7 @@ async fn dial_at_argv(
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_typed_view_equals_what_each_leg_received_at_an_argv_separator() {
     let (client, mut events, _permit) = connect().await;
     client
@@ -1312,7 +1312,7 @@ async fn live_typed_view_equals_what_each_leg_received_at_an_argv_separator() {
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_blank_split_forwards_the_legs_retain_keeps() {
     let (client, mut events, _permit) = connect().await;
     client
@@ -1351,7 +1351,7 @@ async fn live_blank_split_forwards_the_legs_retain_keeps() {
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_argv_separator_forwards_the_legs_retain_keeps() {
     let (client, mut events, _permit) = connect().await;
     client
@@ -1389,7 +1389,7 @@ async fn live_argv_separator_forwards_the_legs_retain_keeps() {
 }
 
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_argv_separator_dial_string_edge_spaces() {
     let (client, mut events, _permit) = connect().await;
     client

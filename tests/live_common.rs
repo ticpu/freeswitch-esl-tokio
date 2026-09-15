@@ -10,18 +10,28 @@ use freeswitch_esl_tokio::commands::{
 };
 use freeswitch_esl_tokio::{
     parse_api_body, EslClient, EslConnectOptions, EslEvent, EslEventPriority, EslEventStream,
-    EslEventType, EventFormat, EventHeader, HeaderLookup, Originate, DEFAULT_ESL_PASSWORD,
-    UNDEF_VALUE,
+    EslEventType, EventFormat, EventHeader, HeaderLookup, Originate, UNDEF_VALUE,
 };
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 use tokio::sync::{OnceCell, Semaphore};
 use tokio::time::Instant;
 
-pub const ESL_HOST: &str = "localhost";
-pub const ESL_PORT: u16 = 8022;
-pub const ESL_PASSWORD: &str = DEFAULT_ESL_PASSWORD;
+#[path = "../examples/common/env.rs"]
+mod esl_env;
+
+/// The suite's port when `ESL_PORT` is unset.
+pub const DEFAULT_LIVE_PORT: u16 = 8022;
 pub const MAX_CONCURRENT_CONNECTIONS: usize = 5;
+
+/// The switch under test: `ESL_HOST` / `ESL_PORT` / `ESL_PASSWORD`, read the way the examples read them.
+pub fn esl_env() -> &'static esl_env::EslEnv {
+    static ENV: std::sync::OnceLock<esl_env::EslEnv> = std::sync::OnceLock::new();
+    ENV.get_or_init(|| {
+        esl_env::EslEnv::from_env_with_port(DEFAULT_LIVE_PORT).unwrap_or_else(|e| panic!("{e}"))
+    })
+}
+
 pub const REQUIRED_SPS: u32 = 1000;
 pub const REQUIRED_MAX_SESSIONS: u32 = 1000;
 
@@ -72,9 +82,16 @@ pub async fn connect() -> (
         .await
         .expect("semaphore closed");
     let opts = EslConnectOptions::new().with_connect_timeout(Duration::from_secs(30));
-    let (client, events) = EslClient::connect_with_options(ESL_HOST, ESL_PORT, ESL_PASSWORD, opts)
-        .await
-        .expect("failed to connect to FreeSWITCH");
+    let env = esl_env();
+    let (client, events) =
+        EslClient::connect_with_options(&env.host, env.port, &env.password, opts)
+            .await
+            .unwrap_or_else(|e| {
+                panic!(
+                    "failed to connect to FreeSWITCH at {}:{} (ESL_HOST / ESL_PORT): {e}",
+                    env.host, env.port
+                )
+            });
     client.set_command_timeout(Duration::from_secs(10));
     raise_session_throttle(&client).await;
     (client, events, permit)

@@ -2,7 +2,7 @@
 //! loopback originate (see docs/originate-loopback-yaml.md), nested-bridge
 //! scoped variables, and the bowout pair.
 //!
-//! These tests require FreeSWITCH ESL on localhost:8022 with password ClueCon.
+//! These tests require a live FreeSWITCH ESL; see docs/live-test-switch.md.
 //! Run with: cargo test --test 'live_*' -- --ignored
 
 mod live_common;
@@ -121,7 +121,7 @@ fn yaml_loopback_bowout_parses() {
 /// comes up: both legs are created and answered, and every variable from the
 /// originate block is readable on each leg.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_originate_loopback_from_yaml() {
     let (client, mut events, _permit) = connect().await;
 
@@ -252,7 +252,7 @@ fn yaml_loopback_scoped_vars_parses() {
 /// different variables, since neither `{}` nor `[]` can address one loopback
 /// leg on its own.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_originate_loopback_nested_bridge_scopes_vars() {
     let (client, _events, _permit) = connect().await;
 
@@ -329,7 +329,7 @@ async fn live_originate_loopback_nested_bridge_scopes_vars() {
 /// itself: both loopback legs resign, and the two real channels end up
 /// bridged straight to each other.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_originate_loopback_bowout_from_yaml() {
     let (client, mut events, _permit) = connect().await;
 
@@ -516,7 +516,7 @@ async fn live_originate_loopback_bowout_from_yaml() {
 /// `CS_EXCHANGE_MEDIA` (which the switch sets only after writing the bond),
 /// then arm the trigger and transfer. Every step is ordered by the switch.
 #[tokio::test]
-#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_originate_loopback_bowout_on_execute() {
     let (client, mut events, _permit) = connect().await;
 
