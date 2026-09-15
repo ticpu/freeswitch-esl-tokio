@@ -449,6 +449,10 @@ impl DialStringTarget {
         self
     }
 
+    pub(crate) fn argument(&self) -> ArgumentPass {
+        self.argument
+    }
+
     /// This target inside an argument already escaped for its split.
     pub(crate) fn inner(mut self) -> Self {
         if let ArgumentPass::Char(_) = self.argument {

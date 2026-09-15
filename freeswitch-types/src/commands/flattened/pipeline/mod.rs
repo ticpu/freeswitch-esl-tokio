@@ -6,10 +6,10 @@ use std::ops::Range;
 
 use super::CauseReading;
 use crate::channel::HangupCause;
-use crate::commands::variables::{BlockParse, DialStringCarrier, DialStringTarget};
+use crate::commands::variables::{ArgumentPass, BlockParse, DialStringCarrier, DialStringTarget};
 use crate::tokenizer::{
-    byte_range, extent, find, find_end_paren, separate, separate_string_string, skip_spaces, trace,
-    untrace, Traced,
+    byte_range, extent, find, find_end_paren, separate, separate_string_string, skip_spaces,
+    sole_argument, trace, untrace, ArgvCut, Traced,
 };
 
 #[cfg(test)]
@@ -92,7 +92,7 @@ pub(crate) enum PipelineError {
     /// Nothing to dial.
     Empty,
     /// The API carrier's argument split cuts the dial string into more than one
-    /// argument, or leaves a quote open.
+    /// argument, leaves a quote open, or finds a quote holding its separator.
     ArgvSplit,
     /// A block never closes, which aborts the whole originate.
     UnclosedBlock { leg: usize },
@@ -107,7 +107,7 @@ pub(crate) fn read(input: &str, target: DialStringTarget) -> Result<DialList, Pi
     let input = trace(input);
     let (text, raw, carrier_expands) = match target.carrier() {
         DialStringCarrier::EslApi => {
-            let (text, raw) = api_argument(&input)?;
+            let (text, raw) = api_argument(&input, target.argument())?;
             (text, raw, false)
         }
         DialStringCarrier::Dialplan => {
@@ -141,21 +141,34 @@ pub(crate) fn read(input: &str, target: DialStringTarget) -> Result<DialList, Pi
     })
 }
 
-/// `originate`'s own `switch_separate_string` on a space, which the dial string
-/// must survive as one argument: that argument and the input bytes it covers.
-fn api_argument(text: &[Traced]) -> Result<(Vec<Traced>, Range<usize>), PipelineError> {
-    let argv = separate(text, ' ', usize::MAX);
-    if argv.open_quote
-        || argv
-            .tokens
-            .len()
-            > 1
-    {
-        return Err(PipelineError::ArgvSplit);
-    }
-    argv.tokens
-        .into_iter()
-        .next()
+/// `originate`'s own `switch_separate_string`, on a space or on the target's argument
+/// separator, which the dial string must survive as one argument: that argument and the input
+/// bytes it covers.
+fn api_argument(
+    text: &[Traced],
+    argument: ArgumentPass,
+) -> Result<(Vec<Traced>, Range<usize>), PipelineError> {
+    let token = match argument {
+        ArgumentPass::Blank => {
+            let argv = separate(text, ' ', usize::MAX);
+            if argv.open_quote
+                || argv
+                    .tokens
+                    .len()
+                    > 1
+            {
+                return Err(PipelineError::ArgvSplit);
+            }
+            argv.tokens
+                .into_iter()
+                .next()
+        }
+        ArgumentPass::Char(sep) => {
+            sole_argument(text, sep).map_err(|ArgvCut| PipelineError::ArgvSplit)?
+        }
+        ArgumentPass::Consumed => return Ok((text.to_vec(), extent(text))),
+    };
+    token
         .map(|token| (token.text, byte_range(text, extent(text), token.raw)))
         .ok_or(PipelineError::Empty)
 }

@@ -158,7 +158,8 @@ pub enum FlattenedDialStringError {
     /// Nothing to dial.
     Empty,
     /// The API carrier's argument split cuts the dial string into more than one
-    /// argument, or leaves a quote open.
+    /// argument, leaves a quote open, or finds a quote holding a
+    /// [`DialStringTarget::argv_separator`].
     ArgvSplit,
     /// A block never closes, which aborts the whole originate.
     UnclosedBlock {
