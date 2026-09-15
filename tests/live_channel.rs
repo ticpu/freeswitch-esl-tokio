@@ -793,6 +793,73 @@ async fn live_user_fields_arrive_on_either_carrier() {
     }
 }
 
+/// Through `bridge`, endpoint text naming a variable is left to the expansion of the executing
+/// channel, as a block value is, while a `$$` beside no reference still arrives whole.
+#[tokio::test]
+#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+async fn live_endpoint_text_leaves_a_reference_to_the_bridge_expansion() {
+    let (client, mut events, _permit) = connect().await;
+    client
+        .subscribe_events(EventFormat::Plain, &[EslEventType::ChannelCreate])
+        .await
+        .unwrap();
+
+    let marker = create_uuid(&client).await;
+    let expanded = format!("ext-{marker}");
+    let cases = [
+        ("${some_var}".to_owned(), expanded.clone()),
+        (format!("pa$${marker}"), format!("pa$${marker}")),
+    ];
+    for (extension, want) in cases {
+        let uuid = create_uuid(&client).await;
+        let anchor = client
+            .api(&format!(
+                "originate {{some_var={expanded}}}null/anchor &park()"
+            ))
+            .await
+            .expect("anchor transport error")
+            .api_result()
+            .expect("anchor originate failed")
+            .to_string();
+        let endpoint = Endpoint::Loopback(
+            LoopbackEndpoint::new(extension.as_str())
+                .with_context("default")
+                .with_variables(uuid_block(&uuid, &[])),
+        );
+        let dial = BridgeDialString::new(vec![vec![endpoint]])
+            .display_with(block_parse_under_test())
+            .to_string();
+
+        let mut reaper = ChannelReaper::new(&client);
+        reaper.track(&anchor);
+        reaper.track(&uuid);
+        client
+            .execute_with_options(
+                "bridge",
+                Some(&dial),
+                Some(&anchor),
+                ExecuteOptions::new().with_async(),
+            )
+            .await
+            .unwrap_or_else(|e| panic!("bridge {dial}: transport error: {e}"))
+            .check()
+            .unwrap_or_else(|e| panic!("bridge {dial} rejected: {e}"));
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let created =
+            wait_for_own_event(&mut events, &uuid, EslEventType::ChannelCreate, deadline).await;
+        reaper
+            .reap()
+            .await;
+
+        let created = created.unwrap_or_else(|| panic!("{dial} was never created"));
+        assert_eq!(
+            created.header(EventHeader::CallerDestinationNumber),
+            Some(want.as_str()),
+            "{dial}"
+        );
+    }
+}
+
 // --- Dial-string escaping, per carrier ---
 
 /// Every case through `originate`, whose argument list the switch splits before

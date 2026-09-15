@@ -1254,7 +1254,7 @@ mod tests {
         let separators: Endpoint = LoopbackEndpoint::new("a,b")
             .with_context("c|d")
             .into();
-        let cases: [(DialStringTarget, Endpoint, &str); 9] = [
+        let cases: [(DialStringTarget, Endpoint, &str); 10] = [
             (api, separators.clone(), r"loopback/a\,b/c\|d"),
             (dialplan, separators, r"loopback/a\,b/c\|d"),
             (
@@ -1292,7 +1292,12 @@ mod tests {
             (
                 dialplan,
                 SofiaEndpoint::new("internal", "${v}").into(),
-                r"\'sofia/internal/\${v}",
+                "sofia/internal/${v}",
+            ),
+            (
+                dialplan,
+                LoopbackEndpoint::new("pa$$${v}").into(),
+                "loopback/pa$$${v}",
             ),
         ];
         for (target, ep, want) in cases {

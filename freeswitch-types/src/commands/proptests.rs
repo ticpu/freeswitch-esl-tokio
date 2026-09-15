@@ -709,6 +709,9 @@ proptest! {
         bare in bare_endpoint(),
         vars in option::of((scope(), block_separator(), entries(1..3))),
     ) {
+        if names_a_variable(&bare.module_text()) {
+            return Ok(());
+        }
         let mut endpoint = bare.clone();
         if let Some((scope, sep, values)) = &vars {
             let Some(vars) = build_vars(*scope, "v", values, *sep) else {
@@ -983,6 +986,9 @@ fn endpoints_arrive_through_the_c_passes() {
             option::of((scope, block_separator(), entries(1..3))),
         ),
         |(bare, vars)| {
+            if names_a_variable(&bare.module_text()) {
+                return Ok(());
+            }
             let mut endpoint = bare.clone();
             let mut want = Vec::new();
             let mut block = None;
