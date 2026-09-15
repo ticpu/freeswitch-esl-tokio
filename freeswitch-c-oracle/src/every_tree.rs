@@ -9,7 +9,7 @@ use proptest::test_runner::{TestCaseResult, TestRunner};
 
 use crate::{trees, Oracle};
 
-/// `PROPTEST_CASES` raises the count the pre-commit hook runs.
+/// `PROPTEST_CASES` sets the case count, 65536 unset; the pre-commit hook lowers it.
 pub fn config() -> ProptestConfig {
     let cases = std::env::var("PROPTEST_CASES")
         .ok()
@@ -80,7 +80,7 @@ pub fn oracles() -> impl Iterator<Item = (&'static str, Oracle)> {
 ///
 /// # Panics
 ///
-/// On the first tree that reads a value differently, naming it.
+/// After every tree has run, naming each tree that reads a value differently.
 pub fn trees_agree<S, T>(
     source: &'static str,
     name: &str,
@@ -111,7 +111,7 @@ pub fn trees_agree<S, T>(
 ///
 /// # Panics
 ///
-/// On the first tree the property fails on, naming it.
+/// After every tree has run, naming each tree the property fails on.
 pub fn against_the_c<S: Strategy>(
     source: &'static str,
     name: &str,

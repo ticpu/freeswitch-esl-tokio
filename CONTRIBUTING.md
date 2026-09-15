@@ -12,7 +12,7 @@ The pre-commit hook enforces:
 - `cargo fmt --check` -- formatting
 - `cargo clippy --all-features --all-targets -- -D warnings` -- lint warnings as errors
 - `RUSTDOCFLAGS="-D missing_docs" cargo doc` -- all public items documented
-- `cargo test --workspace --all-features` -- the full test suite, doctests included
+- `cargo test --workspace --all-features` -- the full test suite, doctests included, the C oracle properties at 4096 cases unless `PROPTEST_CASES` is set
 - `hooks/check-enums.py` -- validates `EslEventType`, `HangupCause`, `ChannelState`, `CallState`, `CoreMediaVariable` (`core-media-vars`), `ConferenceVariable` (`conference-vars`), `SipHeaderPrefix` (`sip-header-prefixes`), and `EventHeader` (`event-headers`) against FreeSWITCH C source
 - `hooks/check-source-refs.py` -- verifies every `file.c:NNN` citation against the pinned FreeSWITCH commit
 

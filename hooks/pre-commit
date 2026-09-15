@@ -34,7 +34,8 @@ if ! doc_output=$(RUSTDOCFLAGS="-D missing_docs -D rustdoc::broken_intra_doc_lin
     exit 1
 fi
 
-if ! test_output=$(cargo test --workspace --all-features 2>&1); then
+# Debug build: the oracle's default case count is left to pre-release.sh and CI.
+if ! test_output=$(PROPTEST_CASES="${PROPTEST_CASES:-4096}" cargo test --workspace --all-features 2>&1); then
     if echo "$test_output" | grep -q '^failures:'; then
         echo "$test_output" | sed -n '/^failures:/,$p'
     else
