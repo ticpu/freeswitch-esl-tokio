@@ -75,11 +75,12 @@ pub(crate) fn find_matching_bracket(s: &str, open: char, close: char) -> Option<
 
 /// Wrap a token in single quotes for originate command strings.
 ///
-/// A token that is empty or carries a space, single quote or backslash is escaped and wrapped
+/// A token that is empty or carries a space, single quote, backslash, or a tab, vertical tab, CR
+/// or newline, which the API strips from the edges of its argument line, is escaped and wrapped
 /// as [`quote_for_uuid_setvar`] does, since that command splits on the same blank tokenizer;
 /// any other token is returned as-is.
 pub fn originate_quote(token: &str) -> String {
-    if token.is_empty() || token.contains([' ', '\'', '\\']) {
+    if token.is_empty() || token.contains([' ', '\'', '\\', '\t', '\u{b}', '\r', '\n']) {
         quote_for_uuid_setvar(token)
     } else {
         token.to_string()

@@ -685,9 +685,12 @@ originate loopback/9199/test '&socket(127.0.0.1:8040 async full)'
 
 The space split's cleanup also strips quotes and reads `\\`, `\'`, `\"`, `\n`,
 `\r`, `\t` and `\s` in every token, so a value carrying a quote or backslash
-needs the same treatment. `originate_quote()` wraps any token that is empty or
-carries a space, quote or backslash, escaping `'` and `\` inside;
-`originate_unquote()` runs the cleanup and reads it back.
+needs the same treatment. `switch_api_execute` strips tab, vertical tab, CR,
+newline and space from both edges of the argument line before the split, so a
+last argument ending in one loses it unless quoted. `originate_quote()` wraps
+any token that is empty or carries a space, quote, backslash or one of those,
+escaping `'` and `\` inside; `originate_unquote()` runs the cleanup and reads it
+back.
 
 ### `^^X` argument separator
 
@@ -716,7 +719,9 @@ argument written for this split escapes, once:
 - `\`, `'` and the separator itself with a backslash;
 - newline, CR and tab as `\n`, `\r`, `\t`;
 - a space at either edge of the argument as `\s`, since the edges are trimmed
-  and `\s` keeps them.
+  and `\s` keeps them;
+- a vertical tab at either edge beside an empty `''`, since the API strips one
+  from the edges of its line and no escape names it.
 
 The same cleanup also turns `\"` into `"`, under every separator and under the
 blank split alike, and leaves an unknown escape with its backslash. It is the

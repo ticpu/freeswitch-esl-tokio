@@ -2642,6 +2642,36 @@ mod tests {
         assert_eq!(parsed.caller_id_name(), Some("it's"));
     }
 
+    /// `switch_api_execute` strips tab, vertical tab, CR, newline and space from the edges of
+    /// the argument line, so a last positional ending in one is kept inside quotes.
+    #[test]
+    fn a_last_positional_ending_in_stripped_whitespace_arrives() {
+        let cases = [
+            (
+                Originate::extension(test_endpoint(), "1000").cid_num("\t"),
+                "originate loopback/9199/test 1000 undef undef undef '\t'",
+            ),
+            (
+                Originate::extension(test_endpoint(), "1000").cid_num("x\u{b}"),
+                "originate loopback/9199/test 1000 undef undef undef 'x\u{b}'",
+            ),
+            (
+                Originate::extension(test_endpoint(), "1000")
+                    .cid_num("\u{b}")
+                    .with_argv_separator('~')
+                    .unwrap(),
+                "originate ^^~loopback/9199/test~1000~undef~undef~undef~''\u{b}''",
+            ),
+        ];
+        for (cmd, wire) in cases {
+            assert_eq!(cmd.to_string(), wire);
+            let parsed: Originate = wire
+                .parse()
+                .unwrap_or_else(|e| panic!("{wire:?} failed to parse: {e}"));
+            assert_eq!(parsed, cmd, "{wire:?}");
+        }
+    }
+
     /// `originate_function` hands any word in the dialplan slot to the transfer, which looks
     /// up a dialplan module by that name.
     #[test]

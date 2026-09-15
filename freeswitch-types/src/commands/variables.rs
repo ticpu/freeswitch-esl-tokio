@@ -311,11 +311,13 @@ fn usable_argv_separator(sep: char) -> bool {
 
 /// Escapes for one split on `sep` and its cleanup: `\`, `'` and `sep` take a backslash, newline,
 /// CR and tab their letter, and a space reads `\s` at either edge, or everywhere when `sep` is one.
+/// A vertical tab, which no escape names, is kept at either edge by an empty `''` beside it.
 struct ArgumentEscape<W> {
     out: W,
     sep: char,
     started: bool,
     spaces: usize,
+    vertical_tab_last: bool,
 }
 
 impl<W: fmt::Write> fmt::Write for ArgumentEscape<W> {
@@ -329,7 +331,12 @@ impl<W: fmt::Write> fmt::Write for ArgumentEscape<W> {
                 self.out
                     .write_char(' ')?;
             }
+            if c == '\u{b}' && !self.started {
+                self.out
+                    .write_str("''")?;
+            }
             self.started = true;
+            self.vertical_tab_last = c == '\u{b}';
             match c {
                 ' ' => self
                     .out
@@ -369,12 +376,18 @@ pub(crate) fn write_escaped(
         sep,
         started: false,
         spaces: 0,
+        vertical_tab_last: false,
     };
     write!(escape, "{inner}")?;
     let Some(kept) = escape
         .spaces
         .checked_sub(1)
     else {
+        if escape.vertical_tab_last {
+            escape
+                .out
+                .write_str("''")?;
+        }
         return Ok(());
     };
     for _ in 0..kept {
@@ -440,8 +453,8 @@ impl DialStringTarget {
         }
         let guarded = sep == ' ' && text.starts_with("^^");
         let plain = !guarded
-            && !text.starts_with(' ')
-            && !text.ends_with(' ')
+            && !text.starts_with([' ', '\u{b}'])
+            && !text.ends_with([' ', '\u{b}'])
             && !text.contains(['\\', '\'', '\n', '\r', '\t', sep]);
         if plain {
             return Some(Cow::Borrowed(text));
@@ -2178,6 +2191,37 @@ mod tests {
                 Some(want),
                 "{text:?}"
             );
+        }
+    }
+
+    /// `switch_api_execute` strips a vertical tab from the edges of the argument line before
+    /// `originate` splits it, and no escape letter names one.
+    #[test]
+    fn a_vertical_tab_at_an_edge_survives_the_line_strip() {
+        use crate::tokenizer::{separate, trace, untrace};
+
+        for text in ["\u{b}", "\u{b}a", "a\u{b}", "\u{b} \u{b}"] {
+            for target in [DialStringTarget::new(DialStringCarrier::EslApi), tilde()] {
+                let escaped = target
+                    .escape_argument(text)
+                    .expect("an API target escapes");
+                let (prefix, sep) = match target.argv_separator() {
+                    Some(sep) => (format!("^^{sep}"), sep),
+                    None => (String::new(), ' '),
+                };
+                for (line, want) in [
+                    (format!("{prefix}{escaped}{sep}y"), vec![text, "y"]),
+                    (format!("{prefix}x{sep}{escaped}"), vec!["x", text]),
+                ] {
+                    let stripped = line.trim_matches(['\r', '\n', '\t', ' ', '\u{b}']);
+                    let tokens: Vec<String> = separate(&trace(stripped), ' ', usize::MAX)
+                        .tokens
+                        .iter()
+                        .map(|token| untrace(&token.text))
+                        .collect();
+                    assert_eq!(tokens, want, "{line:?}");
+                }
+            }
         }
     }
 

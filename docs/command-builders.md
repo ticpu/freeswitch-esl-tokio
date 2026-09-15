@@ -147,7 +147,8 @@ present by a later one is written `undef` on either split, and the switch falls
 back to `XML`/`default`. A line opening `^^ ` parses as the blank split.
 
 On the blank split every argument goes through `originate_quote()`: a token that
-is empty or carries a space, `'` or `\` is wrapped and escaped as
+is empty or carries a space, `'`, `\`, or whitespace the API strips from its
+line's edges is wrapped and escaped as
 `quote_for_uuid_setvar()` does, since `uuid_setvar` splits on the same blank
 tokenizer, so `\n`, `\\`, `\s` and `\t` arrive as written rather than read as
 escapes. `originate_unquote()` runs that split's cleanup and inverts it.
