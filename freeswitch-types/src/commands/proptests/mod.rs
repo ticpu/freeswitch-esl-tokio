@@ -39,12 +39,14 @@ fn scope() -> impl Strategy<Value = VariablesType> {
     ]
 }
 
-/// Any ASCII byte and a non-ASCII char; `build_vars` drops the separators `with_separator` refuses.
+/// Any ASCII byte and a non-ASCII char, weighted toward another pass's delimiter; `build_vars`
+/// drops the separators `with_separator` refuses.
 fn block_separator() -> impl Strategy<Value = Option<char>> {
     prop_oneof![
         2 => Just(None),
-        1 => prop_oneof![
-            4 => (0u8..0x80).prop_map(char::from),
+        2 => prop_oneof![
+            3 => select(&[',', '|', '=', '\'', '\\', ' ', '{', '}', '[', ']', '<', '>'][..]),
+            3 => (0u8..0x80).prop_map(char::from),
             1 => select(&['é', '😀'][..]),
         ]
         .prop_map(Some),

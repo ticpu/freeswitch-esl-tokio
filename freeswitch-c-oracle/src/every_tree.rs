@@ -18,7 +18,7 @@ pub fn config() -> ProptestConfig {
                 .parse()
                 .ok()
         })
-        .unwrap_or(1024);
+        .unwrap_or(65536);
     ProptestConfig {
         cases,
         ..ProptestConfig::default()
@@ -30,13 +30,14 @@ pub fn config() -> ProptestConfig {
 ///
 /// # Panics
 ///
-/// On the first tree the property fails on, naming it.
+/// After every tree has run, naming each tree the property fails on with its shrunk case.
 pub fn on_every_tree<S: Strategy>(
     source: &'static str,
     name: &str,
     strategy: S,
     property: impl Fn(&'static str, Oracle, S::Value) -> TestCaseResult,
 ) {
+    let mut failures = Vec::new();
     for tree in trees() {
         let oracle = match tree.oracle() {
             Ok(oracle) => oracle,
@@ -57,9 +58,10 @@ pub fn on_every_tree<S: Strategy>(
         if let Err(failure) =
             TestRunner::new(config).run(&strategy, |value| property(tree.name(), oracle, value))
         {
-            panic!("{name} on tree {}: {failure}", tree.name());
+            failures.push(format!("{name} on tree {}: {failure}", tree.name()));
         }
     }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
 /// Every built tree, by name, with its C.
