@@ -4,7 +4,7 @@
 
 use std::str::FromStr;
 
-use freeswitch_c_oracle::{against_the_c, config, Oracle};
+use freeswitch_c_oracle::{config, Oracle};
 use proptest::collection::vec;
 use proptest::option;
 use proptest::prelude::*;
@@ -73,15 +73,19 @@ fn api_targets() -> Vec<DialStringTarget> {
 }
 
 pub(crate) fn targets() -> Vec<DialStringTarget> {
-    let mut carriers = api_targets();
-    carriers.push(DialStringTarget::new(DialStringCarrier::Dialplan));
     block_parses()
         .into_iter()
-        .flat_map(|block_parse| {
-            carriers
-                .iter()
-                .map(move |target| target.with_block_parse(block_parse))
-        })
+        .flat_map(targets_at)
+        .collect()
+}
+
+/// Every carrier and argument split, at `block_parse`.
+pub(crate) fn targets_at(block_parse: BlockParse) -> Vec<DialStringTarget> {
+    let mut carriers = api_targets();
+    carriers.push(DialStringTarget::new(DialStringCarrier::Dialplan));
+    carriers
+        .into_iter()
+        .map(|target| target.with_block_parse(block_parse))
         .collect()
 }
 

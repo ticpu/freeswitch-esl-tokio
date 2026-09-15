@@ -1,7 +1,6 @@
 //! `originate_function` against the switch's own C on every built tree, and the originate specs
 //! the builder properties render.
 
-use std::str::FromStr;
 use std::time::Duration;
 
 use freeswitch_c_oracle::{against_the_c, Action, Oracle};
@@ -12,6 +11,7 @@ use proptest::sample::select;
 
 use super::reads_as_application;
 use crate::commands::{Application, DialplanType, Endpoint, LoopbackEndpoint, Originate};
+use crate::switch_passes::against_the_c_at_its_revision;
 use crate::switch_passes::api_argument::STRIPPED_WHITESPACE;
 use crate::switch_passes::separate::separate;
 use crate::switch_passes::{trace, untrace};
@@ -482,18 +482,20 @@ fn originate_function_reads_lines_as_the_port_does() {
 /// case as the module lookup reads it, and an inline action list by the port's model of the hunt.
 #[test]
 fn a_parsed_originate_reads_back_the_same_through_the_switch() {
-    against_the_c(
+    against_the_c_at_its_revision(
         file!(),
         "a_parsed_originate_reads_back_the_same_through_the_switch",
         api_lines(),
-        |c, line| {
+        |c, block_parse, line| {
             let Some(line) = line else {
                 return Ok(());
             };
-            let Ok(parsed) = Originate::from_str(&line) else {
+            let Ok(parsed) = Originate::parse_with(&line, block_parse) else {
                 return Ok(());
             };
-            let rendered = parsed.to_string();
+            let rendered = parsed
+                .display_with(block_parse)
+                .to_string();
             let read = |text: &str| {
                 let mut reading = switch_api_reading(c, text);
                 let (mut dial, mut hunt) = (None, None);

@@ -3,12 +3,15 @@
 freeswitch:
   commit: c2c59645f6911a76589e5008c4d73349ded44b65
   tag: v1.11.1
+  block_parse: pair_split_cleans
 trees:
 - name: master
   commit: b3ba603f495b58baad52af1307136584b1eb76e3
+  block_parse: pair_split_cleans
   fetch: https://github.com/signalwire/freeswitch
 - name: fork
   commit: 8bb2a393840b20c3696aa07842a142859b95ef8b
+  block_parse: pair_split_cleans
 refs:
 - src/include/switch_types.h:197-198 bfb7360a4e85
 - src/include/switch_types.h:595 47db32d4b13c

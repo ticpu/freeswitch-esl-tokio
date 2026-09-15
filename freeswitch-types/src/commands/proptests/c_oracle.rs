@@ -1,6 +1,7 @@
 //! Renders read back through the switch's own C for the passes an API target applies.
 
 use super::*;
+use crate::switch_passes::against_the_c_at_its_revision;
 
 /// The pairs and endpoint text the switch's C reads of `dial` at `target`: `originate_function`
 /// on the API line or the dialplan carrier's expansion, then `switch_ivr_originate`'s passes.
@@ -69,11 +70,11 @@ fn originate_line(dial: &str, target: DialStringTarget) -> String {
 /// A block of every scope at every target, read by the switch's C rather than the port.
 #[test]
 fn variables_arrive_through_the_c_passes() {
-    against_the_c(
+    against_the_c_at_its_revision(
         file!(),
         "variables_arrive_through_the_c_passes",
         (scope(), block_separator(), entries(1..4)),
-        |c, (scope, sep, values)| {
+        |c, block_parse, (scope, sep, values)| {
             let Some(vars) = build_vars(scope, "v", &values, sep) else {
                 return Ok(());
             };
@@ -81,7 +82,7 @@ fn variables_arrive_through_the_c_passes() {
                 return Ok(());
             }
             let want = Ok((pairs(&vars), "null/drift".to_owned()));
-            for target in targets() {
+            for target in targets_at(block_parse) {
                 let dial = format!("{}null/drift", vars.display_for(target));
                 prop_assert_eq!(
                     &c_reads_the_leg(c, &dial, target),
@@ -99,14 +100,14 @@ fn variables_arrive_through_the_c_passes() {
 /// Endpoints under a block of any scope or none at every target, read by the switch's C.
 #[test]
 fn endpoints_arrive_through_the_c_passes() {
-    against_the_c(
+    against_the_c_at_its_revision(
         file!(),
         "endpoints_arrive_through_the_c_passes",
         (
             bare_endpoint(),
             option::of((scope(), block_separator(), entries(1..3))),
         ),
-        |c, (bare, vars)| {
+        |c, block_parse, (bare, vars)| {
             if fields_name_a_variable(&bare) {
                 return Ok(());
             }
@@ -132,7 +133,7 @@ fn endpoints_arrive_through_the_c_passes() {
                 .unwrap_or_default();
             let want = Ok((installed, bare.module_text()));
             let expression = matches!(bare, Endpoint::SofiaContact(_) | Endpoint::GroupCall(_));
-            for target in targets() {
+            for target in targets_at(block_parse) {
                 // The expansion substitutes the expression, which the stub answers with nothing.
                 if expression && target.carrier() == DialStringCarrier::Dialplan {
                     continue;
@@ -165,11 +166,11 @@ fn bridges_dial_through_the_c_passes() {
             .map(|(key, value)| (key.into_bytes(), value.into_bytes()))
             .collect()
     };
-    against_the_c(
+    against_the_c_at_its_revision(
         file!(),
         "bridges_dial_through_the_c_passes",
         bridge_spec(),
-        |c, spec| {
+        |c, block_parse, spec| {
             let Some(bridge) = build_bridge(&spec) else {
                 return Ok(());
             };
@@ -184,7 +185,9 @@ fn bridges_dial_through_the_c_passes() {
             if expression || config_refuses_bridge(&bridge) {
                 return Ok(());
             }
-            let rendered = bridge.to_string();
+            let rendered = bridge
+                .display_with(block_parse)
+                .to_string();
             let dial = c.dial(
                 &c.expand(rendered.as_bytes())
                     .text,

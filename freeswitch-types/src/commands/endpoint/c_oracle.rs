@@ -10,7 +10,8 @@ use proptest::sample::select;
 
 use super::{Endpoint, GroupCallOrder};
 use crate::commands::proptests::{bare_endpoint, c_reads_the_leg, fields_name_a_variable, targets};
-use crate::commands::variables::DialStringCarrier;
+use crate::commands::variables::{DialStringCarrier, DialStringTarget};
+use crate::switch_passes::against_the_c_at_its_revision;
 use crate::test_text::text;
 
 fn bytes(text: &str) -> Vec<u8> {
@@ -330,20 +331,24 @@ fn config_refuses(endpoint: &Endpoint) -> bool {
 /// its module or function as the fields it holds; an expression through the dialplan carrier.
 #[test]
 fn endpoint_modules_read_the_fields_the_crate_holds() {
-    against_the_c(
+    against_the_c_at_its_revision(
         file!(),
         "endpoint_modules_read_the_fields_the_crate_holds",
         (bare_endpoint(), select(targets())),
-        |c, (endpoint, target)| {
+        |c, block_parse, (endpoint, target)| {
             if fields_name_a_variable(&endpoint) || config_refuses(&endpoint) {
                 return Ok(());
             }
             if matches!(endpoint, Endpoint::SofiaContact(_) | Endpoint::GroupCall(_)) {
                 let rendered = endpoint
-                    .display_for(DialStringCarrier::Dialplan)
+                    .display_for(
+                        DialStringTarget::new(DialStringCarrier::Dialplan)
+                            .with_block_parse(block_parse),
+                    )
                     .to_string();
                 return reads_the_fields(c, &rendered, &endpoint);
             }
+            let target = target.with_block_parse(block_parse);
             let dial = endpoint
                 .display_for(target)
                 .to_string();

@@ -19,6 +19,7 @@ pub use every_tree::{against_the_c, config, on_every_tree, oracles, trees_agree}
 pub struct Tree {
     name: &'static str,
     commit: &'static str,
+    block_parse: &'static str,
     public: bool,
     abi: Result<&'static Abi, &'static str>,
 }
@@ -32,6 +33,11 @@ impl Tree {
     /// The commit compiled.
     pub fn commit(&self) -> &'static str {
         self.commit
+    }
+
+    /// The block-parse revision the index names for the commit, in `BlockParse`'s string form.
+    pub fn block_parse(&self) -> &'static str {
+        self.block_parse
     }
 
     /// The index names a public remote for the commit, which CI fetches.
@@ -49,6 +55,13 @@ impl Tree {
 /// Every tree the index names, the pin first, built or not.
 pub fn trees() -> &'static [Tree] {
     TREES
+}
+
+/// The tree the index names `name`, built or not.
+pub fn tree(name: &str) -> Option<&'static Tree> {
+    TREES
+        .iter()
+        .find(|tree| tree.name == name)
 }
 
 /// The C of one built tree.

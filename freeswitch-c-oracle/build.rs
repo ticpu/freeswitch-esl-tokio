@@ -105,12 +105,14 @@ struct Index {
 #[derive(Deserialize)]
 struct Pinned {
     commit: String,
+    block_parse: String,
 }
 
 #[derive(Deserialize)]
 struct Named {
     name: String,
     commit: String,
+    block_parse: String,
     fetch: Option<String>,
 }
 
@@ -118,6 +120,7 @@ struct Named {
 struct Tree {
     name: String,
     commit: String,
+    block_parse: String,
     public: bool,
 }
 
@@ -169,8 +172,8 @@ fn main() {
             }
         };
         generated += &format!(
-            "    Tree {{ name: {:?}, commit: {:?}, public: {}, abi: {abi} }},\n",
-            tree.name, tree.commit, tree.public
+            "    Tree {{ name: {:?}, commit: {:?}, block_parse: {:?}, public: {}, abi: {abi} }},\n",
+            tree.name, tree.commit, tree.block_parse, tree.public
         );
     }
     generated += "];\n";
@@ -235,11 +238,15 @@ fn trees(index: &Path) -> Vec<Tree> {
         commit: index
             .freeswitch
             .commit,
+        block_parse: index
+            .freeswitch
+            .block_parse,
         public: true,
     }];
     for Named {
         name,
         commit,
+        block_parse,
         fetch,
     } in index.trees
     {
@@ -254,6 +261,7 @@ fn trees(index: &Path) -> Vec<Tree> {
         trees.push(Tree {
             name,
             commit,
+            block_parse,
             public: fetch.is_some(),
         });
     }

@@ -24,6 +24,42 @@ pub(crate) mod originate_legs;
 pub(crate) mod pipeline;
 pub(crate) mod separate;
 
+/// The block-parse revision the oracle index names for `tree`.
+#[cfg(all(test, feature = "esl"))]
+pub(crate) fn tree_block_parse(tree: &str) -> crate::commands::BlockParse {
+    let revision = freeswitch_c_oracle::tree(tree)
+        .unwrap_or_else(|| panic!("the oracle index names no tree {tree}"))
+        .block_parse();
+    revision
+        .parse()
+        .unwrap_or_else(|e| panic!("tree {tree} block_parse: {e}"))
+}
+
+/// `against_the_c` handing the property each tree's block-parse revision.
+#[cfg(all(test, feature = "esl"))]
+pub(crate) fn against_the_c_at_its_revision<S: proptest::strategy::Strategy>(
+    source: &'static str,
+    name: &str,
+    strategy: S,
+    property: impl Fn(
+        freeswitch_c_oracle::Oracle,
+        crate::commands::BlockParse,
+        S::Value,
+    ) -> proptest::test_runner::TestCaseResult,
+) {
+    freeswitch_c_oracle::on_every_tree(source, name, strategy, |tree, c, value| {
+        property(c, tree_block_parse(tree), value)
+    });
+}
+
+#[cfg(all(test, feature = "esl"))]
+#[test]
+fn every_oracle_tree_names_a_known_block_parse() {
+    for tree in freeswitch_c_oracle::trees() {
+        tree_block_parse(tree.name());
+    }
+}
+
 /// What stops the switch from reading a dial string at all.
 #[cfg(feature = "esl")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -1,6 +1,6 @@
 //! `switch_event_create_brackets` against the switch's own C on every built tree.
 
-use freeswitch_c_oracle::{against_the_c, Pair};
+use freeswitch_c_oracle::Pair;
 use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest::sample::select;
@@ -9,7 +9,7 @@ use super::{install, parse_block, Block, PairEffect};
 use crate::commands::variables::BlockParse;
 use crate::switch_passes::originate_legs::UNQUOTED_ESC_COMMA;
 use crate::switch_passes::separate::CBuffer;
-use crate::switch_passes::{trace, untrace};
+use crate::switch_passes::{against_the_c_at_its_revision, trace, tree_block_parse, untrace};
 use crate::test_text::text;
 
 /// The headers an event carrying `EF_UNIQ_HEADERS` holds once `blocks` install into it.
@@ -81,15 +81,15 @@ fn blocks_match_the_switch() {
     let case = kind.prop_flat_map(|(open, close, comma)| {
         (Just((open, close, comma)), block_text(open, close), text())
     });
-    against_the_c(
+    against_the_c_at_its_revision(
         file!(),
         "blocks_match_the_switch",
         case,
-        |c, ((open, close, comma), block, tail)| {
+        |c, block_parse, ((open, close, comma), block, tail)| {
             let input = format!("{block}{tail}");
             let text = trace(&input);
             let mut buffer = CBuffer::new(&text);
-            let port = parse_block(&mut buffer, 0, open, close, comma, BlockParse::default());
+            let port = parse_block(&mut buffer, 0, open, close, comma, block_parse);
             if port
                 .as_ref()
                 .is_some_and(|parsed| unmodelled(&parsed.block))
@@ -120,19 +120,16 @@ fn blocks_match_the_switch() {
 fn a_block_event_folds_names_by_case() {
     let block = "{k=1,K=2,gone=x,GONE=,kept=y}";
     let text = trace(block);
-    let parsed = parse_block(
-        &mut CBuffer::new(&text),
-        0,
-        '{',
-        '}',
-        ',',
-        BlockParse::default(),
-    )
-    .expect("the block closes");
+    let port = |block_parse| {
+        let parsed = parse_block(&mut CBuffer::new(&text), 0, '{', '}', ',', block_parse)
+            .expect("the block closes");
+        installed([&parsed.block])
+    };
     let pair = |key: &[u8], value: &[u8]| -> Pair { (key.to_vec(), value.to_vec()) };
     let want = vec![pair(b"K", b"2"), pair(b"gone", b"x"), pair(b"kept", b"y")];
-    assert_eq!(installed([&parsed.block]), want);
+    assert_eq!(port(BlockParse::default()), want);
     for (tree, c) in freeswitch_c_oracle::oracles() {
+        assert_eq!(port(tree_block_parse(tree)), want, "tree {tree}");
         let read = c
             .brackets(block.as_bytes(), b'{', b'}', b',')
             .expect("the block closes");

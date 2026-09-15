@@ -12,7 +12,7 @@ use crate::commands::variables::BlockParse;
 use crate::switch_passes::brackets::c_oracle::{block_text, installed, unmodelled};
 use crate::switch_passes::brackets::{self, Block, PairEffect};
 use crate::switch_passes::expansion::enterprise_nests;
-use crate::switch_passes::{trace, PipelineError};
+use crate::switch_passes::{against_the_c_at_its_revision, trace, tree_block_parse, PipelineError};
 use crate::test_text::text;
 
 fn spaces() -> impl Strategy<Value = &'static str> {
@@ -211,13 +211,13 @@ fn enterprise_block(enterprise: &[Pair]) -> Block {
 
 #[test]
 fn dial_lists_match_the_switch() {
-    against_the_c(
+    against_the_c_at_its_revision(
         file!(),
         "dial_lists_match_the_switch",
         dial_text(),
-        |c, input| {
+        |c, block_parse, input| {
             let text = trace(&input);
-            let port = dial_list(&text, 0..input.len(), false, BlockParse::default());
+            let port = dial_list(&text, 0..input.len(), false, block_parse);
             let refused = matches!(port, Err(PipelineError::SplitSeparatorUnreadable));
             if refused
                 || port
@@ -264,11 +264,15 @@ fn dial_lists_match_the_switch() {
 #[test]
 fn a_chained_block_split_by_a_non_ascii_byte_is_refused() {
     let input = "<^^é><<>:_:[>],é|[[]";
-    assert!(matches!(
-        dial_list(&trace(input), 0..input.len(), false, BlockParse::default()),
-        Err(PipelineError::SplitSeparatorUnreadable)
-    ));
+    let refused = |block_parse| {
+        matches!(
+            dial_list(&trace(input), 0..input.len(), false, block_parse),
+            Err(PipelineError::SplitSeparatorUnreadable)
+        )
+    };
+    assert!(refused(BlockParse::default()));
     for (tree, c) in freeswitch_c_oracle::oracles() {
+        assert!(refused(tree_block_parse(tree)), "tree {tree}");
         let dial = c.dial(input.as_bytes());
         let endpoints: Vec<_> = dial
             .threads
