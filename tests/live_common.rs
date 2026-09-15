@@ -341,6 +341,10 @@ pub const ESCAPING_CASES: &[(&str, &[(&str, &str)])] = &[
         &[("p1", r"a\nb"), ("p2", "SENTINEL")],
     ),
     ("pipe", &[("p1", "a|b"), ("p2", "SENTINEL")]),
+    (
+        "edge spaces in a value",
+        &[("p1", " lead and trail "), ("p2", "SENTINEL")],
+    ),
 ];
 
 /// `lead` goes in first, so a value that eats its separator damages a variable

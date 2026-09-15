@@ -374,7 +374,20 @@ fn nothing_to_dial_is_empty() {
 #[test]
 fn the_port_reads_back_every_value_the_renderer_writes() {
     let values = [
-        r"C:\path", r"a\nb", "a,b", "it's", "don't,x", "a b", "a|b", "p1:p2", "x~y",
+        r"C:\path",
+        r"a\nb",
+        "a,b",
+        "it's",
+        "don't,x",
+        "a b",
+        "a|b",
+        "p1:p2",
+        "x~y",
+        " lead and trail ",
+        " a",
+        "a  ",
+        " ",
+        r"a\ ",
     ];
     let targets = [
         API.into(),

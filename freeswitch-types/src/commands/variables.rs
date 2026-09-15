@@ -1770,8 +1770,52 @@ mod tests {
         }
     }
 
+    /// Measured: the `=` split trims both edges of a value, quoted or not, so an edge space
+    /// must still read `\s` entering it.
+    #[test]
+    fn an_edge_space_is_escaped_for_the_pass_that_trims_it() {
+        let api = DialStringTarget::new(DialStringCarrier::EslApi);
+        let dialplan = DialStringTarget::new(DialStringCarrier::Dialplan);
+        let cases = [
+            (api, VariablesType::Default, " a b ", r"'\\\\sa b\\\\s'"),
+            (
+                dialplan,
+                VariablesType::Default,
+                " a b ",
+                r"'\\\\sa b\\\\s'",
+            ),
+            (api, VariablesType::Enterprise, " a", r"\\\\sa"),
+            (api, VariablesType::Default, "a  ", r"'a \\\\s'"),
+            (api, VariablesType::Default, " ", r"\\\\s"),
+            (api, VariablesType::Default, "  ", r"\\\\s\\\\s"),
+            (api, VariablesType::Default, r"a\ ", r"a\\\\\\\\\\\\s"),
+            (
+                api,
+                VariablesType::Channel,
+                " a ",
+                &format!("{0}sa{0}s", "\\".repeat(16)),
+            ),
+        ];
+        for (target, scope, value, want) in cases {
+            assert_eq!(
+                escape_value(value, target, true, scope),
+                want,
+                "{value:?} in {scope:?} at {target:?}"
+            );
+        }
+
+        let mut vars = Variables::new(VariablesType::Default);
+        vars.insert("k", " a b ");
+        assert_eq!(
+            vars.display_for(tilde())
+                .to_string(),
+            r"{k=\'\\\\sa b\\\\s\'}"
+        );
+    }
+
     #[test]
     fn round_trips_at_every_target() {
+        const EDGES: [&str; 6] = [" lead and trail ", " a", "a  ", " ", r"a\ ", r"a\s"];
         let cases = [
             (
                 VariablesType::Default,
@@ -1786,6 +1830,14 @@ mod tests {
                 &[r"C:\path", "a,b", "a|b", "with space", "x~y"][..],
             ),
         ];
+        let cases = cases.map(|(scope, values)| {
+            let values: Vec<&str> = values
+                .iter()
+                .chain(&EDGES)
+                .copied()
+                .collect();
+            (scope, values)
+        });
         for &block_parse in REVISIONS {
             for target in [
                 DialStringTarget::new(DialStringCarrier::EslApi),
@@ -1793,9 +1845,9 @@ mod tests {
                 tilde(),
             ] {
                 let target = target.with_block_parse(block_parse);
-                for (scope, values) in cases {
+                for (scope, values) in &cases {
                     for &value in values {
-                        let mut vars = Variables::new(scope);
+                        let mut vars = Variables::new(*scope);
                         vars.insert("k", value);
                         vars.insert("after", "sentinel");
                         let rendered = vars
