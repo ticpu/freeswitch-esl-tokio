@@ -46,7 +46,7 @@ pub use variables::{
     VariablesDisplay,
 };
 
-use crate::tokenizer::{blank_delim_spans, char_delim_spans};
+use crate::tokenizer::{blank_delim_spans, char_delim_spans, delimiter_override, trace};
 use originate::DEFAULT_INLINE_DELIMITER;
 
 /// Find the index of the closing bracket matching the opener at position 0.
@@ -118,20 +118,28 @@ pub fn originate_unquote(token: &str) -> String {
 
 /// Split a command line the way the `originate` API splits its arguments.
 ///
-/// On a space this is `separate_string_blank_delim` in `switch_utils.c`, on any
-/// other delimiter `separate_string_char_delim`. Tokens keep their quotes and
-/// escapes: [`originate_unquote`] and the variable-block parser consume those.
+/// `split_at` is the default a leading `^^X` overrides, as `switch_separate_string`
+/// in `switch_utils.c` reads one: an ASCII `X` followed by at least one byte, the
+/// prefix itself dropped. The switch takes a non-ASCII `X` as its first UTF-8 byte,
+/// which no char delimiter mirrors, so such a line splits on `split_at` whole.
+///
+/// On a space this is `separate_string_blank_delim`, on any other delimiter
+/// `separate_string_char_delim`. Tokens keep their quotes and escapes:
+/// [`originate_unquote`] and the variable-block parser consume those.
 ///
 /// A quote left open is an error. The switch runs the rest of the line into one
 /// argument instead, a shape nothing this crate renders produces.
 pub fn originate_split(line: &str, split_at: char) -> Result<Vec<String>, OriginateError> {
+    let text = trace(line);
+    let (picked, body) = delimiter_override(&text);
+    let split_at = picked.unwrap_or(split_at);
     if split_at != ' ' {
-        return Ok(char_delim_spans(line, split_at)
+        return Ok(char_delim_spans(line, body, split_at)
             .into_iter()
             .map(str::to_string)
             .collect());
     }
-    let (spans, open_quote) = blank_delim_spans(line);
+    let (spans, open_quote) = blank_delim_spans(line, body);
     if open_quote {
         let last = spans
             .last()

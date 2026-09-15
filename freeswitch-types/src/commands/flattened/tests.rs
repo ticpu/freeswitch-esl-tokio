@@ -128,6 +128,83 @@ fn a_leg_ending_in_an_escaped_char_keeps_it_after_retain() {
     }
 }
 
+#[test]
+fn a_dropped_quote_or_escape_stays_with_its_leg_after_retain() {
+    let cases = [
+        (
+            API,
+            "loopback/9199/a,'loopback/9199/b c',error/USER_BUSY",
+            "loopback/9199/a,'loopback/9199/b c'",
+        ),
+        (
+            API,
+            "error/USER_BUSY,'loopback/9199/b c',loopback/9199/a",
+            "'loopback/9199/b c',loopback/9199/a",
+        ),
+        (
+            DIALPLAN,
+            "[v='x y']loopback/9199/a,error/USER_BUSY",
+            "[v='x y']loopback/9199/a",
+        ),
+        (
+            DIALPLAN,
+            "error/USER_BUSY,[v='x,y']loopback/9199/a",
+            "[v='x,y']loopback/9199/a",
+        ),
+        (
+            DIALPLAN,
+            "'loopback/9199/a b',error/USER_BUSY",
+            "'loopback/9199/a b'",
+        ),
+        (
+            DIALPLAN,
+            r"loopback/9199/a\',error/USER_BUSY",
+            r"loopback/9199/a\'",
+        ),
+    ];
+    for (carrier, input, kept) in cases {
+        let mut list = parse(input, carrier);
+        assert_eq!(
+            list.display_raw()
+                .to_string(),
+            input
+        );
+        list.retain(|leg| !is_error(leg));
+        assert_eq!(
+            list.display_raw()
+                .to_string(),
+            kept,
+            "{input:?} at {carrier:?}"
+        );
+    }
+}
+
+#[test]
+fn a_non_ascii_block_separator_warns_and_carries_nothing() {
+    let input = "[a=1][^^ék=secretév=2]loopback/9199/test";
+    let list = parse(input, API);
+    let leg = list
+        .legs()
+        .next()
+        .unwrap();
+    assert_eq!(
+        leg.warnings(),
+        [LegWarning::BlockSeparatorUnreadable { block: 1 }]
+    );
+    assert_eq!(
+        list.display_for(API)
+            .to_string(),
+        "[a=1]loopback/9199/test"
+    );
+    let shown = leg.warnings()[0].to_string();
+    assert!(shown.contains('1') && !shown.contains("secret") && !shown.contains('é'));
+    assert_eq!(
+        list.display_raw()
+            .to_string(),
+        input
+    );
+}
+
 /// The switch splits on the first byte of a non-ASCII `^^` separator, which no char
 /// delimiter mirrors, so the blank split runs over the whole argument.
 #[test]
@@ -136,6 +213,129 @@ fn a_non_ascii_argument_separator_is_not_taken() {
         FlattenedDialString::parse_for("^^é{v=a b}loopback/9199/test", API),
         Err(FlattenedDialStringError::ArgvSplit)
     );
+}
+
+/// The raw render of `input` with the legs at `dropped` removed.
+fn without_legs(input: &str, carrier: DialStringCarrier, dropped: &[usize]) -> String {
+    let mut list = parse(input, carrier);
+    let mut index = 0;
+    list.retain(|_| {
+        index += 1;
+        !dropped.contains(&(index - 1))
+    });
+    list.display_raw()
+        .to_string()
+}
+
+#[test]
+fn a_leg_owns_every_byte_between_its_separators() {
+    let cases: &[(&str, &[usize], &str)] = &[
+        (
+            r"loopback/9199/a,\'loopback/9199/b",
+            &[0],
+            r"\'loopback/9199/b",
+        ),
+        (
+            r"loopback/9199/a,\'loopback/9199/b",
+            &[1],
+            "loopback/9199/a",
+        ),
+        (
+            "loopback/9199/a,'loopback/9199/b c'",
+            &[0],
+            "'loopback/9199/b c'",
+        ),
+        (
+            r"loopback/9199/a\',loopback/9199/b",
+            &[1],
+            r"loopback/9199/a\'",
+        ),
+        (
+            r"loopback/9199/a\\\\\\\\,loopback/9199/b",
+            &[1],
+            r"loopback/9199/a\\\\\\\\",
+        ),
+        (
+            "'loopback/9199/a b',loopback/9199/b",
+            &[1],
+            "'loopback/9199/a b'",
+        ),
+        (
+            "loopback/9199/a,'',loopback/9199/b",
+            &[1],
+            "loopback/9199/a,loopback/9199/b",
+        ),
+        ("loopback/9199/a,'',loopback/9199/b", &[0, 2], "''"),
+        (
+            "loopback/9199/a,'',loopback/9199/b",
+            &[0],
+            "'',loopback/9199/b",
+        ),
+        (
+            "loopback/9199/a,'',loopback/9199/b",
+            &[2],
+            "loopback/9199/a,''",
+        ),
+        (" loopback/9199/a,loopback/9199/b", &[0], "loopback/9199/b"),
+        (" loopback/9199/a,loopback/9199/b", &[1], " loopback/9199/a"),
+        (
+            r"loopback/9199/a:_:\'loopback/9199/b",
+            &[0],
+            r"\'loopback/9199/b",
+        ),
+    ];
+    for &(input, dropped, kept) in cases {
+        for carrier in [API, DIALPLAN] {
+            assert_eq!(without_legs(input, carrier, &[]), input, "{carrier:?}");
+            assert_eq!(
+                without_legs(input, carrier, dropped),
+                kept,
+                "{input:?} without {dropped:?} at {carrier:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_non_ascii_separator_ahead_of_the_legs_warns_and_carries_nothing() {
+    for (input, block, carried) in [
+        (
+            "{g=1}{^^ék=secretév=2}loopback/9199/test",
+            1,
+            "{g=1}loopback/9199/test",
+        ),
+        (
+            "<e=1>{g=2}loopback/9199/a:_:<^^ék=secret>loopback/9199/b",
+            2,
+            "<e=1>{g=2}loopback/9199/a:_:loopback/9199/b",
+        ),
+    ] {
+        for carrier in [API, DIALPLAN] {
+            let list = parse(input, carrier);
+            assert_eq!(
+                list.warnings(),
+                [ListWarning::BlockSeparatorUnreadable { block }],
+                "{input:?} at {carrier:?}"
+            );
+            assert_eq!(
+                list.display_for(carrier)
+                    .to_string(),
+                carried
+            );
+            let shown = list.warnings()[0].to_string();
+            assert!(
+                shown.contains(&block.to_string())
+                    && !shown.contains("secret")
+                    && !shown.contains('é'),
+                "{shown}"
+            );
+            assert_eq!(
+                list.display_raw()
+                    .to_string(),
+                input
+            );
+        }
+    }
 }
 
 #[test]

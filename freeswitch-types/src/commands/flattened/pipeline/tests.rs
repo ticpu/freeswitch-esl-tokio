@@ -409,3 +409,94 @@ fn the_port_reads_back_every_value_the_renderer_writes() {
         }
     }
 }
+
+#[test]
+fn legs_and_threads_meet_only_at_their_separators() {
+    let is_separator = |gap: &str| {
+        !gap.is_empty()
+            && gap
+                .chars()
+                .all(|c| matches!(c, ',' | '|'))
+    };
+    for input in crate::tokenizer::TILING_INPUTS
+        .iter()
+        .copied()
+        .chain([
+            r"a\'",
+            r"\'",
+            r"x\\\'y",
+            r"\$$",
+            "$${a}$${b}",
+            r"a:_:\'b:_:'c d'",
+            r"  a,\'b|'c',''",
+            "a,'',b",
+        ])
+    {
+        for carrier in [API, DIALPLAN] {
+            let Ok(list) = read(input, carrier.into()) else {
+                continue;
+            };
+            let context = format!("{input:?} at {carrier:?}: {list:?}");
+            for pair in list
+                .threads
+                .windows(2)
+            {
+                assert_eq!(
+                    &input[pair[0]
+                        .raw
+                        .end
+                        ..pair[1]
+                            .raw
+                            .start],
+                    ENTERPRISE_DELIM,
+                    "{context}"
+                );
+            }
+            for thread in list
+                .threads
+                .iter()
+                .filter(|thread| {
+                    thread
+                        .groups
+                        .iter()
+                        .any(|group| !group.is_empty())
+                })
+            {
+                let mut at = thread
+                    .raw
+                    .start;
+                for (k, leg) in thread
+                    .groups
+                    .iter()
+                    .flatten()
+                    .enumerate()
+                {
+                    let gap = &input[at..leg
+                        .raw
+                        .start];
+                    assert!((k == 0 && gap.is_empty()) || is_separator(gap), "{context}");
+                    at = leg
+                        .raw
+                        .end;
+                }
+                let rest = &input[at..thread
+                    .raw
+                    .end];
+                // A trailing empty leg yields no token, so its bytes trail the separator.
+                assert!(rest.is_empty() || is_separator(&rest[..1]), "{context}");
+            }
+        }
+    }
+}
+
+#[test]
+fn a_non_ascii_block_separator_yields_no_pairs() {
+    let list = read_at("[a=1][^^éb=2éc=3]loopback/9199/test", API);
+    let (_, leg) = legs(&list)[0];
+    assert_eq!(leg.blocks[1].separator, 'é');
+    assert!(leg.blocks[1]
+        .pairs
+        .is_empty());
+    assert_eq!(value(&list, 0, "a"), Some("1"));
+    assert_eq!(leg.endpoint, "loopback/9199/test");
+}

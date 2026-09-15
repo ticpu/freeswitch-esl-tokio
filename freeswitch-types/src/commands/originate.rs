@@ -721,7 +721,7 @@ impl Originate {
         let s = s
             .strip_prefix("originate")
             .unwrap_or(s)
-            .trim();
+            .trim_matches(['\t', '\n', '\u{b}', '\r', ' ']);
         let mut args = originate_split(s, ' ')?;
 
         if args.is_empty() {

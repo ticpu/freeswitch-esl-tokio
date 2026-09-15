@@ -375,9 +375,13 @@ fn check_representable(
 /// Either bracket moves the end the switch counts its way to, `=` splits the
 /// pair instead, `^` leaves the `^^` prefix reading as its own separator, and
 /// `|` in a `[]` block is read by the leg split before the block is parsed.
+///
+/// A non-ASCII separator is refused: the switch splits on its first byte, and
+/// every key then starts with the rest of its UTF-8 form.
 fn check_separator(sep: char, vars_type: VariablesType) -> Result<(), OriginateError> {
     let (open, close) = vars_type.delimiters();
-    if sep == open
+    if !sep.is_ascii()
+        || sep == open
         || sep == close
         || sep == '='
         || sep == '^'
@@ -869,7 +873,7 @@ mod tests {
     #[test]
     fn separator_that_cannot_delimit_the_block_is_refused() {
         let vars = Variables::new(VariablesType::Channel);
-        for sep in ['[', ']', '=', '^'] {
+        for sep in ['[', ']', '=', '^', 'é', '§'] {
             assert!(
                 vars.clone()
                     .with_separator(sep)
@@ -884,7 +888,7 @@ mod tests {
     /// a value that changes when it is written back out.
     #[test]
     fn the_parser_refuses_every_separator_the_builder_does() {
-        for sep in ['[', ']', '=', '^'] {
+        for sep in ['[', ']', '=', '^', 'é', '§'] {
             assert!(
                 format!("[^^{sep}a=1{sep}b=2]")
                     .parse::<Variables>()

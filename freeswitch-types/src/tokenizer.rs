@@ -1,39 +1,58 @@
 //! Port of the switch's own string separators in `switch_utils.c`, for every reader
 //! of text the switch tokenizes that way.
 //!
-//! Every pass runs over traced text: each char paired with the byte offset in the
+//! Every pass runs over traced text: each char paired with the byte range in the
 //! original input it came from, so a cleaned token still points back at its source.
 
 use std::ops::Range;
 
-/// A char and its byte offset in the original input.
-pub(crate) type Traced = (char, usize);
+/// A char and the start and end of the input bytes it stands for; an unescaped char
+/// spans its whole escape.
+pub(crate) type Traced = (char, usize, usize);
 
 pub(crate) fn trace(s: &str) -> Vec<Traced> {
     s.char_indices()
-        .map(|(at, c)| (c, at))
+        .map(|(at, c)| (c, at, at + c.len_utf8()))
         .collect()
 }
 
 pub(crate) fn untrace(text: &[Traced]) -> String {
     text.iter()
-        .map(|&(c, _)| c)
+        .map(|&(c, ..)| c)
         .collect()
 }
 
-/// The byte range in the original input a raw token covers.
+/// The input bytes token `span` of `text` covers, `text` covering `extent`: from the end of
+/// the char before it, or the start of `extent`, to the start of the char after it, or its end.
+///
+/// Chars a pass dropped between a token and its delimiters thereby belong to the token.
 #[cfg(feature = "esl")]
-pub(crate) fn byte_range(text: &[Traced], span: Range<usize>) -> Range<usize> {
-    let end_of_text = text
-        .last()
-        .map_or(0, |&(c, at)| at + c.len_utf8());
+pub(crate) fn byte_range(
+    text: &[Traced],
+    extent: Range<usize>,
+    span: Range<usize>,
+) -> Range<usize> {
+    let start = span
+        .start
+        .checked_sub(1)
+        .and_then(|before| text.get(before))
+        .map_or(extent.start, |&(.., end)| end);
+    let end = text
+        .get(span.end)
+        .map_or(extent.end, |&(_, start, _)| start);
+    start..end
+}
+
+/// The input bytes an untouched trace covers.
+#[cfg(feature = "esl")]
+pub(crate) fn extent(text: &[Traced]) -> Range<usize> {
     let start = text
-        .get(span.start)
-        .map_or(end_of_text, |&(_, at)| at);
-    match text[span].last() {
-        Some(&(c, at)) => start..at + c.len_utf8(),
-        None => start..start,
-    }
+        .first()
+        .map_or(0, |&(_, start, _)| start);
+    let end = text
+        .last()
+        .map_or(start, |&(.., end)| end);
+    start..end
 }
 
 /// Raw token spans one split cuts, as index ranges into the text it split.
@@ -51,14 +70,14 @@ pub(crate) struct Cut {
 pub(crate) fn skip_spaces(text: &[Traced]) -> &[Traced] {
     let count = text
         .iter()
-        .take_while(|&&(c, _)| c == ' ')
+        .take_while(|&&(c, ..)| c == ' ')
         .count();
     &text[count..]
 }
 
 fn has_quote(rest: &[Traced]) -> bool {
     rest.iter()
-        .any(|&(c, _)| c == '\'')
+        .any(|&(c, ..)| c == '\'')
 }
 
 /// `separate_string_char_delim` before its cleanup, keeping at most `limit` tokens. A trailing
@@ -179,8 +198,7 @@ fn unescape(next: char, delim: Option<char>) -> Option<char> {
     }
 }
 
-/// `cleanup_separated_string`, `delim` being `None` where the switch passes 0. Each kept char
-/// keeps its trace.
+/// `cleanup_separated_string`, `delim` being `None` where the switch passes 0.
 pub(crate) fn cleanup(raw: &[Traced], delim: Option<char>) -> Vec<Traced> {
     let s = skip_spaces(raw);
     let mut out = Vec::with_capacity(s.len());
@@ -188,13 +206,15 @@ pub(crate) fn cleanup(raw: &[Traced], delim: Option<char>) -> Vec<Traced> {
     let mut inside_quotes = false;
     let mut i = 0;
     while i < s.len() {
-        let (c, at) = s[i];
+        let (c, start, _) = s[i];
         let escaped = match (c, s.get(i + 1)) {
-            ('\\', Some(&(next, _))) => unescape(next, delim),
+            ('\\', Some(&(next, _, next_end))) => {
+                unescape(next, delim).map(|e| (e, start, next_end))
+            }
             _ => None,
         };
         if let Some(e) = escaped {
-            out.push((e, at));
+            out.push(e);
             end = out.len();
             i += 2;
             continue;
@@ -205,7 +225,7 @@ pub(crate) fn cleanup(raw: &[Traced], delim: Option<char>) -> Vec<Traced> {
                 end = out.len();
             }
         } else {
-            out.push((c, at));
+            out.push(s[i]);
             if c != ' ' || inside_quotes {
                 end = out.len();
             }
@@ -230,15 +250,47 @@ pub(crate) struct Separated {
     pub(crate) open_quote: bool,
 }
 
-/// `switch_separate_string`: a `^^X` prefix with at least one char after `X` picks
-/// `X` as the delimiter, a space splits blank and anything else by char.
+/// The delimiter a leading `^^X` picks and the text after it, as `switch_separate_string`
+/// reads one: `X` then at least one byte.
+///
+/// The switch takes `X` as one byte, so a non-ASCII `X` splits on the first byte of its
+/// UTF-8 form. No char delimiter mirrors that, and such a prefix picks nothing here.
+#[cfg(feature = "esl")]
+pub(crate) fn delimiter_override(text: &[Traced]) -> (Option<char>, &[Traced]) {
+    match text {
+        [('^', ..), ('^', ..), (picked, ..), rest @ ..]
+            if picked.is_ascii() && !rest.is_empty() =>
+        {
+            (Some(*picked), rest)
+        }
+        _ => (None, text),
+    }
+}
+
+/// `switch_separate_string`: a `^^X` prefix [`delimiter_override`] accepts picks `X` over
+/// `delim`, a space splits blank and anything else by char.
 #[cfg(feature = "esl")]
 pub(crate) fn separate(text: &[Traced], delim: char, limit: usize) -> Separated {
-    let (skipped, delim) = match text {
-        [('^', _), ('^', _), (picked, _), _, ..] => (3, *picked),
-        _ => (0, delim),
-    };
-    let body = &text[skipped..];
+    let (picked, body) = delimiter_override(text);
+    let skipped = text.len() - body.len();
+    let mut separated = separate_on(body, picked.unwrap_or(delim), limit);
+    for token in &mut separated.tokens {
+        token.raw = token
+            .raw
+            .start
+            + skipped
+            ..token
+                .raw
+                .end
+                + skipped;
+    }
+    separated
+}
+
+/// [`separate`] on `delim` with no `^^X` prefix read, for text not at the head of a
+/// switch argument.
+#[cfg(feature = "esl")]
+pub(crate) fn separate_on(body: &[Traced], delim: char, limit: usize) -> Separated {
     let (cut, cleanup_delim) = match (limit, delim) {
         (0, _) => (
             Cut {
@@ -257,7 +309,7 @@ pub(crate) fn separate(text: &[Traced], delim: char, limit: usize) -> Separated 
             .into_iter()
             .map(|span| Token {
                 text: cleanup(&body[span.clone()], cleanup_delim),
-                raw: span.start + skipped..span.end + skipped,
+                raw: span,
             })
             .collect(),
         held_delimiter: cut.held_delimiter,
@@ -278,7 +330,7 @@ pub(crate) fn find_end_paren(text: &[Traced], open: char, close: char) -> Option
         return None;
     }
     let mut depth = 1usize;
-    for (i, &(c, _)) in text
+    for (i, &(c, ..)) in text
         .iter()
         .enumerate()
         .skip(skip + 1)
@@ -307,7 +359,7 @@ pub(crate) fn find(text: &[Traced], needle: &str) -> Option<usize> {
     (0..=last).find(|&i| {
         text[i..i + needle.len()]
             .iter()
-            .map(|&(c, _)| c)
+            .map(|&(c, ..)| c)
             .eq(needle
                 .iter()
                 .copied())
@@ -349,29 +401,100 @@ pub(crate) fn separate_string_char_delim(s: &str, delim: char) -> Vec<String> {
         .collect()
 }
 
-/// The raw tokens `separate_string_char_delim` cuts, before any cleanup.
+/// The raw tokens `separate_string_char_delim` cuts from `text`, traced from `s`, before
+/// any cleanup.
 #[cfg(feature = "esl")]
-pub(crate) fn char_delim_spans(s: &str, delim: char) -> Vec<&str> {
-    let text = trace(s);
-    char_delim(&text, delim, usize::MAX)
+pub(crate) fn char_delim_spans<'s>(s: &'s str, text: &[Traced], delim: char) -> Vec<&'s str> {
+    char_delim(text, delim, usize::MAX)
         .spans
         .into_iter()
-        .map(|span| &s[byte_range(&text, span)])
+        .map(|span| &s[byte_range(text, extent(text), span)])
         .collect()
 }
 
-/// The raw tokens `separate_string_blank_delim` cuts on spaces, before any cleanup,
-/// and whether a quote was still open at the end.
+/// The raw tokens `separate_string_blank_delim` cuts on spaces from `text`, traced from
+/// `s`, before any cleanup, and whether a quote was still open at the end.
 #[cfg(feature = "esl")]
-pub(crate) fn blank_delim_spans(s: &str) -> (Vec<&str>, bool) {
-    let text = trace(s);
-    let cut = blank_delim(&text, usize::MAX);
+pub(crate) fn blank_delim_spans<'s>(s: &'s str, text: &[Traced]) -> (Vec<&'s str>, bool) {
+    let cut = blank_delim(text, usize::MAX);
     let spans = cut
         .spans
         .into_iter()
-        .map(|span| &s[byte_range(&text, span)])
+        .map(|span| &s[byte_range(text, extent(text), span)])
         .collect();
     (spans, cut.open_quote)
+}
+
+#[cfg(all(test, feature = "esl"))]
+pub(crate) const TILING_INPUTS: &[&str] = &[
+    "a,'b c',error/X",
+    "'b c',a",
+    "  a b  ",
+    " 'x y' ",
+    "a '' b",
+    "''",
+    "'",
+    "x'y",
+    r"a\,b,c",
+    r"a\'b",
+    r"'a\'b'",
+    r"\\",
+    r"trailing\",
+    r"\s\n\t",
+    r"a\',b",
+    r"\'lead,x",
+    r"\$${x}\$y",
+    "${a}b,$${c}",
+    "'é,ü' ,ß",
+    "[v='x,y']loopback/9199/a,error/USER_BUSY",
+    "a|'b|c' |d",
+];
+
+#[cfg(all(test, feature = "esl"))]
+mod tiling {
+    use super::*;
+
+    #[test]
+    fn tokens_meet_only_at_their_delimiters() {
+        for input in TILING_INPUTS {
+            let text = trace(input);
+            for delim in [' ', ',', '|', '='] {
+                let ranges: Vec<_> = separate(&text, delim, usize::MAX)
+                    .tokens
+                    .into_iter()
+                    .map(|token| byte_range(&text, extent(&text), token.raw))
+                    .collect();
+                let is_delimiter = |gap: &str| match delim {
+                    ' ' => {
+                        !gap.is_empty()
+                            && gap
+                                .chars()
+                                .all(|c| c == ' ')
+                    }
+                    _ => gap.len() == 1 && gap.starts_with(delim),
+                };
+                let context = format!("{input:?} on {delim:?}: {ranges:?}");
+                let mut at = 0;
+                for (k, range) in ranges
+                    .iter()
+                    .enumerate()
+                {
+                    let gap = &input[at..range.start];
+                    assert!(
+                        if k == 0 {
+                            gap.is_empty()
+                        } else {
+                            is_delimiter(gap)
+                        },
+                        "{context}"
+                    );
+                    at = range.end;
+                }
+                let rest = &input[at..];
+                assert!(rest.is_empty() || is_delimiter(rest), "{context}");
+            }
+        }
+    }
 }
 
 #[cfg(all(test, feature = "sdp"))]

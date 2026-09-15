@@ -100,7 +100,7 @@ pub enum CauseReading {
     Unrecognized,
 }
 
-/// A pair of a leg's own blocks that does not reach the channel as written.
+/// A pair or block of the leg's own that does not reach the channel as written.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum LegWarning {
@@ -126,6 +126,12 @@ pub enum LegWarning {
         /// Variable name.
         key: String,
     },
+    /// The block's `^^` separator is not ASCII. The switch splits on its first
+    /// byte, which no typed name can carry, so the block contributes no pairs.
+    BlockSeparatorUnreadable {
+        /// Index among the leg's blocks.
+        block: usize,
+    },
 }
 
 /// Something about the whole list the typed view cannot show.
@@ -137,6 +143,12 @@ pub enum ListWarning {
     /// The dialplan carrier substitutes a `${}` reference with a value only the
     /// switch knows; the reference is kept as written.
     CarrierExpands,
+    /// A list or thread block's `^^` separator is not ASCII. The switch splits on
+    /// its first byte, which no typed name can carry, so the block contributes no pairs.
+    BlockSeparatorUnreadable {
+        /// Index among the list's blocks and then each thread's, in reading order.
+        block: usize,
+    },
 }
 
 /// What stops the switch from reading the dial string at all.
@@ -189,12 +201,23 @@ impl FlattenedDialString {
             quote_spans_legs,
             carrier_expands,
         } = list;
+        let unreadable = blocks
+            .iter()
+            .chain(
+                threads
+                    .iter()
+                    .flat_map(|thread| &thread.blocks),
+            )
+            .enumerate()
+            .filter(|(_, parsed)| parsed.separator_unreadable())
+            .map(|(block, _)| ListWarning::BlockSeparatorUnreadable { block });
         let warnings = [
             (quote_spans_legs, ListWarning::QuoteSpansLegs),
             (carrier_expands, ListWarning::CarrierExpands),
         ]
         .into_iter()
         .filter_map(|(raised, warning)| raised.then_some(warning))
+        .chain(unreadable)
         .collect();
         let mut kept: Vec<(Range<usize>, FlattenedThread)> = Vec::new();
         for thread in threads {
@@ -538,9 +561,15 @@ impl FlattenedLeg {
             .enumerate()
             .flat_map(|(block, parsed)| {
                 parsed
-                    .pairs
-                    .iter()
-                    .filter_map(move |pair| LegWarning::of(block, pair, nested_vars))
+                    .separator_unreadable()
+                    .then_some(LegWarning::BlockSeparatorUnreadable { block })
+                    .into_iter()
+                    .chain(
+                        parsed
+                            .pairs
+                            .iter()
+                            .filter_map(move |pair| LegWarning::of(block, pair, nested_vars)),
+                    )
             })
             .collect();
         Self {
@@ -584,7 +613,7 @@ impl FlattenedLeg {
         &self.target
     }
 
-    /// Pairs of the leg's own blocks that do not reach the channel as written.
+    /// Pairs and blocks of the leg's own that do not reach the channel as written.
     pub fn warnings(&self) -> &[LegWarning] {
         &self.warnings
     }
@@ -712,18 +741,26 @@ impl fmt::Display for LegWarning {
                 f,
                 "pair {key} in block {block} names a variable while origination_nested_vars is off"
             ),
+            Self::BlockSeparatorUnreadable { block } => write!(
+                f,
+                "block {block} has a non-ASCII separator and contributes no pairs"
+            ),
         }
     }
 }
 
 impl fmt::Display for ListWarning {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::QuoteSpansLegs => "a quote holds a leg or group separator",
+        match self {
+            Self::QuoteSpansLegs => f.write_str("a quote holds a leg or group separator"),
             Self::CarrierExpands => {
-                "the dialplan carrier expands a variable reference kept as written"
+                f.write_str("the dialplan carrier expands a variable reference kept as written")
             }
-        })
+            Self::BlockSeparatorUnreadable { block } => write!(
+                f,
+                "list block {block} has a non-ASCII separator and contributes no pairs"
+            ),
+        }
     }
 }
 
