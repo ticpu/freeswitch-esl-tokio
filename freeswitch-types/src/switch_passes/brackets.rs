@@ -130,32 +130,35 @@ pub(crate) fn parse_block(
     };
     let next = end + 1;
     if block.separator_unreadable() {
-        let trailing_backslashes = buffer
-            .c_str(at)
-            .get(4..end - at)
-            .unwrap_or_default()
-            .iter()
-            .rev()
-            .take_while(|&&(c, ..)| c == '\\')
-            .count();
+        let escaped = escapes_its_end(
+            buffer
+                .c_str(at)
+                .get(4..end - at)
+                .unwrap_or_default(),
+        );
         let chains_a_block = following_block(buffer, next, open, close).is_some();
         return Some(Parsed {
             block,
             next,
-            splits_past_close_by_byte: trailing_backslashes % 2 == 1 || chains_a_block,
+            splits_past_close_by_byte: escaped || chains_a_block,
         });
     }
     let following = chars(buffer.c_str(next));
     buffer.terminate(end);
     let (mut data, mut delim) = (at + 1, comma);
     let mut second = following_block(buffer, next, open, close);
+    let mut reads_past_by_byte = false;
     loop {
         if buffer.at(data) == '^' && buffer.at(data + 1) == '^' {
             delim = buffer.at(data + 2);
             data += 3;
         }
+        // A split on a non-ASCII head's first byte steps over an escaped terminator into the text
+        // after the close, which the port's split on the given separator would cut instead.
+        let escaped = escapes_its_end(buffer.c_str(data));
         let split = buffer.separate(data, delim, BLOCK_PAIRS);
         if split.unreadable_head {
+            reads_past_by_byte |= escaped;
             block
                 .pairs
                 .push(Pair {
@@ -164,9 +167,12 @@ pub(crate) fn parse_block(
                 });
         } else {
             for token in split.tokens {
+                let escaped = escapes_its_end(buffer.c_str(token.start));
+                let pair = pair(buffer, token.start);
+                reads_past_by_byte |= escaped && pair.effect == PairEffect::Unreadable;
                 block
                     .pairs
-                    .push(pair(buffer, token.start));
+                    .push(pair);
             }
         }
         match second.take() {
@@ -178,8 +184,18 @@ pub(crate) fn parse_block(
     Some(Parsed {
         block,
         next,
-        splits_past_close_by_byte: false,
+        splits_past_close_by_byte: reads_past_by_byte,
     })
+}
+
+/// `text` ends in an odd run of backslashes, the last escaping its terminator.
+fn escapes_its_end(text: &[Traced]) -> bool {
+    text.iter()
+        .rev()
+        .take_while(|&&(c, ..)| c == '\\')
+        .count()
+        % 2
+        == 1
 }
 
 fn chars(text: &[Traced]) -> Vec<char> {

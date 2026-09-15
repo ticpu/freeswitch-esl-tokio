@@ -507,9 +507,10 @@ does:
   separator's first byte, and what that installs, if anything, no string
   carries: the pair is read as installing nothing and carries
   `LegWarning::PairUnreadable`.
-- A group or leg opening such a head, and a block with a non-ASCII separator
-  whose content ends in a backslash, send a split on the first byte into text no
-  string carries: `FlattenedDialStringError::SplitSeparatorUnreadable`.
+- A group or leg opening such a head, a block with a non-ASCII separator whose
+  content ends in a backslash or that a second block follows, and a pair opening
+  such a head whose text ends in a backslash, send a split on the first byte into
+  text no string carries: `FlattenedDialStringError::SplitSeparatorUnreadable`.
 
 **A `^^X` prefix on an individual value is not a general mechanism.** Writing
 `{k=^^:a:b}` sets `k` to the literal `^^:a:b` — measured on both carriers. Only
