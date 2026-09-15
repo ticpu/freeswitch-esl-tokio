@@ -5,6 +5,7 @@
 use std::str::FromStr;
 use std::time::Duration;
 
+use freeswitch_c_oracle::Oracle;
 use proptest::collection::vec;
 use proptest::option;
 use proptest::prelude::*;
@@ -921,36 +922,31 @@ proptest! {
     }
 }
 
-const BUILT: &str = "against_the_c runs only with the oracle built";
-
 /// The pairs and endpoint text `originate_function`, `switch_event_create_brackets` and
 /// `switch_ivr_originate`'s leg splits read of a line opening with at most one `{}` or `<>`
 /// block, every split done by the switch's own C.
 fn c_reads_the_leg(
+    c: Oracle,
     line: &str,
     block: Option<(u8, u8)>,
 ) -> Result<(Vec<(String, String)>, String), String> {
     let utf8 = |bytes: &[u8]| String::from_utf8(bytes.to_vec()).map_err(|e| e.to_string());
-    let argv = freeswitch_c_oracle::separate_string(strip_whitespace(line).as_bytes(), b' ', 10)
-        .expect(BUILT);
+    let argv = c.separate_string(strip_whitespace(line).as_bytes(), b' ', 10);
     let dial = argv
         .first()
         .ok_or("no argument")?;
     let mut installed = Vec::new();
     let data = match block {
         Some((open, close)) => {
-            let end = freeswitch_c_oracle::find_end_paren(dial, open, close)
-                .expect(BUILT)
+            let end = c
+                .find_end_paren(dial, open, close)
                 .ok_or("the block never closes")?;
             let (separator, content) = match &dial[1..end] {
                 [b'^', b'^', picked, rest @ ..] => (*picked, rest),
                 content => (b',', content),
             };
-            for pair in freeswitch_c_oracle::separate_string(content, separator, 1024).expect(BUILT)
-            {
-                if let [key, value] =
-                    &freeswitch_c_oracle::separate_string(&pair, b'=', 2).expect(BUILT)[..]
-                {
+            for pair in c.separate_string(content, separator, 1024) {
+                if let [key, value] = &c.separate_string(&pair, b'=', 2)[..] {
                     installed.push((utf8(key)?, utf8(value)?));
                 }
             }
@@ -958,10 +954,10 @@ fn c_reads_the_leg(
         }
         None => &dial[..],
     };
-    let [group] = &freeswitch_c_oracle::separate_string(data, b'|', 128).expect(BUILT)[..] else {
+    let [group] = &c.separate_string(data, b'|', 128)[..] else {
         return Err("not one group".to_owned());
     };
-    let [leg] = &freeswitch_c_oracle::separate_string(group, b',', 128).expect(BUILT)[..] else {
+    let [leg] = &c.separate_string(group, b',', 128)[..] else {
         return Err("not one leg".to_owned());
     };
     let endpoint = leg
@@ -991,7 +987,7 @@ fn variables_arrive_through_the_c_passes() {
         file!(),
         "variables_arrive_through_the_c_passes",
         (scope, block_separator(), entries(1..4)),
-        |(scope, sep, values)| {
+        |c, (scope, sep, values)| {
             let Some(vars) = build_vars(scope, "v", &values, sep) else {
                 return Ok(());
             };
@@ -1009,7 +1005,7 @@ fn variables_arrive_through_the_c_passes() {
                     .to_string();
                 let line = originate_line(&format!("{block}null/drift"), target);
                 prop_assert_eq!(
-                    &c_reads_the_leg(&line, Some((open, close))),
+                    &c_reads_the_leg(c, &line, Some((open, close))),
                     &want,
                     "{:?} at {:?}",
                     line,
@@ -1036,7 +1032,7 @@ fn endpoints_arrive_through_the_c_passes() {
             bare_endpoint(),
             option::of((scope, block_separator(), entries(1..3))),
         ),
-        |(bare, vars)| {
+        |c, (bare, vars)| {
             if fields_name_a_variable(&bare) {
                 return Ok(());
             }
@@ -1079,7 +1075,7 @@ fn endpoints_arrive_through_the_c_passes() {
                     target,
                 );
                 prop_assert_eq!(
-                    &c_reads_the_leg(&line, block),
+                    &c_reads_the_leg(c, &line, block),
                     &want,
                     "{:?} at {:?}",
                     line,

@@ -2,6 +2,7 @@
 
 use std::io::Write as _;
 
+use freeswitch_c_oracle::Oracle;
 use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest::sample::select;
@@ -42,24 +43,60 @@ pub(crate) fn text() -> impl Strategy<Value = String> {
     ]
 }
 
-/// Run `property` over `strategy` against the switch's C, seeds kept beside `source`, or write
-/// one line naming why the oracle is absent; the line bypasses the harness's output capture.
+/// Run `property` over `strategy` against the C of every built tree, seeds kept beside `source`,
+/// writing one line per tree not built; the line bypasses the harness's output capture.
 pub(crate) fn against_the_c<S: Strategy>(
     source: &'static str,
     name: &str,
     strategy: S,
-    property: impl Fn(S::Value) -> TestCaseResult,
+    property: impl Fn(Oracle, S::Value) -> TestCaseResult,
 ) {
-    if let Some(missing) = freeswitch_c_oracle::missing() {
-        writeln!(std::io::stderr(), "{name}: skipped, {missing}")
-            .unwrap_or_else(|e| panic!("{name}: writing the skip line: {e}"));
+    for tree in freeswitch_c_oracle::trees() {
+        let oracle = match tree.oracle() {
+            Ok(oracle) => oracle,
+            Err(missing) => {
+                writeln!(
+                    std::io::stderr(),
+                    "{name}: skipped on tree {}, {missing}",
+                    tree.name()
+                )
+                .unwrap_or_else(|e| panic!("{name}: writing the skip line: {e}"));
+                continue;
+            }
+        };
+        let config = ProptestConfig {
+            source_file: Some(source),
+            ..config()
+        };
+        if let Err(failure) =
+            TestRunner::new(config).run(&strategy, |value| property(oracle, value))
+        {
+            panic!("{name} on tree {}: {failure}", tree.name());
+        }
+    }
+}
+
+/// CI fetches every public tree, so one missing there is a broken fetch, never a skip.
+#[test]
+fn public_trees_are_built_under_ci() {
+    if !std::env::var_os("CI").is_some_and(|ci| ci == "true") {
         return;
     }
-    let config = ProptestConfig {
-        source_file: Some(source),
-        ..config()
-    };
-    if let Err(failure) = TestRunner::new(config).run(&strategy, property) {
-        panic!("{name}: {failure}");
+    for tree in freeswitch_c_oracle::trees() {
+        match (tree.oracle(), tree.is_public()) {
+            (Ok(_), _) => {}
+            (Err(missing), true) => {
+                panic!(
+                    "CI runs the C oracle on tree {}, which was not built: {missing}",
+                    tree.name()
+                )
+            }
+            (Err(missing), false) => writeln!(
+                std::io::stderr(),
+                "tree {} is not public, CI skips it: {missing}",
+                tree.name()
+            )
+            .unwrap_or_else(|e| panic!("writing the skip line for tree {}: {e}", tree.name())),
+        }
     }
 }

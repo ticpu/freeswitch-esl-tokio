@@ -1,4 +1,4 @@
-//! The port against the switch's own tokenizer, compiled from the pinned source, byte for byte.
+//! The port against the switch's own tokenizer, compiled from every tracked tree, byte for byte.
 
 use proptest::prelude::*;
 use proptest::sample::select;
@@ -31,16 +31,6 @@ fn owned(tokens: impl IntoIterator<Item = String>) -> Vec<Vec<u8>> {
         .collect()
 }
 
-/// CI fetches the pinned source, so an oracle missing there is a broken fetch, never a skip.
-#[test]
-fn the_oracle_is_built_under_ci() {
-    if std::env::var_os("CI").is_some_and(|ci| ci == "true") {
-        if let Some(missing) = freeswitch_c_oracle::missing() {
-            panic!("CI runs the C oracle, which was not built: {missing}");
-        }
-    }
-}
-
 const CLEANUP_DELIMS: &[u8] = &[0, b',', b'~', b' ', b'|', b'=', b'\'', b'\\', b'n', b':'];
 const SPLIT_DELIMS: &[u8] = b" ,|=~:'";
 const LIMITS: &[u32] = &[1, 2, 3, 10, 128, 1024];
@@ -51,14 +41,14 @@ fn cleanup_matches_the_switch() {
         file!(),
         "cleanup_matches_the_switch",
         (line(), select(CLEANUP_DELIMS)),
-        |(input, delim)| {
+        |c, (input, delim)| {
             let port = untrace(&cleanup(
                 &trace(&input),
                 (delim != 0).then_some(char::from(delim)),
             ));
             prop_assert_eq!(
-                freeswitch_c_oracle::cleanup(input.as_bytes(), delim),
-                Some(port.into_bytes()),
+                c.cleanup(input.as_bytes(), delim),
+                port.into_bytes(),
                 "{:?} cleaned up on {:?}",
                 input,
                 char::from(delim)
@@ -74,7 +64,7 @@ fn separate_matches_the_switch() {
         file!(),
         "separate_matches_the_switch",
         (line(), select(SPLIT_DELIMS), select(LIMITS)),
-        |(input, delim, limit)| {
+        |c, (input, delim, limit)| {
             let text = trace(&input);
             let port = separate(&text, char::from(delim), limit as usize);
             if opens_with_a_non_ascii_head(&input) {
@@ -89,8 +79,8 @@ fn separate_matches_the_switch() {
                     .map(|token| untrace(&token.text)),
             );
             prop_assert_eq!(
-                freeswitch_c_oracle::separate_string(input.as_bytes(), delim, limit),
-                Some(port),
+                c.separate_string(input.as_bytes(), delim, limit),
+                port,
                 "{:?} on {:?} keeping {}",
                 input,
                 char::from(delim),
@@ -107,20 +97,20 @@ fn char_and_blank_splits_match_the_switch() {
         file!(),
         "char_and_blank_splits_match_the_switch",
         (line(), select(SPLIT_DELIMS), select(LIMITS)),
-        |(input, delim, limit)| {
+        |c, (input, delim, limit)| {
             let port = owned(
                 separate_on(&trace(&input), char::from(delim), limit as usize)
                     .tokens
                     .iter()
                     .map(|token| untrace(&token.text)),
             );
-            let c = match delim {
-                b' ' => freeswitch_c_oracle::blank_delim(input.as_bytes(), limit),
-                delim => freeswitch_c_oracle::char_delim(input.as_bytes(), delim, limit),
+            let split = match delim {
+                b' ' => c.blank_delim(input.as_bytes(), limit),
+                delim => c.char_delim(input.as_bytes(), delim, limit),
             };
             prop_assert_eq!(
-                c,
-                Some(port),
+                split,
+                port,
                 "{:?} on {:?} keeping {}",
                 input,
                 char::from(delim),
@@ -141,7 +131,7 @@ fn string_split_matches_the_switch() {
             select(&[":_:", ",", "ab", "::"][..]),
             select(LIMITS),
         ),
-        |(input, delim, limit)| {
+        |c, (input, delim, limit)| {
             let text = trace(&input);
             let port = owned(
                 separate_string_string(&text, delim, limit as usize)
@@ -149,12 +139,8 @@ fn string_split_matches_the_switch() {
                     .map(|span| untrace(&text[span])),
             );
             prop_assert_eq!(
-                freeswitch_c_oracle::separate_string_string(
-                    input.as_bytes(),
-                    delim.as_bytes(),
-                    limit
-                ),
-                Some(port),
+                c.separate_string_string(input.as_bytes(), delim.as_bytes(), limit),
+                port,
                 "{:?} on {:?} keeping {}",
                 input,
                 delim,
@@ -174,13 +160,13 @@ fn end_paren_matches_the_switch() {
             line(),
             select(&[(b'[', b']'), (b'{', b'}'), (b'<', b'>'), (b'\'', b'\'')][..]),
         ),
-        |(input, (open, close))| {
+        |c, (input, (open, close))| {
             let text = trace(&input);
             let port =
                 find_end_paren(&text, char::from(open), char::from(close)).map(|at| text[at].1);
             prop_assert_eq!(
-                freeswitch_c_oracle::find_end_paren(input.as_bytes(), open, close),
-                Some(port),
+                c.find_end_paren(input.as_bytes(), open, close),
+                port,
                 "{:?} from {:?} to {:?}",
                 input,
                 char::from(open),
