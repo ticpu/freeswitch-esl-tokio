@@ -95,6 +95,223 @@ async fn live_originate_timeout_fills_positional_gaps() {
     originate_and_reap(&cmd).await;
 }
 
+/// The first CHANNEL_EXECUTE of `app` on `uuid`, or `None` once the deadline passes.
+async fn wait_for_own_execute(
+    events: &mut freeswitch_esl_tokio::EslEventStream,
+    uuid: &str,
+    app: &str,
+    deadline: Instant,
+) -> Option<freeswitch_esl_tokio::EslEvent> {
+    while let Some(evt) =
+        wait_for_own_event(events, uuid, EslEventType::ChannelExecute, deadline).await
+    {
+        if evt.header(EventHeader::Application) == Some(app) {
+            return Some(evt);
+        }
+    }
+    None
+}
+
+type HeaderValues<'a> = &'a [(EventHeader, Option<&'a str>)];
+type VariableValues<'a> = &'a [(&'a str, Option<&'a str>)];
+
+#[tokio::test]
+#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+async fn live_originate_argv_separator_positionals() {
+    let (client, mut events, _permit) = connect().await;
+    client
+        .subscribe_events(EventFormat::Plain, &[EslEventType::ChannelExecute])
+        .await
+        .expect("subscribe CHANNEL_EXECUTE");
+
+    let separated = |cmd: Originate| {
+        cmd.with_argv_separator('~')
+            .expect("'~' separates originate's arguments")
+    };
+    let park = || {
+        Originate::inline(test_9199(), vec![Application::simple("park")])
+            .expect("park is deliverable")
+    };
+    let socket = Originate::application(
+        test_9199(),
+        Application::new("socket", Some("127.0.0.1:1 async full")),
+    )
+    .dialplan(DialplanType::Xml)
+    .expect("an application target takes XML")
+    .context("test")
+    .cid_name("  Front  Desk  ")
+    .cid_num("5551234")
+    .timeout(Duration::from_secs(6));
+    let empty_last = separated(
+        park()
+            .context("test")
+            .cid_name("Last Empty")
+            .cid_num(""),
+    );
+    assert!(
+        empty_last
+            .to_string()
+            .ends_with("~''"),
+        "{empty_last}"
+    );
+
+    let cases: Vec<(&str, Originate, &str, HeaderValues, VariableValues)> = vec![
+        (
+            "socket target",
+            separated(socket),
+            "socket",
+            &[(EventHeader::ApplicationData, Some("127.0.0.1:1 async full"))],
+            &[
+                ("origination_caller_id_name", Some("  Front  Desk  ")),
+                ("origination_caller_id_number", Some("5551234")),
+            ],
+        ),
+        (
+            "absent context forced by a later slot",
+            separated(park().cid_name("Ctx Undef")),
+            "park",
+            &[
+                (EventHeader::CallerContext, Some("default")),
+                (EventHeader::CallerDialplan, Some("inline")),
+            ],
+            &[("origination_caller_id_name", Some("Ctx Undef"))],
+        ),
+        (
+            "empty context",
+            separated(
+                park()
+                    .context("")
+                    .cid_name("Ctx Empty"),
+            ),
+            "park",
+            &[(EventHeader::CallerContext, Some("test"))],
+            &[("origination_caller_id_name", Some("Ctx Empty"))],
+        ),
+        (
+            "spaced context",
+            separated(
+                park()
+                    .context("ctx with space")
+                    .cid_name("Ctx Named"),
+            ),
+            "park",
+            &[(EventHeader::CallerContext, Some("ctx with space"))],
+            &[("origination_caller_id_name", Some("Ctx Named"))],
+        ),
+        (
+            "empty last slot",
+            empty_last,
+            "park",
+            &[(EventHeader::CallerContext, Some("test"))],
+            &[
+                ("origination_caller_id_name", Some("Last Empty")),
+                ("origination_caller_id_number", None),
+            ],
+        ),
+    ];
+
+    for (label, cmd, app, headers, variables) in cases {
+        let line = cmd.to_string();
+        let reply = client
+            .api(&line)
+            .await
+            .and_then(|resp| {
+                resp.api_result()
+                    .map(str::to_owned)
+            });
+        let mut reaper = ChannelReaper::new(&client);
+        let executed = match &reply {
+            Ok(uuid) => {
+                reaper.track(uuid);
+                let deadline = Instant::now() + Duration::from_secs(10);
+                wait_for_own_execute(&mut events, uuid, app, deadline).await
+            }
+            Err(_) => None,
+        };
+        reaper
+            .reap()
+            .await;
+
+        let uuid = reply.unwrap_or_else(|e| panic!("{label}: {line} rejected: {e}"));
+        let evt = executed
+            .unwrap_or_else(|| panic!("{label}: no CHANNEL_EXECUTE {app} on {uuid} from {line}"));
+        for (header, want) in headers {
+            assert_eq!(evt.header(*header), *want, "{label}: {header} from {line}");
+        }
+        for (name, want) in variables {
+            assert_eq!(evt.variable_str(name), *want, "{label}: {name} from {line}");
+        }
+    }
+}
+
+/// A leg that never answers, so the originate ends when its timeout does.
+async fn unanswered_originate_elapsed(
+    client: &freeswitch_esl_tokio::EslClient,
+    seconds: u64,
+) -> (
+    Result<String, freeswitch_esl_tokio::EslError>,
+    String,
+    Duration,
+) {
+    let marker = format!("argv-timeout-{}-{seconds}", std::process::id());
+    let mut vars = Variables::new(VariablesType::Default);
+    vars.insert("fp_marker", marker.as_str());
+    vars.insert("ignore_early_media", "true");
+    let cmd = Originate::application(
+        Endpoint::Loopback(LoopbackEndpoint::new("app=park").with_variables(vars)),
+        Application::simple("park"),
+    )
+    .timeout(Duration::from_secs(seconds))
+    .with_argv_separator('~')
+    .expect("'~' separates originate's arguments");
+    let line = cmd.to_string();
+    let started = Instant::now();
+    let reply = client
+        .api(&line)
+        .await
+        .and_then(|resp| {
+            resp.api_result()
+                .map(str::to_owned)
+        });
+    let elapsed = started.elapsed();
+    if let Ok(uuid) = &reply {
+        kill_channel(client, uuid).await;
+    }
+    let hupall = format!("hupall NORMAL_CLEARING fp_marker {marker}");
+    match client
+        .api(&hupall)
+        .await
+    {
+        Ok(resp) => {
+            if let Err(e) = resp.api_result() {
+                eprintln!("cleanup: {hupall}: {e}");
+            }
+        }
+        Err(e) => eprintln!("cleanup: {hupall}: transport error: {e}"),
+    }
+    (reply, line, elapsed)
+}
+
+#[tokio::test]
+#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+async fn live_originate_argv_separator_timeout_is_read() {
+    let (client, _events, _permit) = connect().await;
+
+    let (short, short_line, short_elapsed) = unanswered_originate_elapsed(&client, 1).await;
+    let (long, long_line, long_elapsed) = unanswered_originate_elapsed(&client, 3).await;
+
+    assert!(short.is_err(), "{short_line} answered {short:?}");
+    assert!(long.is_err(), "{long_line} answered {long:?}");
+    assert!(
+        short_elapsed < Duration::from_millis(2500),
+        "{short_line} took {short_elapsed:?}"
+    );
+    assert!(
+        long_elapsed >= Duration::from_millis(2800),
+        "{long_line} took {long_elapsed:?}"
+    );
+}
+
 #[tokio::test]
 #[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
 async fn live_channel_timetable_on_create() {

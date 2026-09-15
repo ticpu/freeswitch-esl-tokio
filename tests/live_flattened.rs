@@ -11,13 +11,14 @@ mod live_common;
 use freeswitch_esl_tokio::channel::CallDirection;
 use freeswitch_esl_tokio::commands::originate::VariablesType;
 use freeswitch_esl_tokio::commands::{
-    originate_split, CauseReading, DialStringCarrier, FlattenedDialString,
-    FlattenedDialStringError, FlattenedLeg, LegTarget, LegWarning, OriginateError, UuidGetVar,
+    originate_split, CauseReading, DialStringCarrier, DialStringTarget, FlattenedDialString,
+    FlattenedDialStringError, FlattenedLeg, LegTarget, LegWarning, LoopbackEndpoint,
+    OriginateError, UuidGetVar,
 };
 use freeswitch_esl_tokio::variables::VariableName;
 use freeswitch_esl_tokio::{
-    CommandFailure, Endpoint, EslClient, EslEvent, EslEventStream, EslEventType, EslResult,
-    EventFormat, ExecuteOptions, HangupCause, HeaderLookup, UNDEF_VALUE,
+    parse_channel_dump, CommandFailure, Endpoint, EslClient, EslEvent, EslEventStream,
+    EslEventType, EslResult, EventFormat, ExecuteOptions, HangupCause, HeaderLookup, UNDEF_VALUE,
 };
 use live_common::{
     carried_in, channel_exists, connect, escaping_block, getvar, kill_channel, target_under_test,
@@ -50,6 +51,8 @@ const PROBE_KEYS: &[&str] = &[
     "codecs",
     "q",
     "from",
+    "v",
+    "j",
 ];
 
 /// Names outside every typed variable enum.
@@ -1022,4 +1025,336 @@ async fn live_typed_view_reads_escaping_depths_over_the_api_in_channel_scope() {
 #[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
 async fn live_typed_view_reads_escaping_depths_over_the_dialplan_in_channel_scope() {
     escaping_through_the_typed_view(DIALPLAN, VariablesType::Channel).await;
+}
+
+// --- The `^^<sep>` argument separator ---
+
+const ARGV_SEPARATORS: [char; 2] = ['~', '!'];
+
+fn argv_target(sep: char) -> DialStringTarget {
+    target_under_test(API)
+        .with_argv_separator(sep)
+        .unwrap_or_else(|e| panic!("{sep:?}: {e}"))
+}
+
+/// Runs of three or more backslashes: the depths a quote or a literal backslash is written at.
+fn deep_escapes(text: &str) -> Vec<usize> {
+    text.split(|c| c != '\\')
+        .map(str::len)
+        .filter(|&run| run >= 3)
+        .collect()
+}
+
+/// `keys` off the dump of the channel `originate ^^<sep><dial><sep>&park()` returns, and that
+/// channel with its loopback partner for the caller to reap.
+async fn received_at_argv(
+    client: &EslClient,
+    sep: char,
+    dial: &str,
+    keys: &[&str],
+) -> (Result<Vec<Option<String>>, String>, Vec<String>) {
+    let reply = client
+        .api(&format!("originate ^^{sep}{dial}{sep}&park()"))
+        .await
+        .map_err(|e| format!("originate transport error: {e}"))
+        .and_then(|resp| {
+            resp.api_result()
+                .map(str::to_owned)
+                .map_err(|e| format!("originate rejected: {e}"))
+        });
+    let uuid = match reply {
+        Ok(uuid) => uuid,
+        Err(e) => return (Err(e), Vec::new()),
+    };
+    let dump = client
+        .api(&format!("uuid_dump {uuid}"))
+        .await
+        .map_err(|e| format!("uuid_dump transport error: {e}"))
+        .and_then(|resp| {
+            resp.body()
+                .map(str::to_owned)
+                .ok_or_else(|| "uuid_dump answered no body".to_owned())
+        })
+        .and_then(|body| parse_channel_dump(&body).map_err(|e| format!("uuid_dump: {e}")));
+    let mut channels = vec![uuid];
+    let values = dump.map(|dump| {
+        channels.extend(
+            dump.variable_str("other_loopback_leg_uuid")
+                .map(str::to_owned),
+        );
+        keys.iter()
+            .map(|key| {
+                dump.variable_str(key)
+                    .map(str::to_owned)
+            })
+            .collect()
+    });
+    (values, channels)
+}
+
+/// Every escaping case rendered by `Variables` and by `Endpoint` at an argv separator target,
+/// read through the typed view and off the channel `originate ^^<sep>…<sep>&park()` creates.
+async fn escaping_at_an_argv_separator(scope: VariablesType) {
+    let (client, _events, _permit) = connect().await;
+
+    for sep in ARGV_SEPARATORS {
+        let target = argv_target(sep);
+        for block_separator in [None, Some(ESCAPING_SEPARATOR)] {
+            for (case, pairs) in ESCAPING_CASES {
+                if !carried_in(scope, pairs) {
+                    continue;
+                }
+                let label = format!(
+                    "{case} in {scope:?} scope, block separator {block_separator:?}, at ^^{sep}"
+                );
+                let vars = escaping_block(&[], pairs, block_separator, scope);
+                let at_api = vars
+                    .display_for(target_under_test(API))
+                    .to_string();
+                let at_sep = vars
+                    .display_for(target)
+                    .to_string();
+                assert_eq!(
+                    deep_escapes(&at_sep),
+                    deep_escapes(&at_api),
+                    "{label}: {at_sep} is not escaped as deep as {at_api}"
+                );
+                let endpoint = Endpoint::Loopback(
+                    LoopbackEndpoint::new("9199")
+                        .with_context("test")
+                        .with_variables(vars),
+                );
+                let keys: Vec<&str> = pairs
+                    .iter()
+                    .map(|(key, _)| *key)
+                    .collect();
+
+                for dial in [
+                    format!("{at_sep}null/escaping"),
+                    endpoint
+                        .display_for(target)
+                        .to_string(),
+                ] {
+                    let list = FlattenedDialString::parse_for(&dial, target)
+                        .unwrap_or_else(|e| panic!("{label}: {dial:?}: {e}"));
+                    let legs: Vec<&FlattenedLeg> = list
+                        .legs()
+                        .collect();
+                    let [leg] = legs[..] else {
+                        panic!("{label}: {dial:?} is not a single leg");
+                    };
+                    let typed: Vec<Option<String>> = keys
+                        .iter()
+                        .map(|key| {
+                            leg.variable(Var(key))
+                                .map(str::to_owned)
+                        })
+                        .collect();
+
+                    let (received, channels) = received_at_argv(&client, sep, &dial, &keys).await;
+                    for uuid in &channels {
+                        kill_channel(&client, uuid).await;
+                    }
+                    wait_gone(&client, &label, &channels).await;
+
+                    let received = received.unwrap_or_else(|e| panic!("{label}: {dial:?}: {e}"));
+                    for (((key, want), typed), got) in pairs
+                        .iter()
+                        .zip(typed)
+                        .zip(received)
+                    {
+                        assert!(
+                            typed.as_deref() == Some(*want) && got.as_deref() == Some(*want),
+                            "{label}: {key} of {dial:?}: expected {want:?}, typed {typed:?}, switch {got:?}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[tokio::test]
+#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+async fn live_escaping_depths_at_an_argv_separator() {
+    escaping_at_an_argv_separator(VariablesType::Default).await;
+}
+
+#[tokio::test]
+#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+async fn live_escaping_depths_at_an_argv_separator_in_enterprise_scope() {
+    escaping_at_an_argv_separator(VariablesType::Enterprise).await;
+}
+
+#[tokio::test]
+#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+async fn live_escaping_depths_at_an_argv_separator_in_channel_scope() {
+    escaping_at_an_argv_separator(VariablesType::Channel).await;
+}
+
+const ARGV_CAPTURES: &[&str] = &[
+    "g-fp-argv-apos2",
+    "g-fp-argv-bsbs",
+    "g-fp-argv-bsn",
+    "g-fp-argv-bsq",
+    "g-fp-argv-bss",
+    "g-fp-argv-bstilde",
+    "g-fp-argv-caret",
+    "g-fp-argv-lastesc",
+    "g-fp-argv-leg2",
+    "g-fp-argv-space",
+    "g-fp-argv-tilde",
+    "g-fp-argv-trail-last",
+    "g-fp-argv-trail-mid",
+];
+
+/// `group_call` output tagged with `marker`, escaped as one argument of `target`'s split.
+async fn argv_capture(
+    client: &EslClient,
+    group: &str,
+    marker: &str,
+    target: DialStringTarget,
+) -> String {
+    let body = live_group_call(client, group, "A").await;
+    target
+        .escape_argument(&format!("<fp_marker={marker},originate_timeout=4>{body}"))
+        .expect("a separator target escapes")
+        .into_owned()
+}
+
+/// Originate `list`'s raw text under `^^<sep>` and compare each leg it dials with its channel.
+async fn dial_at_argv(
+    client: &EslClient,
+    events: &mut EslEventStream,
+    label: &str,
+    sep: char,
+    list: &FlattenedDialString,
+    marker: &str,
+) {
+    let line = format!("originate ^^{sep}{}{sep}&park()", list.display_raw());
+    let reply = client
+        .api(&line)
+        .await
+        .unwrap_or_else(|e| panic!("{label}: originate transport error: {e}"));
+    let created = outbound_creates(
+        events,
+        marker,
+        dialed_legs(list).len(),
+        Instant::now() + Duration::from_secs(10),
+    )
+    .await;
+    reap_marked(client, marker, &created).await;
+    wait_gone(client, label, &uuids_of(&created)).await;
+
+    reply
+        .api_result()
+        .unwrap_or_else(|e| panic!("{label}: {line} rejected: {e}"));
+    assert_legs_match(label, list, &created);
+}
+
+#[tokio::test]
+#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+async fn live_typed_view_equals_what_each_leg_received_at_an_argv_separator() {
+    let (client, mut events, _permit) = connect().await;
+    client
+        .subscribe_events(EventFormat::Plain, &[EslEventType::ChannelCreate])
+        .await
+        .expect("subscribe CHANNEL_CREATE");
+
+    for (s, sep) in ARGV_SEPARATORS
+        .into_iter()
+        .enumerate()
+    {
+        let target = argv_target(sep);
+        for group in ARGV_CAPTURES {
+            let label = format!("{group}.A at ^^{sep}");
+            let m = marker(&format!("argv{s}-{group}"));
+            let escaped = argv_capture(&client, group, &m, target).await;
+            let list = FlattenedDialString::parse_for(&escaped, target)
+                .unwrap_or_else(|e| panic!("{label}: {escaped:?}: {e}"));
+            assert_eq!(
+                list.display_raw()
+                    .to_string(),
+                escaped,
+                "{label}"
+            );
+            dial_at_argv(&client, &mut events, &label, sep, &list, &m).await;
+        }
+    }
+}
+
+#[tokio::test]
+#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+async fn live_argv_separator_forwards_the_legs_retain_keeps() {
+    let (client, mut events, _permit) = connect().await;
+    client
+        .subscribe_events(EventFormat::Plain, &[EslEventType::ChannelCreate])
+        .await
+        .expect("subscribe CHANNEL_CREATE");
+
+    for (s, sep) in ARGV_SEPARATORS
+        .into_iter()
+        .enumerate()
+    {
+        let target = argv_target(sep);
+        for group in ["g-fp-argv-leg2", "g-fp-argv-lastesc"] {
+            for dropped in 0..2 {
+                let label = format!("{group}.A without leg {dropped} at ^^{sep}");
+                let m = marker(&format!("argv{s}-{group}-drop{dropped}"));
+                let escaped = argv_capture(&client, group, &m, target).await;
+                let mut list = FlattenedDialString::parse_for(&escaped, target)
+                    .unwrap_or_else(|e| panic!("{label}: {escaped:?}: {e}"));
+                assert_eq!(
+                    list.legs()
+                        .count(),
+                    2,
+                    "{label}: {escaped:?}"
+                );
+                let mut index = 0;
+                list.retain(|_| {
+                    index += 1;
+                    index - 1 != dropped
+                });
+                dial_at_argv(&client, &mut events, &label, sep, &list, &m).await;
+            }
+        }
+    }
+}
+
+#[tokio::test]
+#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+async fn live_argv_separator_dial_string_edge_spaces() {
+    let (client, mut events, _permit) = connect().await;
+    client
+        .subscribe_events(EventFormat::Plain, &[EslEventType::ChannelCreate])
+        .await
+        .expect("subscribe CHANNEL_CREATE");
+
+    for (s, sep) in ARGV_SEPARATORS
+        .into_iter()
+        .enumerate()
+    {
+        let target = argv_target(sep);
+        for escaped in [true, false] {
+            let label = format!("edge spaces, escaped {escaped}, at ^^{sep}");
+            let m = marker(&format!("argv{s}-edge-{escaped}"));
+            let spaced = format!("  <fp_marker={m}>{{k=a b,sentinel=s}}loopback/9199/test ");
+            let dial = match escaped {
+                true => target
+                    .escape_argument(&spaced)
+                    .expect("a separator target escapes")
+                    .into_owned(),
+                false => spaced,
+            };
+            let list = FlattenedDialString::parse_for(&dial, target)
+                .unwrap_or_else(|e| panic!("{label}: {dial:?}: {e}"));
+            assert_eq!(
+                list.display_raw()
+                    .to_string(),
+                dial,
+                "{label}"
+            );
+            dial_at_argv(&client, &mut events, &label, sep, &list, &m).await;
+        }
+    }
 }
