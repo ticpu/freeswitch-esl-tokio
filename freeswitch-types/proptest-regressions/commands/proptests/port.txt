@@ -15,11 +15,7 @@ cc d6976c3581addb7b17be52ed763fe0a52bc85caa14fd441385ea82f7f77efa81 # shrinks to
 cc 28c23f6fe81fc0ec8b8043ec3dcbee5b5a2437ae18d0d532aef7e3f6b63ead38 # shrinks to bare = SofiaGateway(SofiaGateway { gateway: "", destination: "", profile: Some(":"), variables: None }), vars = None
 cc 0075b520f7d191bfad8dc60bb8d9125ec2fd85a3db14cb03544cbb4b79b43119 # shrinks to scope = Channel, sep = Some(';'), values = ["\\,"]
 cc 69c0867fa07739663a671b6e07131563461d693efcbfb4d5fa0a83ce697c0442 # shrinks to scope = Enterprise, sep = Some('v'), values = [" "]
-cc d020c53acbbd132c0e9970054edff7b44d84ce7099459a4180b15f03001f4f84 # shrinks to (Default, Some('0'), [" "])
-cc 9fea4a17fb35a72555a247d327f8736add71e7b27e013b9118994ead748a939c # shrinks to (Sofia(SofiaEndpoint { profile: "", destination: "", variables: None }), Some((Default, Some('\''), [" "])))
-cc aeedd9193c9a0f8e70e8d0c40cba27effe56b24d45acced11d77fdea05ce6f67 # shrinks to (Loopback(LoopbackEndpoint { extension: "", context: None, dialplan: None, variables: None }), Some((Default, None, [(Some(" "), " ")])))
 cc 05a92a483a91f3ba48370f990f2a7a9104c886cf879d72923853a36adc8e1e79 # shrinks to bare = Loopback(LoopbackEndpoint { extension: "", context: None, dialplan: None, variables: None }), vars = Some((Enterprise, None, [(Some(" "), "=")]))
 cc fe1f53d5ee6d18bdac8aece8f4ac8a04894725b5926ca6e6a0bd799f6e76d36c # shrinks to scope = Enterprise, sep = Some('{'), values = [(None, "$"), (None, " ")]
 cc f8aa4ed29873135b186aba2cc2b8a9c832f4f09eaa839c3935b6c604473d9042 # shrinks to bare = Loopback(LoopbackEndpoint { extension: "", context: None, dialplan: None, variables: None }), vars = Some((Enterprise, Some('$'), [(Some("{"), " ")]))
 cc 4e46e62bbec9d77bc1ab910c4c063bdb88a8ac768a4495d79dc55bb946c58353 # shrinks to bare = SofiaGateway(SofiaGateway { gateway: "_:", destination: "", profile: Some(""), variables: None }), vars = None
-cc 02edc0d9ba9f6c329609bb9fd7a5e661766ac6464cb945b7a2b31ed0c03645af # shrinks to (SofiaContact(SofiaContact { user: "", domain: "a", profile: None, variables: None }), None)
