@@ -443,6 +443,25 @@ impl DialStringTarget {
         Some(Cow::Owned(escaped))
     }
 
+    /// `render` at this target, escaped once at its edge for an argv separator's split.
+    pub(crate) fn write_argument(
+        self,
+        f: &mut fmt::Formatter<'_>,
+        render: impl Fn(&mut fmt::Formatter<'_>, Self) -> fmt::Result,
+    ) -> fmt::Result {
+        match self.argv_separator() {
+            Some(sep) => write_escaped(
+                f,
+                sep,
+                RenderedAt {
+                    target: self.inner(),
+                    render: &render,
+                },
+            ),
+            None => render(f, self),
+        }
+    }
+
     /// A separator [`with_argv_separator`](Self::with_argv_separator) refuses as policy, for
     /// reading captures the switch accepts under it.
     #[cfg(test)]
@@ -543,6 +562,20 @@ impl DialStringTarget {
         };
         let run = (1usize << self.passes(scope)) - consumed_by_carrier;
         format!("{}'", "\\".repeat(run))
+    }
+}
+
+struct RenderedAt<'r, R> {
+    target: DialStringTarget,
+    render: &'r R,
+}
+
+impl<R> fmt::Display for RenderedAt<'_, R>
+where
+    R: Fn(&mut fmt::Formatter<'_>, DialStringTarget) -> fmt::Result,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        (self.render)(f, self.target)
     }
 }
 
@@ -930,23 +963,11 @@ pub struct VariablesDisplay<'a> {
 
 impl fmt::Display for VariablesDisplay<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self
-            .target
-            .argv_separator()
-        {
-            Some(sep) => write_escaped(
-                f,
-                sep,
+        self.target
+            .write_argument(f, |f, target| {
                 self.vars
-                    .display_for(
-                        self.target
-                            .inner(),
-                    ),
-            ),
-            None => self
-                .vars
-                .write_for(f, self.target),
-        }
+                    .write_for(f, target)
+            })
     }
 }
 

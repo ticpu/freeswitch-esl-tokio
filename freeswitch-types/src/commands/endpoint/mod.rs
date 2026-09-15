@@ -98,9 +98,7 @@ use std::str::FromStr;
 
 use super::find_matching_bracket;
 use super::originate::OriginateError;
-use super::variables::{
-    write_escaped, DialStringCarrier, DialStringTarget, Variables, VariablesType,
-};
+use super::variables::{DialStringCarrier, DialStringTarget, Variables, VariablesType};
 
 type PrefixParser = fn(&str) -> Result<Endpoint, OriginateError>;
 
@@ -400,23 +398,11 @@ pub struct EndpointDisplay<'a> {
 
 impl fmt::Display for EndpointDisplay<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self
-            .target
-            .argv_separator()
-        {
-            Some(sep) => write_escaped(
-                f,
-                sep,
+        self.target
+            .write_argument(f, |f, target| {
                 self.endpoint
-                    .display_for(
-                        self.target
-                            .inner(),
-                    ),
-            ),
-            None => self
-                .endpoint
-                .write_for(f, self.target),
-        }
+                    .write_for(f, target)
+            })
     }
 }
 
