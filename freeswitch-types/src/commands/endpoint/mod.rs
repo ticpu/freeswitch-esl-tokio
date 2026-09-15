@@ -891,6 +891,65 @@ mod tests {
         }
     }
 
+    #[test]
+    fn every_endpoint_type_round_trips_at_an_argv_separator() {
+        let target = DialStringTarget::new(DialStringCarrier::EslApi)
+            .with_argv_separator('~')
+            .expect("'~' separates originate's arguments");
+        let mut vars = Variables::new(VariablesType::Default);
+        vars.insert("path", r"C:\path");
+        vars.insert("tilde", "x~y");
+        vars.insert("spaced", "a b");
+        vars.insert("quote", "it's");
+
+        let with_vars = |mut ep: Endpoint| {
+            ep.set_variables(Some(vars.clone()));
+            ep
+        };
+        let cases: [Endpoint; 8] = [
+            with_vars(SofiaEndpoint::new("internal", "1000@example.com").into()),
+            with_vars(
+                SofiaGateway::new("gw", "1234")
+                    .with_profile("external")
+                    .into(),
+            ),
+            with_vars(
+                LoopbackEndpoint::new("9199")
+                    .with_context("default")
+                    .into(),
+            ),
+            with_vars(
+                UserEndpoint::new("bob")
+                    .with_domain("example.com")
+                    .into(),
+            ),
+            with_vars(SofiaContact::new("1000", "example.com").into()),
+            with_vars(GroupCall::new("support", "example.com").into()),
+            ErrorEndpoint::new(crate::channel::HangupCause::UserBusy).into(),
+            with_vars(Endpoint::Alsa(
+                AudioEndpoint::new().with_destination("auto_answer"),
+            )),
+        ];
+
+        for ep in cases {
+            let rendered = ep
+                .display_for(target)
+                .to_string();
+            let back = Endpoint::parse_for(&rendered, target)
+                .unwrap_or_else(|e| panic!("{rendered} failed to parse: {e}"));
+            assert_eq!(back, ep, "rendered {rendered}");
+        }
+    }
+
+    #[test]
+    fn an_endpoint_cut_by_its_argv_separator_is_refused() {
+        let target = DialStringTarget::new(DialStringCarrier::EslApi)
+            .with_argv_separator('~')
+            .expect("'~' separates originate's arguments");
+        assert!(Endpoint::parse_for("loopback/9199/test~error/USER_BUSY", target).is_err());
+        assert!(Endpoint::parse_for(r"{k=x\~y}loopback/9199/test", target).is_ok());
+    }
+
     // --- From impls ---
 
     #[test]

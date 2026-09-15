@@ -1535,20 +1535,24 @@ mod tests {
         let cases = [
             (
                 VariablesType::Default,
-                &["it's", r"C:\path", "a,b", r"a\nb", "with space"][..],
+                &["it's", r"C:\path", "a,b", r"a\nb", "with space", "x~y"][..],
             ),
             (
                 VariablesType::Enterprise,
-                &["it's", r"C:\path", "a,b", "with space"][..],
+                &["it's", r"C:\path", "a,b", "with space", "x~y"][..],
             ),
             (
                 VariablesType::Channel,
-                &[r"C:\path", "a,b", "a|b", "with space"][..],
+                &[r"C:\path", "a,b", "a|b", "with space", "x~y"][..],
             ),
         ];
         for &block_parse in REVISIONS {
-            for carrier in [DialStringCarrier::EslApi, DialStringCarrier::Dialplan] {
-                let target = DialStringTarget::new(carrier).with_block_parse(block_parse);
+            for target in [
+                DialStringTarget::new(DialStringCarrier::EslApi),
+                DialStringTarget::new(DialStringCarrier::Dialplan),
+                tilde(),
+            ] {
+                let target = target.with_block_parse(block_parse);
                 for (scope, values) in cases {
                     for &value in values {
                         let mut vars = Variables::new(scope);
@@ -1671,6 +1675,204 @@ mod tests {
         assert!(
             matches!(err, UnvouchedVersion::OlderThanVouched { .. }),
             "{version}: {err:?}"
+        );
+    }
+
+    fn tilde() -> DialStringTarget {
+        DialStringTarget::new(DialStringCarrier::EslApi)
+            .with_argv_separator('~')
+            .expect("'~' separates originate's arguments")
+    }
+
+    #[test]
+    fn an_argv_separator_is_part_of_the_target() {
+        let blank = DialStringTarget::new(DialStringCarrier::EslApi);
+        assert_eq!(blank.argv_separator(), None);
+        assert_eq!(tilde().argv_separator(), Some('~'));
+        assert_eq!(tilde().carrier(), DialStringCarrier::EslApi);
+        assert_eq!(
+            tilde()
+                .with_block_parse(BlockParse::PairSplitCleans)
+                .argv_separator(),
+            Some('~')
+        );
+        assert_ne!(tilde(), blank);
+    }
+
+    #[test]
+    fn the_dialplan_carrier_takes_no_argv_separator() {
+        assert_eq!(
+            DialStringTarget::new(DialStringCarrier::Dialplan).with_argv_separator('~'),
+            Err(InvalidArgvSeparator::WrongCarrier(
+                DialStringCarrier::Dialplan
+            ))
+        );
+    }
+
+    /// Space, `\`, `'`, lowercase `n r t s`, controls and non-ASCII break the switch's split
+    /// or its escapes; the rest collide with the dial-string grammar.
+    #[test]
+    fn unusable_argv_separators_are_refused() {
+        for sep in [
+            ' ', '\\', '\'', 'é', '\n', '\r', '\t', '\0', '\u{b}', 'n', 'r', 't', 's', 'N', 'R',
+            'T', 'S', 'a', '0', '^', '"', ',', '|', '[', ']', '{', '}', '<', '>', '=', ':',
+        ] {
+            let err = DialStringTarget::new(DialStringCarrier::EslApi)
+                .with_argv_separator(sep)
+                .expect_err(&format!("accepted {sep:?}"));
+            assert_eq!(err, InvalidArgvSeparator::Unusable(sep));
+            assert!(!err
+                .to_string()
+                .is_empty());
+        }
+        for sep in ['~', ';', '!', '#'] {
+            assert!(
+                DialStringTarget::new(DialStringCarrier::EslApi)
+                    .with_argv_separator(sep)
+                    .is_ok(),
+                "refused {sep:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn escape_argument_needs_an_argv_separator() {
+        assert_eq!(
+            DialStringTarget::new(DialStringCarrier::EslApi).escape_argument("a b"),
+            None
+        );
+        assert!(matches!(
+            tilde().escape_argument("loopback/9199/test"),
+            Some(std::borrow::Cow::Borrowed("loopback/9199/test"))
+        ));
+    }
+
+    /// fs-acd's `escape()` for `^^~`, which this replaces; the last case is a capture
+    /// originated that way.
+    #[test]
+    fn escape_argument_matches_fs_acd() {
+        for (text, want) in [
+            ("a b", "a b"),
+            ("x~y", r"x\~y"),
+            ("it's o'k", r"it\'s o\'k"),
+            (r"a\b", r"a\\b"),
+            (r"a\~b", r"a\\\~b"),
+            (r"end\", r"end\\"),
+            ("a\nb", r"a\nb"),
+            ("a\rb", r"a\rb"),
+            ("a\tb", r"a\tb"),
+            (
+                r"[presence_id=fp-argv-leg2@pbx.example.com,v=a b~c\d,sentinel=s]loopback/9199/test,[presence_id=fp-argv-leg2@pbx.example.com,sentinel=s2]loopback/9199/test",
+                r"[presence_id=fp-argv-leg2@pbx.example.com,v=a b\~c\\d,sentinel=s]loopback/9199/test,[presence_id=fp-argv-leg2@pbx.example.com,sentinel=s2]loopback/9199/test",
+            ),
+        ] {
+            assert_eq!(
+                tilde()
+                    .escape_argument(text)
+                    .as_deref(),
+                Some(want),
+                "{text:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn escape_argument_keeps_edge_spaces() {
+        for (text, want) in [
+            (" a ", r"\sa\s"),
+            ("a  ", r"a \s"),
+            ("  a", r"\s a"),
+            (" ", r"\s"),
+            ("  ", r"\s\s"),
+            ("", ""),
+        ] {
+            assert_eq!(
+                tilde()
+                    .escape_argument(text)
+                    .as_deref(),
+                Some(want),
+                "{text:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn escape_argument_is_undone_by_the_split_cleanup() {
+        use crate::tokenizer::{cleanup, trace, untrace};
+
+        for text in [
+            "a b",
+            " a b ",
+            r"it's \'q\' ''",
+            r#"a"b\"c"#,
+            r"\\\~~\n\s",
+            "tab\tcr\rnl\n",
+            "x~y~",
+            "~",
+            r"trailing\",
+            "é ü",
+        ] {
+            let escaped = tilde()
+                .escape_argument(text)
+                .expect("a separator target escapes");
+            assert_eq!(
+                untrace(&cleanup(&trace(&escaped), Some('~'))),
+                text,
+                "escaped {escaped:?}"
+            );
+        }
+    }
+
+    /// Inside the argument a value meets the same passes as at the blank split, so the
+    /// argument escape is the whole difference between the two renders.
+    #[test]
+    fn a_block_at_an_argv_separator_is_escaped_once_at_its_edge() {
+        let cases = [
+            (
+                VariablesType::Default,
+                "it's",
+                r"{k=it\\\\\\\'s}".to_owned(),
+            ),
+            (
+                VariablesType::Default,
+                r"a\nb",
+                r"{k=a\\\\\\\\nb}".to_owned(),
+            ),
+            (VariablesType::Default, "x~y", r"{k=x\~y}".to_owned()),
+            (VariablesType::Default, "a,b", r"{k=a\\,b}".to_owned()),
+            (VariablesType::Default, "a b", r"{k=\'a b\'}".to_owned()),
+            (VariablesType::Channel, "a|b", r"[k=a\\|b]".to_owned()),
+            (
+                VariablesType::Channel,
+                r"a\nb",
+                format!("[k=a{}nb]", "\\".repeat(32)),
+            ),
+        ];
+        for (scope, value, want) in cases {
+            let mut vars = Variables::new(scope);
+            vars.insert("k", value);
+            assert_eq!(
+                vars.display_for(tilde())
+                    .to_string(),
+                want,
+                "{value:?} in {scope:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_block_cut_by_its_argv_separator_is_refused() {
+        for block in ["{k=a}~{j=b}", "{k=a~j=b}", "{k='a~b'}"] {
+            let err = Variables::parse_for(block, tilde()).expect_err(block);
+            assert!(!err
+                .to_string()
+                .contains("k="));
+        }
+        assert_eq!(
+            Variables::parse_for("{k=a}~", tilde())
+                .expect("a trailing separator adds no argument")
+                .get("k"),
+            Some("a")
         );
     }
 
