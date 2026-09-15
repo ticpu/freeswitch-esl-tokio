@@ -73,21 +73,29 @@ pub(crate) fn skip_spaces(text: &[Traced]) -> &[Traced] {
     &text[count..]
 }
 
+/// `strchr` for a quote, which stops at a NUL.
 fn has_quote(rest: &[Traced]) -> bool {
     rest.iter()
+        .take_while(|&&(c, ..)| c != '\0')
         .any(|&(c, ..)| c == '\'')
 }
 
 /// `separate_string_char_delim` before its cleanup, keeping at most `limit` tokens. A trailing
-/// delimiter or an empty input yields no token; two adjacent delimiters yield an empty one.
+/// delimiter or an empty input yields no token; two adjacent delimiters yield an empty one. A NUL
+/// ends the scan, unless a backslash before it steps over it.
 pub(crate) fn char_delim(text: &[Traced], delim: char, limit: usize) -> Cut {
     let mut spans = Vec::new();
     let mut begin = None;
     let mut inside_quotes = false;
     #[cfg(feature = "esl")]
     let mut held_delimiter = false;
+    let mut stop = text.len();
     let mut i = 0;
     while i < text.len() {
+        if text[i].0 == '\0' {
+            stop = i;
+            break;
+        }
         let start = match begin {
             Some(start) => start,
             None if spans.len() + 1 >= limit => {
@@ -113,7 +121,7 @@ pub(crate) fn char_delim(text: &[Traced], delim: char, limit: usize) -> Cut {
         i += 1;
     }
     if let Some(start) = begin {
-        spans.push(start..text.len());
+        spans.push(start..stop);
     }
     Cut {
         spans,
@@ -125,7 +133,8 @@ pub(crate) fn char_delim(text: &[Traced], delim: char, limit: usize) -> Cut {
 }
 
 /// `separate_string_blank_delim` before its cleanup, keeping at most `limit` tokens. A quote
-/// toggles with no lookahead, and a run of spaces is one separator.
+/// toggles with no lookahead, and a run of spaces is one separator. A NUL ends the scan, unless a
+/// backslash before it steps over it.
 #[cfg(feature = "esl")]
 pub(crate) fn blank_delim(text: &[Traced], limit: usize) -> Cut {
     enum State {
@@ -140,9 +149,14 @@ pub(crate) fn blank_delim(text: &[Traced], limit: usize) -> Cut {
     let mut begin = 0;
     let mut inside_quotes = false;
     let mut held_delimiter = false;
+    let mut stop = text.len();
     let mut i = 0;
     while i < text.len() {
         let c = text[i].0;
+        if c == '\0' {
+            stop = i;
+            break;
+        }
         match state {
             State::Start if spans.len() + 1 >= limit => {
                 begin = i;
@@ -172,7 +186,7 @@ pub(crate) fn blank_delim(text: &[Traced], limit: usize) -> Cut {
         }
     }
     if matches!(state, State::SkipInitialSpace | State::FindDelim) {
-        spans.push(begin..text.len());
+        spans.push(begin..stop);
     }
     Cut {
         spans,
@@ -198,9 +212,17 @@ fn unescape(next: char, delim: Option<char>) -> Option<char> {
 
 /// `cleanup_separated_string`, `delim` being `None` where the switch passes 0.
 pub(crate) fn cleanup(raw: &[Traced], delim: Option<char>) -> Vec<Traced> {
+    let (mut out, end) = cleanup_written(raw, delim);
+    out.truncate(end.unwrap_or(0));
+    out
+}
+
+/// Every char `cleanup_separated_string` writes from the first past the leading spaces, and where
+/// it writes the terminator, `None` where it writes none.
+fn cleanup_written(raw: &[Traced], delim: Option<char>) -> (Vec<Traced>, Option<usize>) {
     let s = skip_spaces(raw);
     let mut out = Vec::with_capacity(s.len());
-    let mut end = 0;
+    let mut end = None;
     let mut inside_quotes = false;
     let mut i = 0;
     while i < s.len() {
@@ -213,25 +235,124 @@ pub(crate) fn cleanup(raw: &[Traced], delim: Option<char>) -> Vec<Traced> {
         };
         if let Some(e) = escaped {
             out.push(e);
-            end = out.len();
+            end = Some(out.len());
             i += 2;
             continue;
         }
         if c == '\'' && (inside_quotes || has_quote(&s[i + 1..])) {
             inside_quotes = !inside_quotes;
             if inside_quotes {
-                end = out.len();
+                end = Some(out.len());
             }
         } else {
             out.push(s[i]);
             if c != ' ' || inside_quotes {
-                end = out.len();
+                end = Some(out.len());
             }
         }
         i += 1;
     }
-    out.truncate(end);
-    out
+    (out, end)
+}
+
+/// A NUL-terminated buffer the switch's splits rewrite in place, a NUL held as `'\0'`.
+#[cfg(feature = "esl")]
+pub(crate) struct CBuffer(Vec<Traced>);
+
+#[cfg(feature = "esl")]
+impl CBuffer {
+    /// `text` and its terminator, and a second NUL for a trailing backslash to step onto.
+    pub(crate) fn new(text: &[Traced]) -> Self {
+        let end = extent(text).end;
+        let mut chars = text.to_vec();
+        chars.extend([('\0', end, end), ('\0', end, end)]);
+        Self(chars)
+    }
+
+    pub(crate) fn at(&self, index: usize) -> char {
+        self.0
+            .get(index)
+            .map_or('\0', |&(c, ..)| c)
+    }
+
+    pub(crate) fn terminate(&mut self, index: usize) {
+        if let Some(c) = self
+            .0
+            .get_mut(index)
+        {
+            c.0 = '\0';
+        }
+    }
+
+    /// The string at `index`, up to its terminator.
+    pub(crate) fn c_str(&self, index: usize) -> &[Traced] {
+        let rest = self
+            .0
+            .get(index..)
+            .unwrap_or_default();
+        let len = rest
+            .iter()
+            .position(|&(c, ..)| c == '\0')
+            .unwrap_or(rest.len());
+        &rest[..len]
+    }
+
+    /// `switch_separate_string` on the string at `index`, in place: where each cleaned token
+    /// starts, or `None` for a `^^` head naming a non-ASCII separator, which the switch takes as a byte.
+    pub(crate) fn separate(
+        &mut self,
+        index: usize,
+        delim: char,
+        limit: usize,
+    ) -> Option<Vec<usize>> {
+        let (mut buf, mut delim) = (index, delim);
+        if self.at(buf) == '^' && self.at(buf + 1) == '^' && self.at(buf + 2) != '\0' {
+            if !self
+                .at(buf + 2)
+                .is_ascii()
+            {
+                return None;
+            }
+            if self.at(buf + 3) != '\0' {
+                delim = self.at(buf + 2);
+                buf += 3;
+            }
+        }
+        let text = &self.0[buf.min(
+            self.0
+                .len(),
+        )..];
+        let cut = match delim {
+            ' ' => blank_delim(text, limit),
+            delim => char_delim(text, delim, limit),
+        };
+        for span in &cut.spans {
+            if self.at(buf + span.end) == delim {
+                self.terminate(buf + span.end);
+            }
+        }
+        let cleanup_delim = (delim != ' ').then_some(delim);
+        Some(
+            cut.spans
+                .iter()
+                .map(|span| self.cleanup(buf + span.start, cleanup_delim))
+                .collect(),
+        )
+    }
+
+    /// `cleanup_separated_string` on the string at `index`, written back: where the result starts.
+    fn cleanup(&mut self, index: usize, delim: Option<char>) -> usize {
+        let raw = self
+            .c_str(index)
+            .to_vec();
+        let start = index + (raw.len() - skip_spaces(&raw).len());
+        let (written, end) = cleanup_written(&raw, delim);
+        self.0[start..start + written.len()].copy_from_slice(&written);
+        if let Some(end) = end {
+            self.terminate(start + end);
+        }
+        start
+    }
 }
 
 /// One token of [`separate`]: its raw span in the text given, and its cleaned text.

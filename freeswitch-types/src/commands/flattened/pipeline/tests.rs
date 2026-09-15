@@ -529,3 +529,39 @@ fn a_non_ascii_block_separator_yields_no_pairs() {
     assert_eq!(value(&list, 0, "a"), Some("1"));
     assert_eq!(leg.endpoint, "loopback/9199/test");
 }
+
+/// The splits run in place, so a backslash escaping a token's terminator reads on into
+/// whatever the buffer holds after it.
+#[test]
+fn a_block_parse_reads_the_buffer_as_the_switch_leaves_it() {
+    let (block, next) = parse_block(&trace(r"{\}k=v}"), '{', '}', ',').unwrap();
+    assert_eq!(next, 3);
+    assert_eq!(
+        block.pairs,
+        [Pair {
+            key: r"\".into(),
+            effect: PairEffect::Set("v}".into())
+        }]
+    );
+    assert!(block.rewrites_following_text);
+
+    let (block, _) = parse_block(&trace(r"{x\\,k=v}"), '{', '}', ',').unwrap();
+    assert_eq!(
+        block
+            .pairs
+            .iter()
+            .map(|pair| &pair.effect)
+            .collect::<Vec<_>>(),
+        [&PairEffect::Ignored, &PairEffect::Set("v".into())]
+    );
+    assert!(!block.rewrites_following_text);
+
+    let (block, _) = parse_block(&trace("<^^>=>"), '<', '>', ',').unwrap();
+    assert_eq!(
+        block.pairs,
+        [Pair {
+            key: String::new(),
+            effect: PairEffect::Set(">".into())
+        }]
+    );
+}

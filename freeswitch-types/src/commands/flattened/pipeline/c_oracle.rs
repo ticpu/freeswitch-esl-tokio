@@ -18,7 +18,7 @@ fn installed<'a>(blocks: impl IntoIterator<Item = &'a Block>) -> Vec<Pair> {
             let value = match &pair.effect {
                 PairEffect::Set(value) => value.as_str(),
                 PairEffect::Cleared => "",
-                PairEffect::Ignored => return None,
+                PairEffect::Ignored | PairEffect::Unreadable => return None,
             };
             Some((
                 pair.key
@@ -30,6 +30,15 @@ fn installed<'a>(blocks: impl IntoIterator<Item = &'a Block>) -> Vec<Pair> {
             ))
         })
         .collect()
+}
+
+/// A block the port flags rather than reads: a non-ASCII separator, or a pair opening one.
+fn unmodelled(block: &Block) -> bool {
+    block.separator_unreadable()
+        || block
+            .pairs
+            .iter()
+            .any(|pair| pair.effect == PairEffect::Unreadable)
 }
 
 fn byte_offset(text: &[Traced], input: &str, index: usize) -> usize {
@@ -91,15 +100,20 @@ fn blocks_match_the_switch() {
             let port = parse_block(&text, open, close, comma);
             if port
                 .as_ref()
-                .is_some_and(|(block, _)| block.separator_unreadable())
+                .is_some_and(|(block, _)| unmodelled(block))
             {
                 return Ok(());
             }
-            let port =
-                port.map(|(block, next)| (installed([&block]), byte_offset(&text, &input, next)));
+            let port = port.map(|(block, next)| {
+                let rest = byte_offset(&text, &input, next);
+                (installed([&block]), rest, block.rewrites_following_text)
+            });
             let switch = c
                 .brackets(input.as_bytes(), open as u8, close as u8, comma as u8)
-                .map(|read| (read.pairs, read.rest));
+                .map(|read| {
+                    let rewritten = read.following != input.as_bytes()[read.rest..];
+                    (read.pairs, read.rest, rewritten)
+                });
             prop_assert_eq!(port, switch, "{:?} split on {:?}", input, comma);
             Ok(())
         },

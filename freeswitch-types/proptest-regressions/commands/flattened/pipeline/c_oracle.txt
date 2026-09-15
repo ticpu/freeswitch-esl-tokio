@@ -6,3 +6,5 @@
 # everyone who runs the test benefits from these saved cases.
 cc 52c2d6d393bd54e84e1f4726448b4978bbf3543b08dc3cb615eb7c653017be06 # shrinks to "{origination_nested_vars=true}\t:_:>"
 cc e4adeea102abaf1aaeaa310933b5486339148de00dbcb262e95acd490092e24f # shrinks to (('<', '>', ','), "<^^>=>", "")
+cc 57a79c5f7b9dd002fa7213e337611da1074a75e4040f608a0db947a891aae827 # shrinks to (('[', ']', ','), "[ ^^ék=v]", "")
+cc e0c9af70d59006592760f7a84da6f8aa8d2aed9df78a2733c707c2a9e6019890 # shrinks to (('{', '}', ','), "{\\}k=v}", "")

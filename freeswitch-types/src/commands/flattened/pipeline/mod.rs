@@ -9,7 +9,7 @@ use crate::channel::HangupCause;
 use crate::commands::variables::{BlockParse, DialStringCarrier, DialStringTarget};
 use crate::tokenizer::{
     byte_range, extent, find, find_end_paren, separate, separate_string_string, skip_spaces, trace,
-    untrace, ArgvCut, Traced,
+    untrace, ArgvCut, CBuffer, Traced,
 };
 
 #[cfg(test)]
@@ -38,6 +38,9 @@ pub(crate) enum PairEffect {
     Ignored,
     /// An empty value is installed, which deletes an earlier value.
     Cleared,
+    /// A `^^` head names a non-ASCII separator, which the split takes as its first byte; whatever
+    /// it installs no string carries.
+    Unreadable,
 }
 
 /// One pair, keyed by the name the switch installs it under.
@@ -53,6 +56,8 @@ pub(crate) struct Block {
     pub(crate) open: char,
     pub(crate) separator: char,
     pub(crate) pairs: Vec<Pair>,
+    /// The parse wrote into the text after the close, which the switch then reads rewritten.
+    pub(crate) rewrites_following_text: bool,
 }
 
 /// One leg: its blocks, the endpoint text after them, and where it sits in the
@@ -408,24 +413,73 @@ pub(crate) fn escape_block_commas(group: &mut [Traced]) {
 /// index after its close.
 fn parse_block(text: &[Traced], open: char, close: char, comma: char) -> Option<(Block, usize)> {
     let end = find_end_paren(text, open, close)?;
-    let content = text.get(1..end)?;
-    let (separator, delim, content) = match content {
-        [('^', ..), ('^', ..), (picked, ..), rest @ ..] => (*picked, *picked, rest),
-        _ => (',', comma, content),
+    let separator = match text.get(1..end)? {
+        [('^', ..), ('^', ..), (picked, ..), ..] => *picked,
+        [('^', ..), ('^', ..)] => '\0',
+        _ => ',',
     };
     let mut block = Block {
         open,
         separator,
         pairs: Vec::new(),
+        rewrites_following_text: false,
     };
-    if !block.separator_unreadable() {
-        block.pairs = separate(content, delim, BLOCK_PAIRS)
-            .tokens
-            .iter()
-            .map(|token| pair(&token.text))
-            .collect();
+    if block.separator_unreadable() {
+        return Some((block, end + 1));
     }
+    let mut buffer = CBuffer::new(text);
+    buffer.terminate(end);
+    let (mut data, mut delim) = (1, comma);
+    let mut next = following_block(&buffer, end + 1, open, close);
+    loop {
+        if buffer.at(data) == '^' && buffer.at(data + 1) == '^' {
+            delim = buffer.at(data + 2);
+            data += 3;
+        }
+        match buffer.separate(data, delim, BLOCK_PAIRS) {
+            Some(tokens) => {
+                for token in tokens {
+                    block
+                        .pairs
+                        .push(pair(&mut buffer, token));
+                }
+            }
+            None => block
+                .pairs
+                .push(Pair {
+                    key: untrace(buffer.c_str(data)),
+                    effect: PairEffect::Unreadable,
+                }),
+        }
+        match next.take() {
+            Some(at) => data = at,
+            None => break,
+        }
+    }
+    block.rewrites_following_text = buffer
+        .c_str(end + 1)
+        .iter()
+        .map(|&(c, ..)| c)
+        .ne(text[end + 1..]
+            .iter()
+            .map(|&(c, ..)| c));
     Some((block, end + 1))
+}
+
+/// Where `switch_event_create_brackets` reads more pairs after the first: the close of a block
+/// opening right after an opener that follows the close past spaces.
+fn following_block(buffer: &CBuffer, after: usize, open: char, close: char) -> Option<usize> {
+    let rest = buffer.c_str(after);
+    let opener = match rest
+        .iter()
+        .position(|&(c, ..)| c != ' ')
+    {
+        _ if rest.is_empty() => return None,
+        Some(at) if rest[at].0 == open => after + at,
+        Some(_) => return None,
+        None => after + rest.len(),
+    };
+    find_end_paren(buffer.c_str(opener + 1), open, close).map(|at| opener + 1 + at)
 }
 
 impl Block {
@@ -438,18 +492,23 @@ impl Block {
     }
 }
 
-fn pair(text: &[Traced]) -> Pair {
-    let mut fields = separate(text, '=', 2)
-        .tokens
-        .into_iter()
-        .map(|field| field.text);
-    let key = fields
-        .next()
-        .map_or_else(String::new, |key| untrace(&key));
-    let effect = match fields.next() {
-        Some(value) if value.is_empty() => PairEffect::Cleared,
-        Some(value) => PairEffect::Set(untrace(&value)),
-        None => PairEffect::Ignored,
+/// The pair the `=` split reads of the token at `index`, in place.
+fn pair(buffer: &mut CBuffer, index: usize) -> Pair {
+    let token = untrace(buffer.c_str(index));
+    let Some(fields) = buffer.separate(index, '=', 2) else {
+        return Pair {
+            key: token,
+            effect: PairEffect::Unreadable,
+        };
+    };
+    let field = |at: Option<&usize>| at.map_or_else(String::new, |&at| untrace(buffer.c_str(at)));
+    let key = field(fields.first());
+    let effect = match fields[..] {
+        [_, value] => match untrace(buffer.c_str(value)) {
+            value if value.is_empty() => PairEffect::Cleared,
+            value => PairEffect::Set(value),
+        },
+        _ => PairEffect::Ignored,
     };
     Pair { key, effect }
 }
@@ -499,7 +558,7 @@ fn install<'a>(blocks: impl IntoIterator<Item = &'a Block>) -> Vec<(&'a str, &'a
             PairEffect::Cleared => {
                 headers.retain(|(name, _)| !name.eq_ignore_ascii_case(&pair.key))
             }
-            PairEffect::Ignored => {}
+            PairEffect::Ignored | PairEffect::Unreadable => {}
         }
     }
     headers

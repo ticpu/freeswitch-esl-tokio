@@ -205,6 +205,49 @@ fn a_non_ascii_block_separator_warns_and_carries_nothing() {
     );
 }
 
+#[test]
+fn a_block_rewriting_the_text_after_it_warns() {
+    let list = parse("[a=1][^^]k=secret", API);
+    let leg = list
+        .legs()
+        .next()
+        .unwrap();
+    assert_eq!(
+        leg.warnings(),
+        [LegWarning::BlockRewritesFollowingText { block: 1 }]
+    );
+    assert_eq!(leg.variable(Key("k")), Some("secret"));
+    let shown = leg.warnings()[0].to_string();
+    assert!(shown.contains('1') && !shown.contains("secret"), "{shown}");
+
+    let list = parse(r"[a=1][k=secret\]loopback/9199/test", DIALPLAN);
+    let leg = list
+        .legs()
+        .next()
+        .unwrap();
+    assert_eq!(leg.warnings(), []);
+    assert_eq!(leg.variable(Key("k")), Some(r"secret\"));
+
+    let list = parse("[a=1][ ^^ék=secret]loopback/9199/test", DIALPLAN);
+    let leg = list
+        .legs()
+        .next()
+        .unwrap();
+    assert_eq!(leg.warnings(), [LegWarning::PairUnreadable { block: 1 }]);
+    let shown = leg.warnings()[0].to_string();
+    assert!(!shown.contains("secret") && !shown.contains('é'), "{shown}");
+
+    for carrier in [API, DIALPLAN] {
+        let list = parse("<^^>k=secret", carrier);
+        assert_eq!(
+            list.warnings(),
+            [ListWarning::BlockRewritesFollowingText { block: 0 }]
+        );
+        let shown = list.warnings()[0].to_string();
+        assert!(shown.contains('0') && !shown.contains("secret"), "{shown}");
+    }
+}
+
 /// The switch splits on the first byte of a non-ASCII `^^` separator, which no char
 /// delimiter mirrors, so the blank split runs over the whole argument.
 #[test]

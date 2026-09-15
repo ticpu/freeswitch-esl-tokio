@@ -134,6 +134,18 @@ pub enum LegWarning {
         /// Index among the leg's blocks.
         block: usize,
     },
+    /// Parsing the block writes into the leg's text after it, as a block of `^^` alone does, so
+    /// what the leg dials is not the endpoint shown.
+    BlockRewritesFollowingText {
+        /// Index among the leg's blocks.
+        block: usize,
+    },
+    /// A pair opens a `^^` head naming a non-ASCII separator, which the switch splits on its
+    /// first byte; what it installs, if anything, no string carries.
+    PairUnreadable {
+        /// Index among the leg's blocks.
+        block: usize,
+    },
 }
 
 /// Something about the whole list the typed view cannot show.
@@ -148,6 +160,12 @@ pub enum ListWarning {
     /// A list or thread block's `^^` separator is not ASCII. The switch splits on
     /// its first byte, which no typed name can carry, so the block contributes no pairs.
     BlockSeparatorUnreadable {
+        /// Index among the list's blocks and then each thread's, in reading order.
+        block: usize,
+    },
+    /// Parsing a list or thread block writes into the text after it, as a block of `^^` alone
+    /// does, so what follows is not what the switch reads.
+    BlockRewritesFollowingText {
         /// Index among the list's blocks and then each thread's, in reading order.
         block: usize,
     },
@@ -212,8 +230,15 @@ impl FlattenedDialString {
                     .flat_map(|thread| &thread.blocks),
             )
             .enumerate()
-            .filter(|(_, parsed)| parsed.separator_unreadable())
-            .map(|(block, _)| ListWarning::BlockSeparatorUnreadable { block });
+            .filter_map(|(block, parsed)| {
+                if parsed.separator_unreadable() {
+                    Some(ListWarning::BlockSeparatorUnreadable { block })
+                } else {
+                    parsed
+                        .rewrites_following_text
+                        .then_some(ListWarning::BlockRewritesFollowingText { block })
+                }
+            });
         let warnings = [
             (quote_spans_legs, ListWarning::QuoteSpansLegs),
             (carrier_expands, ListWarning::CarrierExpands),
@@ -572,6 +597,11 @@ impl FlattenedLeg {
                     .into_iter()
                     .chain(
                         parsed
+                            .rewrites_following_text
+                            .then_some(LegWarning::BlockRewritesFollowingText { block }),
+                    )
+                    .chain(
+                        parsed
                             .pairs
                             .iter()
                             .filter_map(move |pair| LegWarning::of(block, pair, nested_vars)),
@@ -678,6 +708,7 @@ impl LegWarning {
         };
         match &pair.effect {
             PairEffect::Ignored => Some(Self::PairIgnored { block, key: key() }),
+            PairEffect::Unreadable => Some(Self::PairUnreadable { block }),
             PairEffect::Cleared => Some(Self::PairCleared { block, key: key() }),
             PairEffect::Set(value) if !nested_vars && names_a_variable(value) => {
                 Some(Self::NestedVarsRefused { block, key: key() })
@@ -751,6 +782,13 @@ impl fmt::Display for LegWarning {
                 f,
                 "block {block} has a non-ASCII separator and contributes no pairs"
             ),
+            Self::BlockRewritesFollowingText { block } => {
+                write!(f, "parsing block {block} rewrites the leg's text after it")
+            }
+            Self::PairUnreadable { block } => write!(
+                f,
+                "a pair in block {block} opens a non-ASCII ^^ separator the switch splits by byte"
+            ),
         }
     }
 }
@@ -766,6 +804,9 @@ impl fmt::Display for ListWarning {
                 f,
                 "list block {block} has a non-ASCII separator and contributes no pairs"
             ),
+            Self::BlockRewritesFollowingText { block } => {
+                write!(f, "parsing list block {block} rewrites the text after it")
+            }
         }
     }
 }

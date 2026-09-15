@@ -190,6 +190,8 @@ pub struct Brackets {
     pub pairs: Vec<Pair>,
     /// The offset of the data after the block.
     pub rest: usize,
+    /// The string at `rest` as the parse left it.
+    pub following: Vec<u8>,
 }
 
 /// What `switch_ivr_originate` and `switch_ivr_enterprise_originate` read of a dial string, up to
@@ -578,6 +580,11 @@ impl Oracle {
             };
         });
         let rest = usize::try_from(rest).ok()?;
+        let following = buffer[rest..]
+            .split(|&byte| byte == 0)
+            .next()
+            .unwrap_or_default()
+            .to_vec();
         let pairs = records
             .into_iter()
             .map(|(tag, name, value)| {
@@ -585,7 +592,11 @@ impl Oracle {
                 (text(name), text(value))
             })
             .collect();
-        Some(Brackets { pairs, rest })
+        Some(Brackets {
+            pairs,
+            rest,
+            following,
+        })
     }
 
     /// The passes of `switch_ivr_originate`, through its enterprise split, that read `bridgeto`
