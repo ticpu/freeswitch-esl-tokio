@@ -148,6 +148,33 @@ mod tests {
         assert!(ExecuteOn::new("set", Some("k=a\nb")).is_err());
     }
 
+    /// `switch_core_session_exec` expands the argument, and that pass reads `\\`, `\'` and `\$`,
+    /// so the application receives neither the backslash nor, for a quote, the character.
+    #[test]
+    fn refuses_an_argument_the_expansion_unescapes() {
+        assert!(ExecuteOn::new("set", Some(r"k=a\\b")).is_err());
+        assert!(ExecuteOn::new("set", Some(r"k=it\'s")).is_err());
+        assert!(ExecuteOn::new("set", Some(r"k=\$10")).is_err());
+    }
+
+    /// An expanded argument opening `%[` or `%<delim>[` is read as a block of scope variables and
+    /// never reaches the application; a bare `%` leaves the switch reading past the terminator.
+    #[test]
+    fn refuses_an_argument_that_opens_scope_variables() {
+        assert!(ExecuteOn::new("set", Some("%[k=v]rest")).is_err());
+        assert!(ExecuteOn::new("set", Some("%|[k=v]rest")).is_err());
+        assert!(ExecuteOn::new("set", Some("%")).is_err());
+    }
+
+    /// The name rides the same wire as the argument, and a NUL ends what the switch reads of
+    /// either.
+    #[test]
+    fn refuses_a_name_or_argument_the_wire_cuts() {
+        assert!(ExecuteOn::new("se\nt", None::<String>).is_err());
+        assert!(ExecuteOn::new("se\0t", None::<String>).is_err());
+        assert!(ExecuteOn::new("set", Some("k=a\0b")).is_err());
+    }
+
     #[test]
     fn lua_refuses_a_path_with_a_space() {
         assert!(ExecuteOn::lua("/run/my app/load.lua", ["/run/doc.xml"]).is_err());
