@@ -31,6 +31,17 @@ fn test_9199() -> Endpoint {
     Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("test"))
 }
 
+/// [`test_9199`] with application arguments delivered as the originate line left them.
+fn unexpanded_9199() -> Endpoint {
+    let mut vars = Variables::new(VariablesType::Default);
+    vars.insert("app_disable_expand_variables", "true");
+    Endpoint::Loopback(
+        LoopbackEndpoint::new("9199")
+            .with_context("test")
+            .with_variables(vars),
+    )
+}
+
 /// Originate over bgapi and reap what it created. The originate is the
 /// assertion: a dial string FreeSWITCH will not take comes back `-ERR`.
 async fn originate_and_reap(cmd: &Originate) {
@@ -279,6 +290,23 @@ async fn originate_positionals(separator: Option<char>) {
             "set",
             &[(EventHeader::ApplicationData, Some("quoted=it's,b"))],
             &[("origination_caller_id_number", Some("it's"))],
+        ),
+        (
+            "backslash escapes in an application argument and a caller id",
+            separated(
+                Originate::application(
+                    unexpanded_9199(),
+                    Application::new("set", Some(r"lit=a\nb\\c\sd")),
+                )
+                .cid_name(r"x\ny")
+                .cid_num(r"\t"),
+            ),
+            "set",
+            &[(EventHeader::ApplicationData, Some(r"lit=a\nb\\c\sd"))],
+            &[
+                ("origination_caller_id_name", Some(r"x\ny")),
+                ("origination_caller_id_number", Some(r"\t")),
+            ],
         ),
     ];
 
