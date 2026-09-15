@@ -160,7 +160,8 @@ kept legs as written, `display_for()` renders them canonically.
 `originate`'s arguments on a `^^X` separator. The dial string is one argument of
 that split: rendered, it is escaped once for the split; parsed, the split's
 cleanup runs first. `escape_argument()` applies that escape to text the caller
-holds. A caller that writes its own `originate ^^~<list>~&park` escapes a
+holds; at an API target with no separator it escapes for the blank split, every
+space as `\s`. A caller that writes its own `originate ^^~<list>~&park` escapes a
 switch-produced list with `escape_argument()`, reads it with
 `FlattenedDialString::parse_for()` at the same target, drops legs with
 `retain()`, and splices `display_raw()`, still escaped, between the separators.

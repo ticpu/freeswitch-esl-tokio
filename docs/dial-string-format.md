@@ -735,12 +735,18 @@ argument cleanup consumes one quote level:
 opening with a non-ASCII one splits on `split_at` whole.
 `DialStringTarget::with_argv_separator` names the split. `Variables`, `Endpoint`
 and `FlattenedDialString` rendered at such a target are escaped once at the edge
-of the argument, and parsed at it run the cleanup first and refuse text that
-splits into a second argument or hides a separator inside quotes.
-`escape_argument` escapes caller text the same way, and is `None` without a
-separator: the blank split has no escape that inverts it.
-`DialStringCarrier::Dialplan` takes no separator, because an application's
-argument is never split.
+of the argument. Parsed at any `DialStringCarrier::EslApi` target, with a
+separator or on blanks, they run that argument split and its cleanup first, and
+refuse text that splits into a second argument, leaves a quote open, or hides a
+separator inside quotes.
+
+`escape_argument` escapes caller text as one argument of either split. The blank
+split skips the character after a backslash and its cleanup reads `\s` as a space,
+so on blanks every space is written `\s`, with `\`, `'`, newline, CR and tab
+escaped as under a separator. Each character carries its own escape, so a leg
+sliced out of the escaped text by `retain` is still one argument.
+`escape_argument` is `None` at `DialStringCarrier::Dialplan`, which takes no
+separator either, because an application's argument is never split.
 
 `with_argv_separator` refuses separators that break the split or its escapes:
 
@@ -757,10 +763,11 @@ argument is never split.
 It refuses others as policy, though the switch splits on them:
 
 - `^`, `"`, `,`, `|`, `[`, `]`, `{`, `}`, `<`, `>`, `=`, `:`, which a reader
-  takes for the dial-string grammar or a block's `^^` separator;
+  takes for the dial-string grammar, a block's `^^` separator or quoting;
 - uppercase `N`, `R`, `T`, `S`, which under `^^N` still leave `\n` a newline
   but read like the escapes;
-- every other letter and digit, which endpoints and values carry.
+- every other letter and digit, which a reader cannot tell from the words it
+  separates.
 
 These two lines are the two carriers of [Parse depth](#parse-depth), and the
 typed API picks the right escaping for each without being told: `Originate`

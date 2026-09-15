@@ -149,13 +149,29 @@ let target = DialStringTarget::new(DialStringCarrier::EslApi)
     .unwrap(); // '~' is a usable separator
 let expanded = "[sip_h_X-Seat=desk one]user/1001@pbx.example.com,error/USER_NOT_REGISTERED";
 
-// escape_argument is None only on a target without a separator.
+// escape_argument is None only at the dialplan carrier.
 let escaped = target.escape_argument(expanded).unwrap();
 let mut list = FlattenedDialString::parse_for(&escaped, target).unwrap();
 list.retain(|leg| !matches!(leg.target(), LegTarget::Error(_)));
 
 let line = format!("originate ^^~{}~&park()", list.display_raw());
 assert_eq!(line, "originate ^^~[sip_h_X-Seat=desk one]user/1001@pbx.example.com~&park()");
+```
+
+On a plain line, a target with no separator escapes the list for the blank split instead, every space written `\s`:
+
+```rust
+use freeswitch_esl_tokio::commands::*;
+
+let target = DialStringTarget::new(DialStringCarrier::EslApi);
+let expanded = "[sip_h_X-Seat=desk one]user/1001@pbx.example.com,error/USER_NOT_REGISTERED";
+
+let escaped = target.escape_argument(expanded).unwrap(); // the API carrier escapes
+let mut list = FlattenedDialString::parse_for(&escaped, target).unwrap();
+list.retain(|leg| !matches!(leg.target(), LegTarget::Error(_)));
+
+let line = format!("originate {} &park()", list.display_raw());
+assert_eq!(line, r"originate [sip_h_X-Seat=desk\sone]user/1001@pbx.example.com &park()");
 ```
 
 The measured behaviour of the override and the separators `with_argv_separator` refuses are in [dial-string-format.md](../dial-string-format.md#x-argument-separator).
