@@ -28,7 +28,7 @@ cargo test --test connection_tests --test command_wire_tests \
     --test connection_failure_tests --test reexec_tests
 ```
 
-Live integration tests require FreeSWITCH ESL on `127.0.0.1:8022` (password `ClueCon`). They are `#[ignore]` by default:
+Live integration tests read `ESL_HOST` / `ESL_PORT` / `ESL_PASSWORD`, default `localhost:8022`; see [live-test-switch.md](docs/live-test-switch.md) for what the switch must provide. They are `#[ignore]` by default:
 
 ```sh
 cargo test --test 'live_*' -- --ignored
