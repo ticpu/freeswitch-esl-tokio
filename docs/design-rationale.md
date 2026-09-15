@@ -295,12 +295,15 @@ cleanup keeps a lone quote only while no partner follows it in the same field,
 so a block carrying one such value measures fine and a value carrying two loses
 both.
 
-Dial-string text the switch produced, such as a directory group's expansion, is
-read by porting the switch's own passes for the named target rather than by
-inverting this crate's render, which only undoes what it escaped itself. The
-tokenizer behind those passes is ported once and shared by every such reader.
-Each leg keeps its source text beside the typed view, so a caller can forward the
-list unchanged, and a failure takes the scope the switch gives it: the whole list
+Every parse reads text through a port of the switch's own passes for the named
+target, never by inverting this crate's render, which only undoes what it
+escaped itself. Each pass is modelled once, holding its escape, its inverse and
+its port together, and builders only compose passes. The port models the
+switch's buffer rather than its tokens, because a pass rewrites the text a later
+pass reads, and it is held to the switch's C on every tracked tree, since a live
+switch measures only the build it runs. Each leg of a switch-produced list keeps
+its source text beside the typed view, so a caller can forward the list
+unchanged, and a failure takes the scope the switch gives it: the whole list
 where the originate aborts, one leg where only that leg fails.
 
 ### Serde on command builders for config-driven deployments
