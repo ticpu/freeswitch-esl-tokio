@@ -970,6 +970,26 @@ mod tests {
         assert!(Endpoint::parse_for(r"{k=x\~y}loopback/9199/test", target).is_ok());
     }
 
+    #[test]
+    fn an_endpoint_cut_by_the_blank_split_is_refused() {
+        for input in [
+            "{v=a b}loopback/9199/test",
+            "loopback/9199/test error/USER_BUSY",
+            r"{v=x\\'y}loopback/9199/test",
+        ] {
+            assert!(
+                Endpoint::parse_for(input, DialStringCarrier::EslApi).is_err(),
+                "{input}"
+            );
+        }
+        assert!(
+            Endpoint::parse_for("{v='a b'}loopback/9199/test", DialStringCarrier::EslApi).is_ok()
+        );
+        assert!(
+            Endpoint::parse_for("{v=a b}loopback/9199/test", DialStringCarrier::Dialplan).is_ok()
+        );
+    }
+
     // --- From impls ---
 
     #[test]

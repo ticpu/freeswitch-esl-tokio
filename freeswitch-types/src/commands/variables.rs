@@ -2205,6 +2205,30 @@ mod tests {
         );
     }
 
+    #[test]
+    fn a_block_cut_by_the_blank_split_is_refused() {
+        for block in ["{k=a b}", r"{k=x\\'y}", "{k=a} {j=b}"] {
+            let err = Variables::parse_for(block, DialStringCarrier::EslApi).expect_err(block);
+            assert!(!err
+                .to_string()
+                .contains("k="));
+        }
+        for (block, want) in [
+            ("{k='a b'}", "a b"),
+            (r"{k=\\\\sa\\\\s}", " a "),
+            (" {k=v} ", "v"),
+        ] {
+            assert_eq!(
+                Variables::parse_for(block, DialStringCarrier::EslApi)
+                    .unwrap_or_else(|e| panic!("{block}: {e}"))
+                    .get("k"),
+                Some(want),
+                "{block}"
+            );
+        }
+        assert!(Variables::parse_for("{k=a b}", DialStringCarrier::Dialplan).is_ok());
+    }
+
     /// `switch_ivr_originate` takes the enterprise path on any `:_:` in the dial string, and
     /// that split honours no quote or escape.
     #[test]
