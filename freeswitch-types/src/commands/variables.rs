@@ -309,8 +309,8 @@ fn usable_argv_separator(sep: char) -> bool {
         )
 }
 
-/// Escapes for one `cleanup_separated_string` on `sep`: `\`, `'` and `sep` take a backslash,
-/// newline, CR and tab their letter, and a space at either edge reads `\s`.
+/// Escapes for one split on `sep` and its cleanup: `\`, `'` and `sep` take a backslash, newline,
+/// CR and tab their letter, and a space reads `\s` at either edge, or everywhere when `sep` is one.
 struct ArgumentEscape<W> {
     out: W,
     sep: char,
@@ -321,7 +321,7 @@ struct ArgumentEscape<W> {
 impl<W: fmt::Write> fmt::Write for ArgumentEscape<W> {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         for c in s.chars() {
-            if c == ' ' && self.started {
+            if c == ' ' && self.started && self.sep != ' ' {
                 self.spaces += 1;
                 continue;
             }
@@ -427,10 +427,10 @@ impl DialStringTarget {
         }
     }
 
-    /// `text` escaped as one argument of the [`argv_separator`](Self::argv_separator) split, or
-    /// `None` without one: the blank split has no escape that inverts it.
+    /// `text` escaped as one argument of `originate`'s split, on blanks or on the
+    /// [`argv_separator`](Self::argv_separator), or `None` at the dialplan carrier, which splits none.
     pub fn escape_argument<'a>(&self, text: &'a str) -> Option<Cow<'a, str>> {
-        let sep = self.argv_separator()?;
+        let sep = self.split_delimiter()?;
         let plain = !text.starts_with(' ')
             && !text.ends_with(' ')
             && !text.contains(['\\', '\'', '\n', '\r', '\t', sep]);
