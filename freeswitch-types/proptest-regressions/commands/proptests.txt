@@ -25,3 +25,4 @@ cc 4e46e62bbec9d77bc1ab910c4c063bdb88a8ac768a4495d79dc55bb946c58353 # shrinks to
 cc 7eeba3976acefc72134ea9b4ea545fe093662e562fbc913d21decf7894aa4ace # shrinks to Some("originate loopback/9199/test park: inline")
 cc 079644f8d5d30368471303a208a8a9fe35022669d964cef413a73482d4e38f30 # shrinks to Some("originate ^^é '")
 cc 29f48b45cbaa60418ed23c5ff3165d5ab7b4ab6afe5fc1842e5aa093ae39df24 # shrinks to ('\0', [("park", None)], false)
+cc 02edc0d9ba9f6c329609bb9fd7a5e661766ac6464cb945b7a2b31ed0c03645af # shrinks to (SofiaContact(SofiaContact { user: "", domain: "a", profile: None, variables: None }), None)

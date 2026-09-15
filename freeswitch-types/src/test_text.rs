@@ -43,6 +43,12 @@ pub(crate) fn text() -> impl Strategy<Value = String> {
     ]
 }
 
+/// `switch_separate_string` takes the first byte after `^^` whatever it is; the port takes no
+/// head naming a non-ASCII separator, which no char split mirrors.
+pub(crate) fn opens_with_a_non_ascii_head(input: &str) -> bool {
+    matches!(input.as_bytes(), [b'^', b'^', picked, _, ..] if !picked.is_ascii())
+}
+
 /// Run `property` over `strategy` against the C of every built tree, seeds kept beside `source`,
 /// writing one line per tree not built; the line bypasses the harness's output capture.
 pub(crate) fn against_the_c<S: Strategy>(

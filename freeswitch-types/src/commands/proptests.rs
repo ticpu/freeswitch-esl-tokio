@@ -19,7 +19,7 @@ use super::{
     Originate, SofiaContact, SofiaEndpoint, SofiaGateway, UserEndpoint, Variables, VariablesType,
 };
 use crate::channel::HangupCause;
-use crate::test_text::{against_the_c, config, text};
+use crate::test_text::{against_the_c, config, opens_with_a_non_ascii_head, text};
 use crate::tokenizer::{separate, trace, untrace};
 use crate::variables::VariableName;
 
@@ -922,48 +922,59 @@ proptest! {
     }
 }
 
-/// The pairs and endpoint text `originate_function`, `switch_event_create_brackets` and
-/// `switch_ivr_originate`'s leg splits read of a line opening with at most one `{}` or `<>`
-/// block, every split done by the switch's own C.
+/// The pairs and endpoint text the switch's C reads of `dial` at `target`: `originate_function`
+/// on the API line or the dialplan carrier's expansion, then `switch_ivr_originate`'s passes.
 fn c_reads_the_leg(
     c: Oracle,
-    line: &str,
-    block: Option<(u8, u8)>,
+    dial: &str,
+    target: DialStringTarget,
 ) -> Result<(Vec<(String, String)>, String), String> {
     let utf8 = |bytes: &[u8]| String::from_utf8(bytes.to_vec()).map_err(|e| e.to_string());
-    let argv = c.separate_string(strip_whitespace(line).as_bytes(), b' ', 10);
-    let dial = argv
-        .first()
-        .ok_or("no argument")?;
-    let mut installed = Vec::new();
-    let data = match block {
-        Some((open, close)) => {
-            let end = c
-                .find_end_paren(dial, open, close)
-                .ok_or("the block never closes")?;
-            let (separator, content) = match &dial[1..end] {
-                [b'^', b'^', picked, rest @ ..] => (*picked, rest),
-                content => (b',', content),
-            };
-            for pair in c.separate_string(content, separator, 1024) {
-                if let [key, value] = &c.separate_string(&pair, b'=', 2)[..] {
-                    installed.push((utf8(key)?, utf8(value)?));
-                }
-            }
-            &dial[end + 1..]
+    let aleg = match target.carrier() {
+        DialStringCarrier::Dialplan => {
+            c.expand(dial.as_bytes())
+                .text
         }
-        None => &dial[..],
+        DialStringCarrier::EslApi => c
+            .api_originate(originate_line(dial, target).as_bytes())
+            .originated
+            .and_then(|originated| originated.aleg)
+            .ok_or("originate_function dials nothing")?,
     };
-    let [group] = &c.separate_string(data, b'|', 128)[..] else {
-        return Err("not one group".to_owned());
+    let read = c.dial(&aleg);
+    let [thread] = &read.threads[..] else {
+        return Err(format!(
+            "{:?} in {} threads",
+            read.failure,
+            read.threads
+                .len()
+        ));
     };
-    let [leg] = &c.separate_string(group, b',', 128)[..] else {
-        return Err("not one leg".to_owned());
+    if let Some(failure) = &thread.failure {
+        return Err(utf8(failure)?);
+    }
+    let [group] = &thread.groups[..] else {
+        return Err(format!(
+            "{} groups",
+            thread
+                .groups
+                .len()
+        ));
     };
-    let endpoint = leg
+    let [leg] = &group[..] else {
+        return Err(format!("{} legs", group.len()));
+    };
+    let installed = read
+        .enterprise
         .iter()
-        .position(|&b| b != b' ')
-        .map_or(&leg[leg.len()..], |at| &leg[at..]);
+        .chain(&thread.pairs)
+        .chain(&leg.pairs)
+        .map(|(key, value)| Ok((utf8(key)?, utf8(value)?)))
+        .collect::<Result<Vec<_>, String>>()?;
+    let endpoint = leg
+        .endpoint
+        .as_deref()
+        .ok_or("the leg has no endpoint")?;
     Ok((installed, utf8(endpoint)?))
 }
 
@@ -975,18 +986,13 @@ fn originate_line(dial: &str, target: DialStringTarget) -> String {
     }
 }
 
-/// `{}` and `<>` blocks at the API targets read by the switch's C rather than the port; the dialplan
-/// carrier's expansion and a `[]` block's leg splits are not extracted.
+/// A block of every scope at every target, read by the switch's C rather than the port.
 #[test]
 fn variables_arrive_through_the_c_passes() {
-    let scope = prop_oneof![
-        Just(VariablesType::Default),
-        Just(VariablesType::Enterprise)
-    ];
     against_the_c(
         file!(),
         "variables_arrive_through_the_c_passes",
-        (scope, block_separator(), entries(1..4)),
+        (scope(), block_separator(), entries(1..4)),
         |c, (scope, sep, values)| {
             let Some(vars) = build_vars(scope, "v", &values, sep) else {
                 return Ok(());
@@ -994,21 +1000,14 @@ fn variables_arrive_through_the_c_passes() {
             if left_to_the_switch(&vars) || config_refuses_vars(&vars) {
                 return Ok(());
             }
-            let (open, close) = match scope {
-                VariablesType::Enterprise => (b'<', b'>'),
-                _ => (b'{', b'}'),
-            };
             let want = Ok((pairs(&vars), "null/drift".to_owned()));
-            for target in api_targets() {
-                let block = vars
-                    .display_for(target)
-                    .to_string();
-                let line = originate_line(&format!("{block}null/drift"), target);
+            for target in targets() {
+                let dial = format!("{}null/drift", vars.display_for(target));
                 prop_assert_eq!(
-                    &c_reads_the_leg(c, &line, Some((open, close))),
+                    &c_reads_the_leg(c, &dial, target),
                     &want,
                     "{:?} at {:?}",
-                    line,
+                    dial,
                     target
                 );
             }
@@ -1156,14 +1155,6 @@ fn api_lines() -> impl Strategy<Value = Option<String>> {
     ]
 }
 
-/// The port takes no `^^` head naming a non-ASCII separator, which the switch splits on as a byte.
-fn opens_a_non_ascii_head(line: &str) -> bool {
-    let arguments = line
-        .strip_prefix("originate ")
-        .unwrap_or(line);
-    matches!(strip_whitespace(arguments).as_bytes(), [b'^', b'^', picked, ..] if !picked.is_ascii())
-}
-
 #[test]
 fn originate_function_reads_lines_as_the_port_does() {
     against_the_c(
@@ -1171,7 +1162,12 @@ fn originate_function_reads_lines_as_the_port_does() {
         "originate_function_reads_lines_as_the_port_does",
         api_lines(),
         |c, line| {
-            let Some(line) = line.filter(|line| !opens_a_non_ascii_head(line)) else {
+            let Some(line) = line.filter(|line| {
+                !opens_with_a_non_ascii_head(strip_whitespace(
+                    line.strip_prefix("originate ")
+                        .unwrap_or(line),
+                ))
+            }) else {
                 return Ok(());
             };
             prop_assert_eq!(
@@ -1329,28 +1325,21 @@ fn inline_actions_arrive_through_the_c_hunt() {
     );
 }
 
-/// Endpoints under `{}`, `<>` or no block at the API targets, read by the switch's C; the
-/// comma scan ahead of the leg split only rewrites an unescaped comma, and endpoint text has none.
+/// Endpoints under a block of any scope or none at every target, read by the switch's C.
 #[test]
 fn endpoints_arrive_through_the_c_passes() {
-    let scope = prop_oneof![
-        Just(VariablesType::Default),
-        Just(VariablesType::Enterprise)
-    ];
     against_the_c(
         file!(),
         "endpoints_arrive_through_the_c_passes",
         (
             bare_endpoint(),
-            option::of((scope, block_separator(), entries(1..3))),
+            option::of((scope(), block_separator(), entries(1..3))),
         ),
         |c, (bare, vars)| {
             if fields_name_a_variable(&bare) {
                 return Ok(());
             }
             let mut endpoint = bare.clone();
-            let mut want = Vec::new();
-            let mut block = None;
             if let Some((scope, sep, values)) = vars {
                 let Some(vars) = build_vars(scope, "v", &values, sep) else {
                     return Ok(());
@@ -1358,19 +1347,7 @@ fn endpoints_arrive_through_the_c_passes() {
                 if left_to_the_switch(&vars) || config_refuses_vars(&vars) {
                     return Ok(());
                 }
-                want = pairs(&vars);
-                block = Some(match scope {
-                    VariablesType::Enterprise => (b'<', b'>'),
-                    _ => (b'{', b'}'),
-                });
                 endpoint.set_variables(Some(vars));
-            }
-            if endpoint
-                .variables()
-                .is_none()
-            {
-                want.clear();
-                block = None;
             }
             let refused = serde_json::to_value(&endpoint)
                 .and_then(serde_json::from_value::<Endpoint>)
@@ -1378,19 +1355,25 @@ fn endpoints_arrive_through_the_c_passes() {
             if refused {
                 return Ok(());
             }
-            let want = Ok((want, bare.module_text()));
-            for target in api_targets() {
-                let line = originate_line(
-                    &endpoint
-                        .display_for(target)
-                        .to_string(),
-                    target,
-                );
+            let installed = endpoint
+                .variables()
+                .map(pairs)
+                .unwrap_or_default();
+            let want = Ok((installed, bare.module_text()));
+            let expression = matches!(bare, Endpoint::SofiaContact(_) | Endpoint::GroupCall(_));
+            for target in targets() {
+                // The expansion substitutes the expression, which the stub answers with nothing.
+                if expression && target.carrier() == DialStringCarrier::Dialplan {
+                    continue;
+                }
+                let dial = endpoint
+                    .display_for(target)
+                    .to_string();
                 prop_assert_eq!(
-                    &c_reads_the_leg(c, &line, block),
+                    &c_reads_the_leg(c, &dial, target),
                     &want,
                     "{:?} at {:?}",
-                    line,
+                    dial,
                     target
                 );
             }

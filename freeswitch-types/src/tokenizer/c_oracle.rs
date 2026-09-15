@@ -7,7 +7,7 @@ use super::{
     cleanup, delimiter_override, find_end_paren, separate, separate_on, separate_string_string,
     trace, untrace,
 };
-use crate::test_text::{against_the_c, text};
+use crate::test_text::{against_the_c, opens_with_a_non_ascii_head, text};
 
 /// Text that may open with a `^^X` head, ASCII or not.
 fn line() -> impl Strategy<Value = String> {
@@ -16,12 +16,6 @@ fn line() -> impl Strategy<Value = String> {
         3 => text(),
         1 => (head, text()).prop_map(|(head, rest)| format!("{head}{rest}")),
     ]
-}
-
-/// `switch_separate_string` takes the first byte after `^^` whatever it is; the port takes no
-/// head naming a non-ASCII separator, which no char split mirrors.
-fn opens_with_a_non_ascii_head(input: &str) -> bool {
-    matches!(input.as_bytes(), [b'^', b'^', picked, _, ..] if !picked.is_ascii())
 }
 
 fn owned(tokens: impl IntoIterator<Item = String>) -> Vec<Vec<u8>> {
