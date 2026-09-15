@@ -1597,7 +1597,7 @@ mod tests {
         assert_eq!(orig.inline_delimiter(), None);
         assert!(orig
             .to_string()
-            .contains(r"playback:tone_stream://%(500\,0\,800),park"));
+            .contains(r"playback:tone_stream://%(500\\,0\\,800),park"));
 
         // Serializing back must not introduce a separator field the source
         // never had.
@@ -1697,11 +1697,9 @@ mod tests {
         let ep = Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("test"));
         let cmd = Originate::application(ep, Application::simple("park"))
             .timeout(Duration::from_secs(30));
-        // timeout is arg 7; dialplan/context/cid must be filled so FS
-        // doesn't interpret "30" as the dialplan name
         assert_eq!(
             cmd.to_string(),
-            "originate loopback/9199/test &park() XML default undef undef 30"
+            "originate loopback/9199/test &park() undef undef undef undef 30"
         );
     }
 
@@ -1711,7 +1709,7 @@ mod tests {
         let cmd = Originate::application(ep, Application::simple("park")).cid_num("5551234");
         assert_eq!(
             cmd.to_string(),
-            "originate loopback/9199/test &park() XML default undef 5551234"
+            "originate loopback/9199/test &park() undef undef undef 5551234"
         );
     }
 
@@ -1721,26 +1719,20 @@ mod tests {
         let cmd = Originate::extension(ep, "1000").context("myctx");
         assert_eq!(
             cmd.to_string(),
-            "originate loopback/9199/test 1000 XML myctx"
+            "originate loopback/9199/test 1000 undef myctx"
         );
     }
 
-    /// The gap-filler context is a context a caller could also have written,
-    /// so it reads back as one: the wire round-trips, the struct does not.
+    /// A slot forced present by a later one is `undef`, which reads back as absent.
     #[test]
-    fn originate_context_gap_filler_round_trip_asymmetry() {
+    fn originate_gap_filler_round_trips() {
         let ep = Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("test"));
         let cmd = Originate::application(ep, Application::simple("park")).cid_name("Alice");
         let wire = cmd.to_string();
-        assert!(wire.contains("default"), "gap-filler should emit 'default'");
-
         let parsed: Originate = wire
             .parse()
             .unwrap();
-        // Struct-level asymmetry: None became Some("default")
-        assert_eq!(parsed.context_str(), Some("default"));
-
-        // Wire format is identical (the important invariant)
+        assert_eq!(parsed, cmd);
         assert_eq!(parsed.to_string(), wire);
     }
 
@@ -1893,7 +1885,7 @@ mod tests {
         let wire = cmd.to_string();
         assert_eq!(
             wire,
-            "originate loopback/9199/test &park() XML default 'Outbound Call' '555 1234'"
+            "originate loopback/9199/test &park() undef undef 'Outbound Call' '555 1234'"
         );
 
         let parsed: Originate = wire
@@ -2009,7 +2001,7 @@ mod tests {
 
         assert_eq!(
             cmd.to_string(),
-            "originate loopback/9199 playback:tone_stream://%(500\\,0\\,800),park inline"
+            r"originate loopback/9199 'playback:tone_stream://%(500\\,0\\,800),park' inline"
         );
     }
 
@@ -2031,7 +2023,7 @@ mod tests {
 
         assert!(cmd
             .to_string()
-            .contains("G722\\,PCMU"));
+            .contains(r"G722\\,PCMU"));
     }
 
     #[test]
@@ -2091,7 +2083,7 @@ mod tests {
 
         assert_eq!(
             cmd.to_string(),
-            "originate loopback/9199 m:|:playback:a\\|b inline"
+            r"originate loopback/9199 'm:|:playback:a\\|b' inline"
         );
     }
 
@@ -2107,7 +2099,7 @@ mod tests {
 
         assert_eq!(
             cmd.to_string(),
-            "originate loopback/9199 playback:\\,|;~^! inline"
+            r"originate loopback/9199 'playback:\\,|;~^!' inline"
         );
     }
 
@@ -2369,10 +2361,7 @@ mod tests {
     /// strictly as the dialplan.
     #[test]
     fn argv_separator_parse_refuses_what_the_switch_refuses() {
-        for line in [
-            "originate ^^~loopback/9199/test~&park()~XML~default~a~b~30~extra",
-            "originate ^^~loopback/9199/test~1000~enum~ctx",
-        ] {
+        for line in ["originate ^^~loopback/9199/test~&park()~XML~default~a~b~30~extra"] {
             assert!(line
                 .parse::<Originate>()
                 .is_err());
@@ -2469,16 +2458,18 @@ mod tests {
     /// third argument is strictly the dialplan, `undef` is absent, and an eighth is refused.
     #[test]
     fn blank_positionals_read_as_the_separator_split_does() {
-        for line in [
-            "originate loopback/9199/test 1000 ctx",
-            "originate loopback/9199/test &park() XML default a b 30 extra",
-        ] {
-            assert!(
-                line.parse::<Originate>()
-                    .is_err(),
-                "{line}"
-            );
-        }
+        assert!(
+            "originate loopback/9199/test &park() XML default a b 30 extra"
+                .parse::<Originate>()
+                .is_err()
+        );
+
+        let parsed: Originate = "originate loopback/9199/test 1000 ctx"
+            .parse()
+            .unwrap();
+        assert_eq!(parsed.dialplan_type(), None);
+        assert_eq!(parsed.dialplan_name(), Some("ctx"));
+        assert_eq!(parsed.context_str(), None);
 
         let parsed: Originate = "originate loopback/9199/test &park() undef UNDEF Alice"
             .parse()
@@ -2503,13 +2494,13 @@ mod tests {
                 Originate::extension(test_endpoint(), "1000")
                     .context("")
                     .cid_name("Alice"),
-                "originate loopback/9199/test 1000 XML '' Alice",
+                "originate loopback/9199/test 1000 undef '' Alice",
             ),
             (
                 Originate::extension(test_endpoint(), "1000")
                     .context("ctx with space")
                     .cid_name("Alice"),
-                "originate loopback/9199/test 1000 XML 'ctx with space' Alice",
+                "originate loopback/9199/test 1000 undef 'ctx with space' Alice",
             ),
             (
                 Originate::extension(test_endpoint(), "1000")
@@ -2558,6 +2549,15 @@ mod tests {
                     .unwrap(),
                 r"originate loopback/9199 'set:a=it\'s\\,b' inline",
             ),
+            (
+                Originate::application(
+                    test_endpoint(),
+                    Application::new("set", Some(r"lit=a\nb\\c\sd")),
+                )
+                .cid_name(r"x\ny")
+                .cid_num(r"\t"),
+                r"originate loopback/9199/test '&set(lit=a\\nb\\\\c\\sd)' undef undef 'x\\ny' '\\t'",
+            ),
         ];
         for (cmd, wire) in cases {
             assert_eq!(cmd.to_string(), wire);
@@ -2571,6 +2571,70 @@ mod tests {
             .parse()
             .unwrap();
         assert_eq!(parsed.caller_id_name(), Some("it's"));
+    }
+
+    /// `originate_function` hands any word in the dialplan slot to the transfer, which looks
+    /// up a dialplan module by that name.
+    #[test]
+    fn any_dialplan_name_is_kept() {
+        for (line, name) in [
+            ("originate loopback/9199/test 1000 nosuchdp ctx", "nosuchdp"),
+            (
+                "originate ^^~loopback/9199/test~1000~nosuchdp~ctx",
+                "nosuchdp",
+            ),
+            ("originate loopback/9199/test 1000 '' ctx", ""),
+        ] {
+            let parsed: Originate = line
+                .parse()
+                .unwrap_or_else(|e| panic!("{line}: {e}"));
+            assert_eq!(parsed.dialplan_type(), None, "{line}");
+            assert_eq!(parsed.dialplan_name(), Some(name), "{line}");
+            assert_eq!(parsed.context_str(), Some("ctx"), "{line}");
+            assert_eq!(parsed.to_string(), line);
+        }
+
+        let typed: Originate = "originate loopback/9199/test 1000 xml ctx"
+            .parse()
+            .unwrap();
+        assert_eq!(typed.dialplan_type(), Some(&DialplanType::Xml));
+        assert_eq!(typed.dialplan_name(), Some("XML"));
+
+        let named = Originate::extension(test_endpoint(), "1000")
+            .dialplan_raw("nosuchdp")
+            .unwrap();
+        assert_eq!(
+            named.to_string(),
+            "originate loopback/9199/test 1000 nosuchdp"
+        );
+        assert_eq!(
+            Originate::extension(test_endpoint(), "1000").dialplan_raw("INLINE"),
+            Err(OriginateError::ExtensionWithInlineDialplan)
+        );
+        let json = serde_json::to_string(&named).unwrap();
+        assert!(json.contains(r#""dialplan":"nosuchdp""#), "{json}");
+        assert_eq!(serde_json::from_str::<Originate>(&json).unwrap(), named);
+    }
+
+    #[test]
+    fn serde_dialplan_keeps_existing_configs_and_refuses_undef() {
+        let config = |dialplan: &str| {
+            format!(
+                r#"{{"endpoint": {{"loopback": {{"extension": "9199"}}}},
+                "extension": "1000", "dialplan": "{dialplan}"}}"#
+            )
+        };
+        for (dialplan, typed) in [("xml", DialplanType::Xml), ("XML", DialplanType::Xml)] {
+            let cmd: Originate = serde_json::from_str(&config(dialplan)).unwrap();
+            assert_eq!(cmd.dialplan_type(), Some(&typed));
+            assert!(serde_json::to_string(&cmd)
+                .unwrap()
+                .contains(r#""dialplan":"xml""#));
+        }
+        let msg = serde_json::from_str::<Originate>(&config("Undef"))
+            .expect_err("undef dialplan")
+            .to_string();
+        assert!(msg.contains("dialplan"), "{msg}");
     }
 
     /// `switch_separate_string` takes `^^ ` as picking the blank split itself.

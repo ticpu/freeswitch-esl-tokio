@@ -338,8 +338,52 @@ mod tests {
         assert_eq!(originate_quote("it's"), r"'it\'s'");
         assert_eq!(originate_quote(r"a\b it's"), r"'a\\b it\'s'");
         assert_eq!(originate_quote("a b"), "'a b'");
-        assert_eq!(originate_quote(r"a\b c"), r"'a\b c'");
-        assert_eq!(originate_quote(r"a\,b"), r"a\,b");
+        assert_eq!(originate_quote(r"a\b c"), r"'a\\b c'");
+        assert_eq!(originate_quote(r"a\,b"), r"'a\\,b'");
+        assert_eq!(originate_quote(r"x\ny"), r"'x\\ny'");
+        assert_eq!(originate_quote(""), "''");
+        assert_eq!(originate_quote("&park()"), "&park()");
+    }
+
+    /// Every string over the characters the blank split and its cleanup treat specially
+    /// survives quoting, the split and unquoting unchanged.
+    #[test]
+    fn unquote_inverts_quote_through_the_blank_split() {
+        const ALPHABET: [char; 7] = ['a', ' ', '\'', '\\', 'n', 's', '"'];
+        let mut strings = vec![String::new()];
+        for _ in 0..5 {
+            let longer: Vec<String> = strings
+                .iter()
+                .filter(|s| {
+                    s.len()
+                        == strings
+                            .last()
+                            .map_or(0, String::len)
+                })
+                .flat_map(|s| {
+                    ALPHABET
+                        .iter()
+                        .map(move |c| {
+                            let mut next = s.clone();
+                            next.push(*c);
+                            next
+                        })
+                })
+                .collect();
+            strings.extend(longer);
+        }
+        for value in strings {
+            let quoted = originate_quote(&value);
+            assert_eq!(
+                originate_unquote(&quoted),
+                value,
+                "{value:?} via {quoted:?}"
+            );
+            let line = format!("x {quoted} y");
+            let tokens = originate_split(&line, ' ').unwrap_or_else(|e| panic!("{line:?}: {e}"));
+            assert_eq!(tokens.len(), 3, "{line:?} split into {tokens:?}");
+            assert_eq!(originate_unquote(&tokens[1]), value, "{line:?}");
+        }
     }
 
     #[test]
