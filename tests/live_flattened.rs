@@ -348,36 +348,90 @@ fn received_vars(event: &EslEvent) -> LegVars {
         .collect()
 }
 
-/// CHANNEL_CREATE of each outbound leg carrying `marker`: a loopback pair's `-a`
-/// half and a sofia leg's outbound side, never the inbound legs they cause.
-async fn outbound_creates(
-    events: &mut EslEventStream,
-    marker: &str,
-    want: usize,
-    deadline: Instant,
-) -> Vec<EslEvent> {
-    let mut created = Vec::new();
-    let mut deadline = deadline;
-    while Instant::now() < deadline {
-        match tokio::time::timeout_at(deadline, events.recv()).await {
-            Ok(Some(Ok(evt))) => {
-                if evt.event_type() == Some(EslEventType::ChannelCreate)
-                    && evt.variable_str("fp_marker") == Some(marker)
-                    && evt.call_direction() == Ok(Some(CallDirection::Outbound))
-                {
-                    created.push(evt);
-                    if created.len() == want {
-                        // A short settle catches a leg the typed view did not expect.
-                        deadline = Instant::now() + Duration::from_millis(500);
+/// CHANNEL_CREATE and CHANNEL_HANGUP_COMPLETE of each outbound leg carrying a marker: a loopback
+/// pair's `-a` half and a sofia leg's outbound side, never the inbound legs they cause.
+#[derive(Default)]
+struct MarkedLegs {
+    created: Vec<EslEvent>,
+    completed: Vec<EslEvent>,
+}
+
+impl MarkedLegs {
+    async fn collect(
+        &mut self,
+        events: &mut EslEventStream,
+        marker: &str,
+        done: impl Fn(&Self) -> bool,
+        deadline: Instant,
+    ) {
+        while !done(self) && Instant::now() < deadline {
+            match tokio::time::timeout_at(deadline, events.recv()).await {
+                Ok(Some(Ok(evt))) => {
+                    if evt.variable_str("fp_marker") != Some(marker)
+                        || evt.call_direction() != Ok(Some(CallDirection::Outbound))
+                    {
+                        continue;
+                    }
+                    match evt.event_type() {
+                        Some(EslEventType::ChannelCreate) => self
+                            .created
+                            .push(evt),
+                        Some(EslEventType::ChannelHangupComplete) => self
+                            .completed
+                            .push(evt),
+                        _ => {}
                     }
                 }
+                Ok(Some(Err(e))) => panic!("event error collecting {marker}: {e}"),
+                Ok(None) => panic!("event stream closed collecting {marker}"),
+                Err(_) => break,
             }
-            Ok(Some(Err(e))) => panic!("event error collecting {marker}: {e}"),
-            Ok(None) => panic!("event stream closed collecting {marker}"),
-            Err(_) => break,
         }
     }
-    created
+
+    /// Until `want` legs are seen, then a short settle that catches a leg the typed view did not
+    /// expect. A leg losing before its thread runs completes without being announced.
+    async fn collect_dialled(&mut self, events: &mut EslEventStream, marker: &str, want: usize) {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        self.collect(
+            events,
+            marker,
+            |legs| {
+                legs.uuids()
+                    .len()
+                    >= want
+            },
+            deadline,
+        )
+        .await;
+        let settle = Instant::now() + Duration::from_millis(500);
+        self.collect(events, marker, |_| false, settle)
+            .await;
+    }
+
+    /// Until every leg seen has completed.
+    async fn collect_completed(&mut self, events: &mut EslEventStream, marker: &str) {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        self.collect(
+            events,
+            marker,
+            |legs| {
+                legs.uuids()
+                    .len()
+                    == uuids_of(&legs.completed).len()
+            },
+            deadline,
+        )
+        .await;
+    }
+
+    fn uuids(&self) -> Vec<String> {
+        let mut uuids = uuids_of(&self.created);
+        uuids.extend(uuids_of(&self.completed));
+        uuids.sort();
+        uuids.dedup();
+        uuids
+    }
 }
 
 async fn hupall(client: &EslClient, variable: &str, value: &str) {
@@ -454,12 +508,14 @@ async fn reap_marked(client: &EslClient, marker: &str, created: &[EslEvent]) {
     hupall(client, "fp_marker", marker).await;
 }
 
-fn assert_legs_match(label: &str, list: &FlattenedDialString, created: &[EslEvent]) {
+/// Compared on completion, which every leg reaches whether or not its creation was announced.
+fn assert_legs_match(label: &str, list: &FlattenedDialString, legs: &MarkedLegs) {
     let mut expected: Vec<LegVars> = dialed_legs(list)
         .into_iter()
         .map(expected_vars)
         .collect();
-    let mut received: Vec<LegVars> = created
+    let mut received: Vec<LegVars> = legs
+        .completed
         .iter()
         .map(received_vars)
         .collect();
@@ -477,9 +533,15 @@ fn assert_legs_match(label: &str, list: &FlattenedDialString, created: &[EslEven
 async fn live_typed_view_equals_what_each_leg_received_over_the_api() {
     let (client, mut events, _permit) = connect().await;
     client
-        .subscribe_events(EventFormat::Plain, &[EslEventType::ChannelCreate])
+        .subscribe_events(
+            EventFormat::Plain,
+            &[
+                EslEventType::ChannelCreate,
+                EslEventType::ChannelHangupComplete,
+            ],
+        )
         .await
-        .expect("subscribe CHANNEL_CREATE");
+        .expect("subscribe CHANNEL_CREATE and CHANNEL_HANGUP_COMPLETE");
 
     for (group, flag) in TYPED_CAPTURES {
         let label = format!("{group}.{flag} over the API");
@@ -493,20 +555,18 @@ async fn live_typed_view_equals_what_each_leg_received_over_the_api() {
             .api(&format!("originate {dial_string} &park()"))
             .await
             .unwrap_or_else(|e| panic!("{label}: originate transport error: {e}"));
-        let created = outbound_creates(
-            &mut events,
-            &m,
-            want,
-            Instant::now() + Duration::from_secs(10),
-        )
-        .await;
-        reap_marked(&client, &m, &created).await;
-        wait_gone(&client, &label, &uuids_of(&created)).await;
+        let mut legs = MarkedLegs::default();
+        legs.collect_dialled(&mut events, &m, want)
+            .await;
+        reap_marked(&client, &m, &legs.created).await;
+        legs.collect_completed(&mut events, &m)
+            .await;
+        wait_gone(&client, &label, &legs.uuids()).await;
 
         reply
             .api_result()
             .unwrap_or_else(|e| panic!("{label}: originate {dial_string} rejected: {e}"));
-        assert_legs_match(&label, &list, &created);
+        assert_legs_match(&label, &list, &legs);
     }
 }
 
@@ -515,9 +575,15 @@ async fn live_typed_view_equals_what_each_leg_received_over_the_api() {
 async fn live_typed_view_equals_what_each_leg_received_over_the_dialplan() {
     let (client, mut events, _permit) = connect().await;
     client
-        .subscribe_events(EventFormat::Plain, &[EslEventType::ChannelCreate])
+        .subscribe_events(
+            EventFormat::Plain,
+            &[
+                EslEventType::ChannelCreate,
+                EslEventType::ChannelHangupComplete,
+            ],
+        )
         .await
-        .expect("subscribe CHANNEL_CREATE");
+        .expect("subscribe CHANNEL_CREATE and CHANNEL_HANGUP_COMPLETE");
 
     for (group, flag) in TYPED_CAPTURES {
         let label = format!("{group}.{flag} over the dialplan");
@@ -546,30 +612,25 @@ async fn live_typed_view_equals_what_each_leg_received_over_the_dialplan() {
             )
             .await
             .and_then(|resp| resp.into_result());
-        let created = match bridge {
-            Ok(_) => {
-                outbound_creates(
-                    &mut events,
-                    &m,
-                    want,
-                    Instant::now() + Duration::from_secs(10),
-                )
-                .await
-            }
-            Err(_) => Vec::new(),
-        };
-        reap_marked(&client, &m, &created).await;
+        let mut legs = MarkedLegs::default();
+        if bridge.is_ok() {
+            legs.collect_dialled(&mut events, &m, want)
+                .await;
+        }
+        reap_marked(&client, &m, &legs.created).await;
         reaper
             .reap()
             .await;
-        let mut channels = uuids_of(&created);
+        legs.collect_completed(&mut events, &m)
+            .await;
+        let mut channels = legs.uuids();
         channels.push(anchor);
         wait_gone(&client, &label, &channels).await;
 
         if let Err(e) = bridge {
             panic!("{label}: execute bridge {dial_string} rejected: {e}");
         }
-        assert_legs_match(&label, &list, &created);
+        assert_legs_match(&label, &list, &legs);
     }
 }
 
@@ -1290,20 +1351,18 @@ async fn dial_at_argv(
         .api(&line)
         .await
         .unwrap_or_else(|e| panic!("{label}: originate transport error: {e}"));
-    let created = outbound_creates(
-        events,
-        marker,
-        dialed_legs(list).len(),
-        Instant::now() + Duration::from_secs(10),
-    )
-    .await;
-    reap_marked(client, marker, &created).await;
-    wait_gone(client, label, &uuids_of(&created)).await;
+    let mut legs = MarkedLegs::default();
+    legs.collect_dialled(events, marker, dialed_legs(list).len())
+        .await;
+    reap_marked(client, marker, &legs.created).await;
+    legs.collect_completed(events, marker)
+        .await;
+    wait_gone(client, label, &legs.uuids()).await;
 
     reply
         .api_result()
         .unwrap_or_else(|e| panic!("{label}: {line} rejected: {e}"));
-    assert_legs_match(label, list, &created);
+    assert_legs_match(label, list, &legs);
 }
 
 #[tokio::test]
@@ -1311,9 +1370,15 @@ async fn dial_at_argv(
 async fn live_typed_view_equals_what_each_leg_received_at_an_argv_separator() {
     let (client, mut events, _permit) = connect().await;
     client
-        .subscribe_events(EventFormat::Plain, &[EslEventType::ChannelCreate])
+        .subscribe_events(
+            EventFormat::Plain,
+            &[
+                EslEventType::ChannelCreate,
+                EslEventType::ChannelHangupComplete,
+            ],
+        )
         .await
-        .expect("subscribe CHANNEL_CREATE");
+        .expect("subscribe CHANNEL_CREATE and CHANNEL_HANGUP_COMPLETE");
 
     for (s, sep) in ARGV_SEPARATORS
         .into_iter()
@@ -1342,9 +1407,15 @@ async fn live_typed_view_equals_what_each_leg_received_at_an_argv_separator() {
 async fn live_blank_split_forwards_the_legs_retain_keeps() {
     let (client, mut events, _permit) = connect().await;
     client
-        .subscribe_events(EventFormat::Plain, &[EslEventType::ChannelCreate])
+        .subscribe_events(
+            EventFormat::Plain,
+            &[
+                EslEventType::ChannelCreate,
+                EslEventType::ChannelHangupComplete,
+            ],
+        )
         .await
-        .expect("subscribe CHANNEL_CREATE");
+        .expect("subscribe CHANNEL_CREATE and CHANNEL_HANGUP_COMPLETE");
 
     let target = target_under_test(API);
     for (group, drops) in [
@@ -1381,9 +1452,15 @@ async fn live_blank_split_forwards_the_legs_retain_keeps() {
 async fn live_argv_separator_forwards_the_legs_retain_keeps() {
     let (client, mut events, _permit) = connect().await;
     client
-        .subscribe_events(EventFormat::Plain, &[EslEventType::ChannelCreate])
+        .subscribe_events(
+            EventFormat::Plain,
+            &[
+                EslEventType::ChannelCreate,
+                EslEventType::ChannelHangupComplete,
+            ],
+        )
         .await
-        .expect("subscribe CHANNEL_CREATE");
+        .expect("subscribe CHANNEL_CREATE and CHANNEL_HANGUP_COMPLETE");
 
     for (s, sep) in ARGV_SEPARATORS
         .into_iter()
@@ -1419,9 +1496,15 @@ async fn live_argv_separator_forwards_the_legs_retain_keeps() {
 async fn live_argv_separator_dial_string_edge_spaces() {
     let (client, mut events, _permit) = connect().await;
     client
-        .subscribe_events(EventFormat::Plain, &[EslEventType::ChannelCreate])
+        .subscribe_events(
+            EventFormat::Plain,
+            &[
+                EslEventType::ChannelCreate,
+                EslEventType::ChannelHangupComplete,
+            ],
+        )
         .await
-        .expect("subscribe CHANNEL_CREATE");
+        .expect("subscribe CHANNEL_CREATE and CHANNEL_HANGUP_COMPLETE");
 
     for (s, sep) in ARGV_SEPARATORS
         .into_iter()
@@ -1450,4 +1533,65 @@ async fn live_argv_separator_dial_string_edge_spaces() {
             dial_at_argv(&client, &mut events, &label, Some(sep), &list, &m).await;
         }
     }
+}
+
+/// The session thread announces CHANNEL_CREATE from `CS_INIT`, so a losing leg the originate hangs
+/// up before its thread runs that state is never announced, while CHANNEL_HANGUP_COMPLETE follows
+/// every leg. `leg_delay_start` holds a leg's thread until the other leg has won.
+#[tokio::test]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
+async fn live_a_leg_that_loses_before_its_thread_runs_announces_no_create() {
+    let (client, mut events, _permit) = connect().await;
+    client
+        .subscribe_events(
+            EventFormat::Plain,
+            &[
+                EslEventType::ChannelCreate,
+                EslEventType::ChannelHangupComplete,
+            ],
+        )
+        .await
+        .expect("subscribe CHANNEL_CREATE and CHANNEL_HANGUP_COMPLETE");
+
+    let m = marker("lose-before-init");
+    let dial = format!(
+        "<fp_marker={m},originate_timeout=4>[leg_delay_start=2]loopback/9199/test,loopback/9199/test"
+    );
+    let reply = client
+        .api(&format!("originate {dial} &park()"))
+        .await
+        .and_then(|resp| {
+            resp.api_result()
+                .map(str::to_owned)
+        });
+    hupall(&client, "fp_marker", &m).await;
+
+    let mut legs = MarkedLegs::default();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    legs.collect(
+        &mut events,
+        &m,
+        |legs| {
+            legs.completed
+                .len()
+                == 2
+        },
+        deadline,
+    )
+    .await;
+    wait_gone(&client, &m, &legs.uuids()).await;
+
+    reply.unwrap_or_else(|e| panic!("originate {dial}: {e}"));
+    assert_eq!(
+        legs.completed
+            .len(),
+        2,
+        "{dial}: legs that completed"
+    );
+    assert_eq!(
+        legs.created
+            .len(),
+        1,
+        "{dial}: legs announced"
+    );
 }
