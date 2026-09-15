@@ -40,6 +40,7 @@ pub mod prelude;
 #[cfg(feature = "sdp")]
 pub mod sdp;
 pub mod sofia;
+pub(crate) mod tokenizer;
 pub mod variables;
 pub mod version;
 #[doc(hidden)]

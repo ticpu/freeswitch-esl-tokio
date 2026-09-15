@@ -1,22 +1,14 @@
-//! Tokenizer and single-entry parser shared by [`CodecString`] and [`CodecStringEntry`].
+//! Entry split and single-entry parser shared by [`CodecString`] and [`CodecStringEntry`].
 //!
 //! Line numbers in this module index FreeSWITCH `v1.11.1`
 //! (`c2c59645f6911a76589e5008c4d73349ded44b65`).
 
-use std::iter::Peekable;
-use std::str::Chars;
-
 use crate::sdp::error::{CodecStringError, SdpWarning};
 use crate::sdp::num::atoi_prefix;
+use crate::tokenizer::separate_string_char_delim;
 
 use super::entry::CodecStringEntry;
 use super::CodecString;
-
-/// Whether a matching close quote lies ahead, mirroring the C `strchr(ptr + 1, '\'')`.
-fn has_closing_quote(rest: &Peekable<Chars<'_>>) -> bool {
-    rest.clone()
-        .any(|c| c == '\'')
-}
 
 /// Inner parser shared by [`FromStr`] (strict, `warnings = None`) and
 /// [`CodecString::parse_lenient`] (lenient, `warnings = Some`).
@@ -83,124 +75,9 @@ pub(super) fn escape_fmtp(s: &str) -> String {
     out
 }
 
-/// Split a codec string on `,` and apply `cleanup_separated_string` to each token.
-///
-/// Faithfully ports `separate_string_char_delim` + `cleanup_separated_string` from
-/// `switch_utils.c`. For the split step, `\` before `,` prevents splitting and `'`
-/// quote-toggling keeps the current token intact through a comma inside quotes.
-/// Then for each token, leading spaces are stripped, trailing spaces (outside quotes)
-/// are dropped, `'` is toggled (and stripped from output), and escape sequences are
-/// expanded: `\'`→`'`, `\"`→`"`, `\,`→`,`, `\\`→`\`, `\n`→LF, `\r`→CR,
-/// `\t`→TAB, `\s`→space; any other `\X` passes through as `\X`.
+/// Split a codec string into cleaned entry tokens, as `switch_separate_string(…, ',', …)` does.
 pub(super) fn split_codec_string(s: &str) -> Vec<String> {
-    // Split on ',' honouring escape and quote, mirroring separate_string_char_delim.
-    let mut raw_tokens: Vec<String> = Vec::new();
-    let mut current = String::new();
-    let mut inside_quotes = false;
-    let mut chars = s
-        .chars()
-        .peekable();
-    while let Some(ch) = chars.next() {
-        if ch == '\\' {
-            // Backslash and the char it escapes ride into the raw token verbatim;
-            // cleanup_token expands them. Skipping ahead only prevents a split.
-            if let Some(&next) = chars.peek() {
-                chars.next();
-                current.push('\\');
-                current.push(next);
-            } else {
-                current.push('\\');
-            }
-        } else if ch == '\'' {
-            // Quote state affects the split point; cleanup_token strips the quote itself.
-            if inside_quotes || has_closing_quote(&chars) {
-                inside_quotes = !inside_quotes;
-            }
-            current.push('\'');
-        } else if ch == ',' && !inside_quotes {
-            raw_tokens.push(current.clone());
-            current.clear();
-        } else {
-            current.push(ch);
-        }
-    }
-    raw_tokens.push(current);
-
-    // Then cleanup_token on each raw token.
-    raw_tokens
-        .into_iter()
-        .map(|t| cleanup_token(&t))
-        .collect()
-}
-
-/// Apply `cleanup_separated_string` logic to a single raw token.
-///
-/// - Strips leading spaces (only space, not other whitespace — mirrors the C `' '` check).
-/// - Strips trailing spaces outside quotes (via `end` pointer tracking).
-/// - Strips `'` quote characters (they are not included in output).
-/// - Expands escape sequences.
-fn cleanup_token(raw: &str) -> String {
-    let mut out = String::new();
-    // `end_len` tracks the length of `out` at the last non-trailing-space position.
-    let mut end_len: usize = 0;
-    let mut inside_quotes = false;
-
-    // Skip leading spaces (C: `for (ptr = str; *ptr == ' '; ++ptr)`).
-    let s = raw.trim_start_matches(' ');
-
-    let mut chars = s
-        .chars()
-        .peekable();
-    while let Some(ch) = chars.next() {
-        if ch == '\\' {
-            // Expand escape: '\'', '"', ',', '\\' are direct; unescape_char handles n/r/t/s.
-            let expanded = chars
-                .peek()
-                .and_then(|&next| match next {
-                    '\'' | '"' | ',' | '\\' => Some(next),
-                    'n' => Some('\n'),
-                    'r' => Some('\r'),
-                    't' => Some('\t'),
-                    's' => Some(' '),
-                    _ => None,
-                });
-            match expanded {
-                Some(e) => {
-                    chars.next();
-                    out.push(e);
-                    end_len = out.len();
-                }
-                // Unrecognized escape: upstream reprocesses the next char, so a
-                // following space still trims.
-                None => {
-                    out.push('\\');
-                    end_len = out.len();
-                }
-            }
-        } else if ch == '\'' {
-            if inside_quotes || has_closing_quote(&chars) {
-                inside_quotes = !inside_quotes;
-                // Quote char is NOT output; only update end_len when entering quotes.
-                if inside_quotes {
-                    end_len = out.len();
-                }
-            } else {
-                // No matching close quote: output the quote literally.
-                out.push('\'');
-                end_len = out.len();
-            }
-        } else {
-            out.push(ch);
-            // Update end tracker when the char is not a trailing space.
-            if ch != ' ' || inside_quotes {
-                end_len = out.len();
-            }
-        }
-    }
-
-    // Truncate to end_len to strip trailing spaces.
-    out.truncate(end_len);
-    out
+    separate_string_char_delim(s, ',')
 }
 
 /// Parse one codec-string entry token (after comma-splitting and unescaping).
@@ -516,18 +393,6 @@ mod tests {
             .unwrap();
         assert_eq!(cs.len(), 1);
         assert_eq!(cs.entries()[0].name(), "PCMU");
-    }
-
-    #[test]
-    fn odd_quote_count_before_comma_still_splits() {
-        // Each ' toggles only when a closing ' is ahead (C: strchr(ptr+1, '\'')),
-        // never by scanning what's already been consumed. Three quotes then a
-        // comma must still split into two raw tokens; the first token's content
-        // (an unterminated quote survives as a literal char, same as the C
-        // cleanup) is a separate, orthogonal name-validation concern.
-        let tokens = split_codec_string("a'b'c'd,PCMA");
-        assert_eq!(tokens.len(), 2);
-        assert_eq!(tokens[1], "PCMA");
     }
 
     #[test]
