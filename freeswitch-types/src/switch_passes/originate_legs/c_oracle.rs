@@ -1,130 +1,18 @@
-//! The dial-string passes against the switch's own C on every built tree.
+//! `switch_ivr_originate`'s passes over a dial string, and `switch_true`, against the switch's own
+//! C on every built tree.
 
-use freeswitch_c_oracle::{Dial, Oracle, Pair};
+use freeswitch_c_oracle::{Dial, Pair};
 use proptest::collection::vec;
 use proptest::option;
 use proptest::prelude::*;
 use proptest::sample::select;
 
-use super::{
-    dial_list, expand_escapes, install, parse_block, switch_true, Block, DialList, PairEffect,
-    PipelineError, UNQUOTED_ESC_COMMA,
-};
-use crate::switch_passes::separate::CBuffer;
-use crate::switch_passes::{trace, untrace, Traced};
+use super::{dial_list, switch_true, DialList};
+use crate::switch_passes::brackets::c_oracle::{block_text, installed, unmodelled};
+use crate::switch_passes::brackets::{self, Block, PairEffect};
+use crate::switch_passes::expansion::enterprise_nests;
+use crate::switch_passes::{trace, PipelineError};
 use crate::test_text::{against_the_c, text};
-
-/// The headers installing `blocks` adds, as the switch hands them to the event.
-fn installed<'a>(blocks: impl IntoIterator<Item = &'a Block>) -> Vec<Pair> {
-    blocks
-        .into_iter()
-        .flat_map(|block| &block.pairs)
-        .filter_map(|pair| {
-            let value = match &pair.effect {
-                PairEffect::Set(value) => value.as_str(),
-                PairEffect::Cleared => "",
-                PairEffect::Ignored | PairEffect::Unreadable => return None,
-            };
-            Some((
-                pair.key
-                    .clone()
-                    .into_bytes(),
-                value
-                    .as_bytes()
-                    .to_vec(),
-            ))
-        })
-        .collect()
-}
-
-/// A block the port flags rather than reads: a non-ASCII separator, or a pair opening one.
-fn unmodelled(block: &Block) -> bool {
-    block.separator_unreadable()
-        || block
-            .pairs
-            .iter()
-            .any(|pair| pair.effect == PairEffect::Unreadable)
-}
-
-fn byte_offset(text: &[Traced], input: &str, index: usize) -> usize {
-    text.get(index)
-        .map_or(input.len(), |&(_, start, _)| start)
-}
-
-const HEADS: &[&str] = &[
-    "", "", "", "^^", "^^,", "^^:", "^^~", "^^'", "^^\\", "^^=", "^^é",
-];
-
-/// Block content: text, the separators the parse reads, and brackets of any kind.
-fn content() -> impl Strategy<Value = String> {
-    let piece = prop_oneof![
-        3 => text(),
-        2 => select(&["=", ",", ":", "~", "\u{2}", "{", "}", "[", "]", "<", ">", "k=v", "'", "^^"][..])
-            .prop_map(str::to_owned),
-    ];
-    vec(piece, 0..6).prop_map(|pieces| pieces.concat())
-}
-
-/// A block of `open` and `close`, its close sometimes missing.
-fn block_text(open: char, close: char) -> impl Strategy<Value = String> {
-    (
-        select(HEADS),
-        content(),
-        prop_oneof![6 => Just(true), 1 => Just(false)],
-    )
-        .prop_map(move |(head, content, closed)| {
-            let close = if closed {
-                close.to_string()
-            } else {
-                String::new()
-            };
-            format!("{open}{head}{content}{close}")
-        })
-}
-
-#[test]
-fn blocks_match_the_switch() {
-    let kind = select(
-        &[
-            ('<', '>', ','),
-            ('{', '}', ','),
-            ('[', ']', ','),
-            ('[', ']', UNQUOTED_ESC_COMMA),
-        ][..],
-    );
-    let case = kind.prop_flat_map(|(open, close, comma)| {
-        (Just((open, close, comma)), block_text(open, close), text())
-    });
-    against_the_c(
-        file!(),
-        "blocks_match_the_switch",
-        case,
-        |c, ((open, close, comma), block, tail)| {
-            let input = format!("{block}{tail}");
-            let text = trace(&input);
-            let mut buffer = CBuffer::new(&text);
-            let port = parse_block(&mut buffer, 0, open, close, comma);
-            if port
-                .as_ref()
-                .is_some_and(|parsed| unmodelled(&parsed.block))
-            {
-                return Ok(());
-            }
-            let port = port.map(|parsed| {
-                (
-                    installed([&parsed.block]),
-                    byte_offset(&text, &input, parsed.next),
-                    untrace(buffer.c_str(parsed.next)).into_bytes(),
-                )
-            });
-            let switch = c
-                .brackets(input.as_bytes(), open as u8, close as u8, comma as u8)
-                .map(|read| (read.pairs, read.rest, read.following));
-            prop_assert_eq!(port, switch, "{:?} split on {:?}", input, comma);
-            Ok(())
-        },
-    );
-}
 
 fn spaces() -> impl Strategy<Value = &'static str> {
     select(&["", "", " ", "  "][..])
@@ -299,17 +187,16 @@ fn switch_view(dial: &Dial) -> Result<(Vec<Pair>, Vec<ThreadView>), Stop> {
     ))
 }
 
-/// Whether the `<>` event `switch_ivr_enterprise_originate` hands every thread turns nested vars
-/// on: its first `origination_nested_vars` header, read by the switch's `switch_true`. The stub
-/// stores no headers, so the event store is the port's.
-fn switch_enterprise_nests(c: Oracle, enterprise: &[Pair]) -> bool {
+/// The `<>` event `switch_ivr_enterprise_originate` hands every thread, as a block of the pairs
+/// the switch installed; the stub stores no headers, so the port's event store reads it.
+fn enterprise_block(enterprise: &[Pair]) -> Block {
     let utf8 = |bytes: &[u8]| String::from_utf8_lossy(bytes).into_owned();
-    let block = Block {
+    Block {
         open: '<',
         separator: ',',
         pairs: enterprise
             .iter()
-            .map(|(key, value)| super::Pair {
+            .map(|(key, value)| brackets::Pair {
                 key: utf8(key),
                 effect: match &value[..] {
                     [] => PairEffect::Cleared,
@@ -318,11 +205,7 @@ fn switch_enterprise_nests(c: Oracle, enterprise: &[Pair]) -> bool {
             })
             .collect(),
         rewrites_following_text: false,
-    };
-    install([&block])
-        .into_iter()
-        .find(|(name, _)| name.eq_ignore_ascii_case("origination_nested_vars"))
-        .is_some_and(|(_, value)| c.switch_true(value.as_bytes()))
+    }
 }
 
 #[test]
@@ -355,7 +238,9 @@ fn dial_lists_match_the_switch() {
                 });
             prop_assert_eq!(&port_read, &switch_view(&dial), "{:?}", input);
             if let Ok(list) = &port {
-                let inherited = switch_enterprise_nests(c, &dial.enterprise);
+                let inherited = enterprise_nests([&enterprise_block(&dial.enterprise)], |value| {
+                    c.switch_true(value.as_bytes())
+                });
                 let switch: Vec<bool> = dial
                     .threads
                     .iter()
@@ -368,56 +253,6 @@ fn dial_lists_match_the_switch() {
                     .collect();
                 prop_assert_eq!(port, switch, "nested vars per thread in {:?}", input);
             }
-            Ok(())
-        },
-    );
-}
-
-/// Text weighted toward what the dialplan carrier's expansion reads: references, escapes, `$$`.
-fn expansion_text() -> impl Strategy<Value = String> {
-    let piece = prop_oneof![
-        2 => text(),
-        3 => select(&[
-            "${", "$${", "}", "$", "$$", "{", r"\$", r"\$$", r"\'", r"\\", r"\n", "${a}", "$${g}",
-            "${f(x)}", "${cmd arg}", "${a:1}", "${a[0]}", "${a${b}}", " ", "(", ")",
-        ][..])
-        .prop_map(str::to_owned),
-    ];
-    vec(piece, 0..8).prop_map(|pieces| pieces.concat())
-}
-
-/// Every reference the port keeps as written is one the switch looks up, and substituting each
-/// with nothing leaves the switch's output.
-#[test]
-fn expansion_matches_the_switch() {
-    against_the_c(
-        file!(),
-        "expansion_matches_the_switch",
-        expansion_text(),
-        |c, input| {
-            let (out, references) = expand_escapes(&trace(&input));
-            let mut kept = String::new();
-            let mut at = 0;
-            for reference in &references {
-                kept.push_str(&untrace(&out[at..reference.start]));
-                at = reference.end;
-            }
-            kept.push_str(&untrace(&out[at..]));
-            let switch = c.expand(input.as_bytes());
-            let looked_up = !switch
-                .lookups
-                .is_empty()
-                || !switch
-                    .api_calls
-                    .is_empty();
-            prop_assert_eq!(
-                (kept.as_bytes(), !references.is_empty()),
-                (&switch.text[..], looked_up),
-                "{:?}: switch looked up {:?}, called {:?}",
-                input,
-                switch.lookups,
-                switch.api_calls
-            );
             Ok(())
         },
     );

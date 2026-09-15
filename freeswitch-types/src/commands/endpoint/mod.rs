@@ -102,14 +102,15 @@ pub use user::UserEndpoint;
 use std::fmt;
 use std::str::FromStr;
 
-use super::flattened::pipeline::{self, splits_into_threads, PipelineError};
 use super::originate::OriginateError;
 use super::variables::{
     escape_text, unbalanced, DialStringCarrier, DialStringTarget, EscapedField, Variables,
     VariablesType,
 };
+use crate::switch_passes::originate_legs::splits_into_threads;
 use crate::switch_passes::separate::find_end_paren;
 use crate::switch_passes::trace;
+use crate::switch_passes::{pipeline, PipelineError};
 
 type PrefixParser = fn(&str) -> Result<Endpoint, OriginateError>;
 
@@ -1380,7 +1381,7 @@ mod tests {
     /// The port of the switch's passes reads back the module text, and the parser the endpoint.
     #[test]
     fn hostile_fields_arrive_and_round_trip_at_every_target() {
-        use crate::commands::flattened::pipeline;
+        use crate::switch_passes::pipeline;
 
         let targets = [
             DialStringTarget::new(DialStringCarrier::EslApi),

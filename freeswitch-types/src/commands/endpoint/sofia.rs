@@ -3,10 +3,10 @@ use std::str::FromStr;
 use super::{
     after_prefix, check_expression_field, check_field, parse_leg, undeliverable, EndpointFieldFault,
 };
-use crate::commands::flattened::pipeline::splits_into_threads;
 use crate::commands::originate::OriginateError;
 use crate::commands::variables::DialStringCarrier;
 use crate::commands::variables::Variables;
+use crate::switch_passes::originate_legs::splits_into_threads;
 
 /// SIP endpoint via a named profile: `sofia/{profile}/{destination}`.
 #[derive(Debug, Clone, PartialEq, Eq)]

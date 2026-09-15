@@ -9,9 +9,11 @@ use std::fmt;
 use std::fmt::Write as _;
 use std::str::FromStr;
 
-use super::flattened::pipeline::{names_a_variable, splits_into_threads, ENTERPRISE_DELIM};
 use super::originate::OriginateError;
 use super::STRIPPED_WHITESPACE;
+use crate::switch_passes::brackets::same_header;
+use crate::switch_passes::expansion::names_a_variable;
+use crate::switch_passes::originate_legs::{splits_into_threads, ENTERPRISE_DELIM};
 use crate::switch_passes::separate::{sole_argument, ArgvCut, Token};
 use crate::switch_passes::{trace, untrace, Traced};
 use crate::version::FreeswitchVersion;
@@ -788,7 +790,7 @@ fn check_case_collision<'a>(
 ) -> Result<(), OriginateError> {
     let collides = earlier
         .into_iter()
-        .any(|name| name != key && name.eq_ignore_ascii_case(key));
+        .any(|name| name != key && same_header(name, key));
     match collides {
         true => Err(OriginateError::ParseError(format!(
             "variable {at} differs only in case from an earlier name, which the switch \
@@ -2808,7 +2810,8 @@ mod tests {
     /// opening `^^` names that split's separator unless a quote pair the cleanup strips leads it.
     #[test]
     fn a_key_the_switch_splits_arrives_escaped_and_round_trips() {
-        use crate::commands::flattened::pipeline::{self, PairEffect};
+        use crate::switch_passes::brackets::PairEffect;
+        use crate::switch_passes::pipeline;
 
         let keys = [
             "a=b", "a,b", "a b", "^^ab", "^^", "x^^", " edge ", r"C:\p", "it's", "pa$$", "a|b",

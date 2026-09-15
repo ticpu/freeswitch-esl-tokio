@@ -7,11 +7,11 @@ use std::fmt;
 use std::str::FromStr;
 
 use super::endpoint::{extract_scoped_variables, read_error, DialString, Endpoint};
-use super::flattened::pipeline;
 use super::originate::OriginateError;
 use super::variables::{BlockParse, DialStringCarrier, DialStringTarget, Variables, VariablesType};
-use crate::switch_passes::separate::separate;
-use crate::switch_passes::trace;
+use crate::switch_passes::originate_legs::{scan_group, split_groups};
+use crate::switch_passes::separate::CBuffer;
+use crate::switch_passes::{pipeline, trace};
 
 /// A bridge dial string is the argument of a dialplan application, which
 /// receives it whole, so it renders and parses one escaping level shallower
@@ -269,15 +269,14 @@ fn separator_merged(group: &[Endpoint], target: DialStringTarget) -> bool {
                 .to_string(),
         );
     }
-    let split = separate(&trace(&text), '|', usize::MAX);
-    let [token] = &split.tokens[..] else {
+    let mut buffer = CBuffer::new(&trace(&text));
+    let split = split_groups(&mut buffer);
+    let [group] = &split.tokens[..] else {
         return false;
     };
-    let mut cleaned = token
-        .text
-        .clone();
-    pipeline::escape_block_commas(&mut cleaned);
-    cleaned
+    scan_group(&mut buffer, group.start);
+    buffer
+        .c_str(group.start)
         .iter()
         .any(|&(c, start, _)| c != ',' && separators.contains(&start))
 }

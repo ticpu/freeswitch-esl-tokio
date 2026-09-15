@@ -1,19 +1,22 @@
 //! Expected values are what the live switch measured for each capture, carrier
 //! and escape depth; `tests/fixtures/flattened/README.md` names the captures.
 
-use super::*;
+use super::read;
 use crate::commands::variables::{DialStringCarrier, DialStringTarget, Variables, VariablesType};
+use crate::switch_passes::brackets::{parse_block, Pair, PairEffect, Parsed};
+use crate::switch_passes::expansion::names_a_variable;
+use crate::switch_passes::originate_legs::{
+    dial_list, resolve, DialList, Leg, Thread, ENTERPRISE_DELIM,
+};
+use crate::switch_passes::separate::CBuffer;
+use crate::switch_passes::{trace, untrace, PipelineError};
 
 const API: DialStringCarrier = DialStringCarrier::EslApi;
 const DIALPLAN: DialStringCarrier = DialStringCarrier::Dialplan;
 
 macro_rules! fixture {
     ($name:literal) => {
-        include_str!(concat!(
-            "../../../../tests/fixtures/flattened/",
-            $name,
-            ".txt"
-        ))
+        include_str!(concat!("../../../tests/fixtures/flattened/", $name, ".txt"))
     };
 }
 
@@ -344,24 +347,6 @@ fn a_nested_variable_is_named_and_the_opt_in_is_seen_anywhere() {
     assert!(names_a_variable(r"$\{x}"));
     assert!(!names_a_variable("$x"));
     assert!(!names_a_variable("a$"));
-}
-
-#[test]
-fn a_cause_is_read_as_the_switch_reads_it() {
-    for (text, want) in [
-        ("USER_BUSY", CauseReading::Name(HangupCause::UserBusy)),
-        ("user_busy", CauseReading::Name(HangupCause::UserBusy)),
-        ("17", CauseReading::Number(17)),
-        ("17abc", CauseReading::Number(17)),
-        ("017", CauseReading::Number(17)),
-        ("0", CauseReading::Number(0)),
-        ("70000", CauseReading::Number(70000)),
-        ("", CauseReading::Unrecognized),
-        (" 17", CauseReading::Unrecognized),
-        ("NOT_A_CAUSE", CauseReading::Unrecognized),
-    ] {
-        assert_eq!(str2cause(text), want, "{text:?}");
-    }
 }
 
 #[test]

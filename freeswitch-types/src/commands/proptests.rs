@@ -11,7 +11,6 @@ use proptest::option;
 use proptest::prelude::*;
 use proptest::sample::select;
 
-use super::flattened::pipeline::{self, names_a_variable, PairEffect};
 use super::{
     originate_quote, originate_unquote, Application, AudioEndpoint, BlockParse, DialString,
     DialStringCarrier, DialStringTarget, DialplanType, Endpoint, ErrorEndpoint,
@@ -20,6 +19,9 @@ use super::{
     STRIPPED_WHITESPACE,
 };
 use crate::channel::HangupCause;
+use crate::switch_passes::brackets::PairEffect;
+use crate::switch_passes::expansion::names_a_variable;
+use crate::switch_passes::pipeline;
 use crate::switch_passes::separate::separate;
 use crate::switch_passes::{trace, untrace};
 use crate::test_text::{against_the_c, config, opens_with_a_non_ascii_head, text};

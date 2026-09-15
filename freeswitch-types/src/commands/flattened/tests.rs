@@ -1043,3 +1043,21 @@ fn warnings_and_unparsed_legs_never_quote_values() {
             .is_empty());
     }
 }
+
+#[test]
+fn a_cause_is_read_as_the_switch_reads_it() {
+    for (text, want) in [
+        ("USER_BUSY", CauseReading::Name(HangupCause::UserBusy)),
+        ("user_busy", CauseReading::Name(HangupCause::UserBusy)),
+        ("17", CauseReading::Number(17)),
+        ("17abc", CauseReading::Number(17)),
+        ("017", CauseReading::Number(17)),
+        ("0", CauseReading::Number(0)),
+        ("70000", CauseReading::Number(70000)),
+        ("", CauseReading::Unrecognized),
+        (" 17", CauseReading::Unrecognized),
+        ("NOT_A_CAUSE", CauseReading::Unrecognized),
+    ] {
+        assert_eq!(str2cause(text), want, "{text:?}");
+    }
+}

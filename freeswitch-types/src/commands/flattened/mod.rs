@@ -15,13 +15,12 @@ use crate::commands::originate::OriginateError;
 use crate::commands::variables::{
     escape_text, DialStringTarget, EscapedField, Variables, VariablesType,
 };
+use crate::switch_passes::brackets::{Block, Pair, PairEffect};
+use crate::switch_passes::expansion::names_a_variable;
+use crate::switch_passes::originate_legs::{resolve, DialList, Leg, Thread, ENTERPRISE_DELIM};
+use crate::switch_passes::{pipeline, PipelineError};
 use crate::variables::VariableName;
-use pipeline::{
-    names_a_variable, str2cause, Block, DialList, Leg, Pair, PairEffect, PipelineError, Thread,
-    ENTERPRISE_DELIM,
-};
 
-pub(crate) mod pipeline;
 #[cfg(test)]
 mod tests;
 
@@ -636,7 +635,7 @@ impl FlattenedLeg {
     /// enterprise split sets it true. On a channel with `CF_NO_PRESENCE`, originate deletes
     /// `presence_id`.
     pub fn variable(&self, name: impl VariableName) -> Option<&str> {
-        pipeline::resolve(
+        resolve(
             self.inherited
                 .iter(),
             &self.leg,
@@ -699,6 +698,23 @@ impl LegTarget {
             }),
         }
     }
+}
+
+/// `switch_channel_str2cause` on the text after `error/`.
+fn str2cause(text: &str) -> CauseReading {
+    if text.starts_with(|c: char| c.is_ascii_digit()) {
+        let number = text
+            .bytes()
+            .take_while(u8::is_ascii_digit)
+            .fold(0u32, |n, digit| {
+                n.saturating_mul(10)
+                    .saturating_add(u32::from(digit - b'0'))
+            });
+        return CauseReading::Number(number);
+    }
+    text.to_ascii_uppercase()
+        .parse::<HangupCause>()
+        .map_or(CauseReading::Unrecognized, CauseReading::Name)
 }
 
 impl LegWarning {

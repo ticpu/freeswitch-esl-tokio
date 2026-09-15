@@ -6,7 +6,31 @@
 #[cfg(feature = "esl")]
 use std::ops::Range;
 
+#[cfg(feature = "esl")]
+pub(crate) mod brackets;
+#[cfg(feature = "esl")]
+pub(crate) mod expansion;
+#[cfg(feature = "esl")]
+pub(crate) mod originate_legs;
+#[cfg(feature = "esl")]
+pub(crate) mod pipeline;
 pub(crate) mod separate;
+
+/// What stops the switch from reading a dial string at all.
+#[cfg(feature = "esl")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PipelineError {
+    /// Nothing to dial.
+    Empty,
+    /// The API carrier's argument split cuts the dial string into more than one
+    /// argument, leaves a quote open, or finds a quote holding its separator.
+    ArgvSplit,
+    /// A block never closes, which aborts the whole originate.
+    UnclosedBlock { leg: usize },
+    /// A split the switch runs on a non-ASCII `^^` separator's first byte reaches text no string
+    /// carries: a group or leg opening such a head, or a block with one ending in a backslash.
+    SplitSeparatorUnreadable,
+}
 
 /// A char and the start and end of the input bytes it stands for; an unescaped char
 /// spans its whole escape.
