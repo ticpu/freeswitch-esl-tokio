@@ -297,6 +297,9 @@ pub(crate) fn read_error(error: PipelineError) -> OriginateError {
             PipelineError::Empty => "no endpoint to dial",
             PipelineError::ArgvSplit => "originate's argument split cuts the dial string",
             PipelineError::UnclosedBlock { .. } => "a variable block never closes",
+            PipelineError::SplitSeparatorUnreadable => {
+                "a split on a non-ASCII ^^ separator's first byte reaches past its text"
+            }
         }
         .into(),
     )

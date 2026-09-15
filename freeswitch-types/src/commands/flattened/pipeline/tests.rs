@@ -50,7 +50,7 @@ fn resolve_on<'a>(
             .chain(&thread.blocks),
         leg,
         key,
-        list.nested_vars,
+        thread.nested_vars,
     )
 }
 
@@ -328,7 +328,7 @@ fn an_empty_pair_is_ignored_or_clears_by_the_depth_it_arrives_at() {
 #[test]
 fn a_nested_variable_is_named_and_the_opt_in_is_seen_anywhere() {
     let list = read_at(fixture!("g-fp-esc-nested.A"), API);
-    assert!(!list.nested_vars);
+    assert!(!list.threads[0].nested_vars);
     assert!(matches!(
         effect(&list, 0, "nv").last(),
         Some(PairEffect::Set(v)) if names_a_variable(v)
@@ -337,7 +337,7 @@ fn a_nested_variable_is_named_and_the_opt_in_is_seen_anywhere() {
     assert_eq!(value(&list, 0, "sentinel"), Some("s"));
     let opted_in = read_at("{origination_nested_vars=true}[nv=${x}]null/a", API);
     assert_eq!(value(&opted_in, 0, "nv"), Some("${x}"));
-    assert!(read_at("{origination_nested_vars=true}[nv=${x}]null/a", API).nested_vars);
+    assert!(read_at("{origination_nested_vars=true}[nv=${x}]null/a", API).threads[0].nested_vars);
 
     assert!(names_a_variable("${x}"));
     assert!(names_a_variable(r"\${x}"));
@@ -530,12 +530,39 @@ fn a_non_ascii_block_separator_yields_no_pairs() {
     assert_eq!(leg.endpoint, "loopback/9199/test");
 }
 
+/// Each enterprise thread looks for the opt-in in its own text; the `<>` event reaches them all.
+#[test]
+fn nested_vars_are_opted_into_per_thread() {
+    let list = read_at(
+        "{origination_nested_vars=true}[nv=${x}]null/a:_:[nv=${x}]null/b",
+        API,
+    );
+    assert_eq!(
+        list.threads
+            .iter()
+            .map(|thread| thread.nested_vars)
+            .collect::<Vec<_>>(),
+        [true, false]
+    );
+    assert_eq!(value(&list, 0, "nv"), Some("${x}"));
+    assert_eq!(value(&list, 1, "nv"), None);
+
+    let list = read_at(
+        "<origination_nested_vars=yes>[nv=${x}]null/a:_:[nv=${x}]null/b",
+        API,
+    );
+    assert_eq!(value(&list, 0, "nv"), Some("${x}"));
+    assert_eq!(value(&list, 1, "nv"), Some("${x}"));
+}
+
 /// The splits run in place, so a backslash escaping a token's terminator reads on into
 /// whatever the buffer holds after it.
 #[test]
 fn a_block_parse_reads_the_buffer_as_the_switch_leaves_it() {
-    let (block, next) = parse_block(&trace(r"{\}k=v}"), '{', '}', ',').unwrap();
+    let mut buffer = CBuffer::new(&trace(r"{\}k=v}"));
+    let Parsed { block, next, .. } = parse_block(&mut buffer, 0, '{', '}', ',').unwrap();
     assert_eq!(next, 3);
+    assert_eq!(untrace(buffer.c_str(next)), "k");
     assert_eq!(
         block.pairs,
         [Pair {
@@ -545,7 +572,8 @@ fn a_block_parse_reads_the_buffer_as_the_switch_leaves_it() {
     );
     assert!(block.rewrites_following_text);
 
-    let (block, _) = parse_block(&trace(r"{x\\,k=v}"), '{', '}', ',').unwrap();
+    let mut buffer = CBuffer::new(&trace(r"{x\\,k=v}"));
+    let Parsed { block, .. } = parse_block(&mut buffer, 0, '{', '}', ',').unwrap();
     assert_eq!(
         block
             .pairs
@@ -556,7 +584,38 @@ fn a_block_parse_reads_the_buffer_as_the_switch_leaves_it() {
     );
     assert!(!block.rewrites_following_text);
 
-    let (block, _) = parse_block(&trace("<^^>=>"), '<', '>', ',').unwrap();
+    let mut buffer = CBuffer::new(&trace("<^^>=>"));
+    let Parsed { block, next, .. } = parse_block(&mut buffer, 0, '<', '>', ',').unwrap();
+    assert_eq!(untrace(buffer.c_str(next)), "");
+    assert!(block.rewrites_following_text);
+
+    let bare = |input: &str| {
+        dial_list(&trace(input), 0..input.len(), false)
+            .unwrap_or_else(|e| panic!("{input:?}: {e:?}"))
+    };
+    let list = bare("<\\>\t>,[[]");
+    let (_, leg) = legs(&list)[0];
+    assert_eq!(legs(&list).len(), 1);
+    assert_eq!(leg.endpoint, "\t>");
+
+    for refused in ["^^é]", "<^^éa\\>x:_:é"] {
+        assert_eq!(
+            dial_list(&trace(refused), 0..refused.len(), false),
+            Err(PipelineError::SplitSeparatorUnreadable),
+            "{refused:?}"
+        );
+    }
+
+    let list = bare("['\\n]|\\n',\\");
+    assert_eq!(
+        legs(&list)
+            .iter()
+            .map(|(_, leg)| leg
+                .endpoint
+                .as_str())
+            .collect::<Vec<_>>(),
+        ["|\n", "\\", "\\"]
+    );
     assert_eq!(
         block.pairs,
         [Pair {

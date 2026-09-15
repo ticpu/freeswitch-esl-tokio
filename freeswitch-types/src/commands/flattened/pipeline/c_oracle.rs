@@ -11,7 +11,7 @@ use super::{
     PipelineError, UNQUOTED_ESC_COMMA,
 };
 use crate::test_text::{against_the_c, text};
-use crate::tokenizer::{trace, untrace, Traced};
+use crate::tokenizer::{trace, untrace, CBuffer, Traced};
 
 /// The headers installing `blocks` adds, as the switch hands them to the event.
 fn installed<'a>(blocks: impl IntoIterator<Item = &'a Block>) -> Vec<Pair> {
@@ -101,23 +101,24 @@ fn blocks_match_the_switch() {
         |c, ((open, close, comma), block, tail)| {
             let input = format!("{block}{tail}");
             let text = trace(&input);
-            let port = parse_block(&text, open, close, comma);
+            let mut buffer = CBuffer::new(&text);
+            let port = parse_block(&mut buffer, 0, open, close, comma);
             if port
                 .as_ref()
-                .is_some_and(|(block, _)| unmodelled(block))
+                .is_some_and(|parsed| unmodelled(&parsed.block))
             {
                 return Ok(());
             }
-            let port = port.map(|(block, next)| {
-                let rest = byte_offset(&text, &input, next);
-                (installed([&block]), rest, block.rewrites_following_text)
+            let port = port.map(|parsed| {
+                (
+                    installed([&parsed.block]),
+                    byte_offset(&text, &input, parsed.next),
+                    untrace(buffer.c_str(parsed.next)).into_bytes(),
+                )
             });
             let switch = c
                 .brackets(input.as_bytes(), open as u8, close as u8, comma as u8)
-                .map(|read| {
-                    let rewritten = read.following != input.as_bytes()[read.rest..];
-                    (read.pairs, read.rest, rewritten)
-                });
+                .map(|read| (read.pairs, read.rest, read.following));
             prop_assert_eq!(port, switch, "{:?} split on {:?}", input, comma);
             Ok(())
         },
@@ -200,7 +201,7 @@ fn flags_a_block(list: &DialList) -> bool {
                         )
                 }),
         )
-        .any(|block| unmodelled(block) || block.rewrites_following_text)
+        .any(unmodelled)
 }
 
 /// How a thread reads, the same shape whichever side produced it.
@@ -300,7 +301,7 @@ fn switch_view(dial: &Dial) -> Result<(Vec<Pair>, Vec<ThreadView>), Stop> {
 /// Whether the `<>` event `switch_ivr_enterprise_originate` hands every thread turns nested vars
 /// on: its first `origination_nested_vars` header, read by the switch's `switch_true`. The stub
 /// stores no headers, so the event store is the port's.
-fn enterprise_nests(c: Oracle, enterprise: &[Pair]) -> bool {
+fn switch_enterprise_nests(c: Oracle, enterprise: &[Pair]) -> bool {
     let utf8 = |bytes: &[u8]| String::from_utf8_lossy(bytes).into_owned();
     let block = Block {
         open: '<',
@@ -332,9 +333,11 @@ fn dial_lists_match_the_switch() {
         |c, input| {
             let text = trace(&input);
             let port = dial_list(&text, 0..input.len(), false);
-            if port
-                .as_ref()
-                .is_ok_and(flags_a_block)
+            let refused = matches!(port, Err(PipelineError::SplitSeparatorUnreadable));
+            if refused
+                || port
+                    .as_ref()
+                    .is_ok_and(flags_a_block)
             {
                 return Ok(());
             }
@@ -345,11 +348,13 @@ fn dial_lists_match_the_switch() {
                 .map_err(|e| match e {
                     PipelineError::Empty => Stop::Empty,
                     PipelineError::UnclosedBlock { .. } => Stop::Unclosed,
-                    PipelineError::ArgvSplit => unreachable!("no carrier pass runs"),
+                    PipelineError::ArgvSplit | PipelineError::SplitSeparatorUnreadable => {
+                        unreachable!("no carrier pass runs, and a refused split returned early")
+                    }
                 });
             prop_assert_eq!(&port_read, &switch_view(&dial), "{:?}", input);
             if let Ok(list) = &port {
-                let inherited = enterprise_nests(c, &dial.enterprise);
+                let inherited = switch_enterprise_nests(c, &dial.enterprise);
                 let switch: Vec<bool> = dial
                     .threads
                     .iter()
@@ -358,7 +363,7 @@ fn dial_lists_match_the_switch() {
                 let port: Vec<bool> = list
                     .threads
                     .iter()
-                    .map(|_| list.nested_vars)
+                    .map(|thread| thread.nested_vars)
                     .collect();
                 prop_assert_eq!(port, switch, "nested vars per thread in {:?}", input);
             }

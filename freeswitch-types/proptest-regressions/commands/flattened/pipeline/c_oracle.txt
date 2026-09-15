@@ -8,3 +8,8 @@ cc 52c2d6d393bd54e84e1f4726448b4978bbf3543b08dc3cb615eb7c653017be06 # shrinks to
 cc e4adeea102abaf1aaeaa310933b5486339148de00dbcb262e95acd490092e24f # shrinks to (('<', '>', ','), "<^^>=>", "")
 cc 57a79c5f7b9dd002fa7213e337611da1074a75e4040f608a0db947a891aae827 # shrinks to (('[', ']', ','), "[ ^^ék=v]", "")
 cc e0c9af70d59006592760f7a84da6f8aa8d2aed9df78a2733c707c2a9e6019890 # shrinks to (('{', '}', ','), "{\\}k=v}", "")
+cc 190f35e999a8e714fed6ae447b8420ecd3ff3d44da8a86c9aadb1f9d93db0b7a # shrinks to "<\\>\t>,[[]"
+cc 4159cd83f1d2dd053d3858c5a8b87a71125a7c4ec7c3b6e1eb559b9fb741004f # shrinks to "['\\n]|\\n',\\"
+cc 2cd0b9407b31d4b1b27a3491c2c72846dc262685473e89add9fb73c824399655 # shrinks to "{{}[}]:_:^^é]"
+cc fe79ef6c7f4029b28a0a7ba771ac808c56fff32ab2b293020bbecfac61a31ef7 # shrinks to "{{}}^^é|[[|]"
+cc 8c28f4d4cb4c9b9016c4398e0f24551741ec5c0452833a98f1789bbff10aafed # shrinks to "<^^é<>[<]:_:[>]|[^^\\>]:_:é|[|]"

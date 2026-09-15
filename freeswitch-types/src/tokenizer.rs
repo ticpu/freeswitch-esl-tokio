@@ -259,6 +259,26 @@ fn cleanup_written(raw: &[Traced], delim: Option<char>) -> (Vec<Traced>, Option<
 #[cfg(feature = "esl")]
 pub(crate) struct CBuffer(Vec<Traced>);
 
+/// What [`CBuffer::separate`] cut.
+#[cfg(feature = "esl")]
+pub(crate) struct Split {
+    pub(crate) tokens: Vec<SplitToken>,
+    /// A quote kept a delimiter from splitting.
+    pub(crate) held_delimiter: bool,
+    /// A `^^` head named a non-ASCII separator, which the switch takes as a byte; the split ran
+    /// on the delimiter given.
+    pub(crate) unreadable_head: bool,
+}
+
+/// One token of a [`Split`], as indices into its buffer.
+#[cfg(feature = "esl")]
+pub(crate) struct SplitToken {
+    /// The token as the split cut it, before its cleanup.
+    pub(crate) raw: Range<usize>,
+    /// Where the cleaned token starts.
+    pub(crate) start: usize,
+}
+
 #[cfg(feature = "esl")]
 impl CBuffer {
     /// `text` and its terminator, and a second NUL for a trailing backslash to step onto.
@@ -297,23 +317,27 @@ impl CBuffer {
         &rest[..len]
     }
 
-    /// `switch_separate_string` on the string at `index`, in place: where each cleaned token
-    /// starts, or `None` for a `^^` head naming a non-ASCII separator, which the switch takes as a byte.
-    pub(crate) fn separate(
-        &mut self,
-        index: usize,
-        delim: char,
-        limit: usize,
-    ) -> Option<Vec<usize>> {
-        let (mut buf, mut delim) = (index, delim);
+    pub(crate) fn c_str_mut(&mut self, index: usize) -> &mut [Traced] {
+        let len = self
+            .c_str(index)
+            .len();
+        &mut self.0[index..index + len]
+    }
+
+    pub(crate) fn into_chars(self) -> Vec<Traced> {
+        self.0
+    }
+
+    /// `switch_separate_string` on the string at `index`, in place.
+    pub(crate) fn separate(&mut self, index: usize, delim: char, limit: usize) -> Split {
+        let (mut buf, mut delim, mut unreadable_head) = (index, delim, false);
         if self.at(buf) == '^' && self.at(buf + 1) == '^' && self.at(buf + 2) != '\0' {
             if !self
                 .at(buf + 2)
                 .is_ascii()
             {
-                return None;
-            }
-            if self.at(buf + 3) != '\0' {
+                unreadable_head = true;
+            } else if self.at(buf + 3) != '\0' {
                 delim = self.at(buf + 2);
                 buf += 3;
             }
@@ -332,12 +356,19 @@ impl CBuffer {
             }
         }
         let cleanup_delim = (delim != ' ').then_some(delim);
-        Some(
-            cut.spans
-                .iter()
-                .map(|span| self.cleanup(buf + span.start, cleanup_delim))
-                .collect(),
-        )
+        let tokens = cut
+            .spans
+            .iter()
+            .map(|span| SplitToken {
+                raw: buf + span.start..buf + span.end,
+                start: self.cleanup(buf + span.start, cleanup_delim),
+            })
+            .collect();
+        Split {
+            tokens,
+            held_delimiter: cut.held_delimiter,
+            unreadable_head,
+        }
     }
 
     /// `cleanup_separated_string` on the string at `index`, written back: where the result starts.

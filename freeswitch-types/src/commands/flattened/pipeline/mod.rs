@@ -8,8 +8,8 @@ use super::CauseReading;
 use crate::channel::HangupCause;
 use crate::commands::variables::{BlockParse, DialStringCarrier, DialStringTarget};
 use crate::tokenizer::{
-    byte_range, extent, find, find_end_paren, separate, separate_string_string, skip_spaces, trace,
-    untrace, ArgvCut, CBuffer, Traced,
+    byte_range, extent, find, find_end_paren, separate_string_string, skip_spaces, trace, untrace,
+    ArgvCut, CBuffer, Traced,
 };
 
 #[cfg(test)]
@@ -75,6 +75,9 @@ pub(crate) struct Thread {
     pub(crate) raw: Range<usize>,
     pub(crate) blocks: Vec<Block>,
     pub(crate) groups: Vec<Vec<Leg>>,
+    /// `origination_nested_vars=true` appears in the thread's text, or the `<>` event ahead of an
+    /// enterprise split sets it true; either lets a value holding `${` reach the channel.
+    pub(crate) nested_vars: bool,
 }
 
 /// A dial string after every pass up to the channel.
@@ -83,9 +86,6 @@ pub(crate) struct DialList {
     /// `<>` blocks ahead of an enterprise split, installed on every thread.
     pub(crate) blocks: Vec<Block>,
     pub(crate) threads: Vec<Thread>,
-    /// `origination_nested_vars=true` appears in the text, which lets a value
-    /// holding `${` reach the channel.
-    pub(crate) nested_vars: bool,
     /// A quote kept a leg separator from splitting.
     pub(crate) quote_spans_legs: bool,
     /// The dialplan carrier substitutes a `${}` or `$${}` reference with a value
@@ -103,6 +103,9 @@ pub(crate) enum PipelineError {
     ArgvSplit,
     /// A block never closes, which aborts the whole originate.
     UnclosedBlock { leg: usize },
+    /// A split the switch runs on a non-ASCII `^^` separator's first byte reaches text no string
+    /// carries: a group or leg opening such a head, or a block with one ending in a backslash.
+    SplitSeparatorUnreadable,
 }
 
 /// Run every pass `target` applies, from the text as given to what each leg's
@@ -135,14 +138,23 @@ fn dial_list(
     let mut reader = Reader::default();
     let (blocks, threads) = if find(text, ENTERPRISE_DELIM).is_some() {
         let head = head_blocks(text, &[('<', '>')], 0)?;
-        let threads = separate_string_string(&text[head.data..], ENTERPRISE_DELIM, MAX_PEERS)
-            .into_iter()
-            .enumerate()
-            .map(|(k, span)| {
-                let span = head.span(k, span);
-                reader.thread(&text[span.clone()], byte_range(text, raw.clone(), span))
-            })
-            .collect::<Result<_, _>>()?;
+        let scanned = &head.text[..head.data_end];
+        let mut threads: Vec<Thread> =
+            separate_string_string(&scanned[head.data..], ENTERPRISE_DELIM, MAX_PEERS)
+                .into_iter()
+                .enumerate()
+                .map(|(k, span)| {
+                    let span = head.span(k, span);
+                    reader.thread(
+                        &scanned[span.clone()],
+                        byte_range(scanned, raw.clone(), span),
+                    )
+                })
+                .collect::<Result<_, _>>()?;
+        let inherited = enterprise_nests(&head.blocks);
+        for thread in &mut threads {
+            thread.nested_vars |= inherited;
+        }
         (head.blocks, threads)
     } else {
         (Vec::new(), vec![reader.thread(text, raw)?])
@@ -150,12 +162,25 @@ fn dial_list(
     Ok(DialList {
         blocks,
         threads,
-        nested_vars: untrace(text)
-            .to_ascii_lowercase()
-            .contains("origination_nested_vars=true"),
         quote_spans_legs: reader.quote_spans_legs,
         carrier_expands,
     })
+}
+
+/// `switch_stristr` for the opt-in `switch_ivr_originate` looks for in the text it dials.
+fn opts_into_nested_vars(text: &[Traced]) -> bool {
+    untrace(text)
+        .to_ascii_lowercase()
+        .contains("origination_nested_vars=true")
+}
+
+/// The `<>` event `switch_ivr_enterprise_originate` hands every thread holds a true
+/// `origination_nested_vars`, as `switch_event_get_header` finds it.
+pub(crate) fn enterprise_nests<'a>(blocks: impl IntoIterator<Item = &'a Block>) -> bool {
+    install(blocks)
+        .into_iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case("origination_nested_vars"))
+        .is_some_and(|(_, value)| switch_true(value))
 }
 
 /// `originate`'s own `switch_separate_string`, which the dial string must survive as one
@@ -265,83 +290,124 @@ struct Reader {
 }
 
 impl Reader {
-    /// The thread `text`, which covers the input bytes `raw`.
+    /// The thread `text`, which covers the input bytes `raw`. Its groups and legs are split in one
+    /// copy of the data, as `switch_ivr_originate` splits them in its own.
     fn thread(&mut self, text: &[Traced], raw: Range<usize>) -> Result<Thread, PipelineError> {
         let head = head_blocks(text, &[('<', '>'), ('{', '}')], self.legs)?;
-        let data = &text[head.data..];
+        let scanned = &head.text[..head.data_end];
+        let data = &scanned[head.data..];
         if data.is_empty() {
             return Err(PipelineError::Empty);
         }
-        let groups = separate(data, '|', MAX_PEERS);
-        self.quote_spans_legs |= groups.held_delimiter;
-        let groups = groups
+        let mut buffer = CBuffer::new(data);
+        let split = buffer.separate(0, '|', MAX_PEERS);
+        if split.unreadable_head {
+            return Err(PipelineError::SplitSeparatorUnreadable);
+        }
+        self.quote_spans_legs |= split.held_delimiter;
+        let groups = split
             .tokens
             .into_iter()
             .enumerate()
             .map(|(k, group)| {
                 let span = head.span(k, group.raw);
-                self.group(group.text, byte_range(text, raw.clone(), span))
+                self.group(
+                    &mut buffer,
+                    group.start,
+                    byte_range(scanned, raw.clone(), span),
+                )
             })
             .collect::<Result<_, _>>()?;
         Ok(Thread {
             raw,
             blocks: head.blocks,
             groups,
+            nested_vars: opts_into_nested_vars(text),
         })
     }
 
+    /// The group at `start` of `buffer`, which covers the input bytes `raw`. A leg the split reads
+    /// past the group's terminator covers none.
     fn group(
         &mut self,
-        mut text: Vec<Traced>,
+        buffer: &mut CBuffer,
+        start: usize,
         raw: Range<usize>,
     ) -> Result<Vec<Leg>, PipelineError> {
-        escape_block_commas(&mut text);
-        let legs = separate(&text, ',', MAX_PEERS);
-        self.quote_spans_legs |= legs.held_delimiter;
-        legs.tokens
+        escape_block_commas(buffer.c_str_mut(start));
+        let scanned = buffer
+            .c_str(start)
+            .to_vec();
+        let split = buffer.separate(start, ',', MAX_PEERS);
+        if split.unreadable_head {
+            return Err(PipelineError::SplitSeparatorUnreadable);
+        }
+        self.quote_spans_legs |= split.held_delimiter;
+        split
+            .tokens
             .into_iter()
-            .map(|leg| self.leg(leg.text, byte_range(&text, raw.clone(), leg.raw)))
+            .map(|leg| {
+                let within = |at: usize| (at - start).min(scanned.len());
+                let span = within(
+                    leg.raw
+                        .start,
+                )
+                    ..within(
+                        leg.raw
+                            .end,
+                    );
+                self.leg(buffer, leg.start, byte_range(&scanned, raw.clone(), span))
+            })
             .collect()
     }
 
-    fn leg(&mut self, mut text: Vec<Traced>, raw: Range<usize>) -> Result<Leg, PipelineError> {
+    fn leg(
+        &mut self,
+        buffer: &mut CBuffer,
+        start: usize,
+        raw: Range<usize>,
+    ) -> Result<Leg, PipelineError> {
         let unclosed = PipelineError::UnclosedBlock { leg: self.legs };
         self.legs += 1;
-        let mut pos = text.len() - skip_spaces(&text).len();
+        let mut pos = start + leading_spaces(buffer.c_str(start));
         let mut blocks = Vec::new();
-        while starts_with(&text[pos..], '[') {
-            if let Some(bend) = find_end_paren(&text[pos..], '[', ']') {
-                for (c, ..) in &mut text[pos + 1..pos + bend] {
+        while buffer.at(pos) == '[' {
+            if let Some(bend) = find_end_paren(buffer.c_str(pos), '[', ']') {
+                for (c, ..) in &mut buffer.c_str_mut(pos)[1..bend] {
                     if *c == QUOTED_ESC_COMMA {
                         *c = ',';
                     }
                 }
             }
-            let (block, next) =
-                parse_block(&text[pos..], '[', ']', UNQUOTED_ESC_COMMA).ok_or(unclosed)?;
+            let (block, next) = parse_block(buffer, pos, '[', ']', UNQUOTED_ESC_COMMA)
+                .ok_or(unclosed)?
+                .read()?;
             blocks.push(block);
-            pos += next;
+            pos = next;
         }
         Ok(Leg {
             raw,
             blocks,
-            endpoint: untrace(skip_spaces(&text[pos..])),
+            endpoint: untrace(skip_spaces(buffer.c_str(pos))),
         })
     }
 }
 
-fn starts_with(text: &[Traced], c: char) -> bool {
-    text.first()
-        .is_some_and(|&(first, ..)| first == c)
+fn leading_spaces(text: &[Traced]) -> usize {
+    text.len() - skip_spaces(text).len()
 }
 
 /// The blocks ahead of a list or thread, and where in its text they end.
 struct Head {
     blocks: Vec<Block>,
+    /// The text read, as the blocks' parse left it.
+    text: Vec<Traced>,
     /// The index after the last block, or 0 with none.
     end: usize,
     /// The index the data starts at, past the spaces around the blocks.
     data: usize,
+    /// The index of the data's terminator.
+    data_end: usize,
 }
 
 impl Head {
@@ -359,22 +425,31 @@ impl Head {
 /// Each kind of block in turn, as many as follow one another, after the spaces ahead of
 /// `text`.
 fn head_blocks(text: &[Traced], kinds: &[(char, char)], leg: usize) -> Result<Head, PipelineError> {
-    let mut pos = text.len() - skip_spaces(text).len();
+    let mut buffer = CBuffer::new(text);
+    let mut pos = leading_spaces(text);
     let mut end = 0;
     let mut blocks = Vec::new();
     for &(open, close) in kinds {
-        while starts_with(&text[pos..], open) {
-            let (block, next) = parse_block(&text[pos..], open, close, ',')
-                .ok_or(PipelineError::UnclosedBlock { leg })?;
+        while buffer.at(pos) == open {
+            let (block, next) = parse_block(&mut buffer, pos, open, close, ',')
+                .ok_or(PipelineError::UnclosedBlock { leg })?
+                .read()?;
             blocks.push(block);
-            pos += next;
+            pos = next;
             end = pos;
         }
     }
+    let data = pos + leading_spaces(buffer.c_str(pos));
+    let data_end = data
+        + buffer
+            .c_str(data)
+            .len();
     Ok(Head {
         blocks,
+        text: buffer.into_chars(),
         end,
-        data: text.len() - skip_spaces(&text[pos..]).len(),
+        data,
+        data_end,
     })
 }
 
@@ -409,11 +484,39 @@ pub(crate) fn escape_block_commas(group: &mut [Traced]) {
     }
 }
 
-/// `switch_event_create_brackets` on the block opening `text`: the block and the
-/// index after its close.
-fn parse_block(text: &[Traced], open: char, close: char, comma: char) -> Option<(Block, usize)> {
-    let end = find_end_paren(text, open, close)?;
-    let separator = match text.get(1..end)? {
+/// What `switch_event_create_brackets` read of a block.
+struct Parsed {
+    block: Block,
+    /// The index after the close.
+    next: usize,
+    /// A non-ASCII separator's split runs past the close, splitting what follows by byte.
+    splits_past_close_by_byte: bool,
+}
+
+impl Parsed {
+    /// The block, or the refusal of a split no string carries.
+    fn read(self) -> Result<(Block, usize), PipelineError> {
+        if self.splits_past_close_by_byte {
+            return Err(PipelineError::SplitSeparatorUnreadable);
+        }
+        Ok((self.block, self.next))
+    }
+}
+
+/// `switch_event_create_brackets` on the block opening at `at` of `buffer`, rewriting the buffer
+/// as the switch does.
+fn parse_block(
+    buffer: &mut CBuffer,
+    at: usize,
+    open: char,
+    close: char,
+    comma: char,
+) -> Option<Parsed> {
+    let end = at + find_end_paren(buffer.c_str(at), open, close)?;
+    let separator = match buffer
+        .c_str(at)
+        .get(1..end - at)?
+    {
         [('^', ..), ('^', ..), (picked, ..), ..] => *picked,
         [('^', ..), ('^', ..)] => '\0',
         _ => ',',
@@ -424,46 +527,63 @@ fn parse_block(text: &[Traced], open: char, close: char, comma: char) -> Option<
         pairs: Vec::new(),
         rewrites_following_text: false,
     };
+    let next = end + 1;
     if block.separator_unreadable() {
-        return Some((block, end + 1));
+        let trailing_backslashes = buffer
+            .c_str(at)
+            .get(4..end - at)
+            .unwrap_or_default()
+            .iter()
+            .rev()
+            .take_while(|&&(c, ..)| c == '\\')
+            .count();
+        return Some(Parsed {
+            block,
+            next,
+            splits_past_close_by_byte: trailing_backslashes % 2 == 1,
+        });
     }
-    let mut buffer = CBuffer::new(text);
+    let following = chars(buffer.c_str(next));
     buffer.terminate(end);
-    let (mut data, mut delim) = (1, comma);
-    let mut next = following_block(&buffer, end + 1, open, close);
+    let (mut data, mut delim) = (at + 1, comma);
+    let mut second = following_block(buffer, next, open, close);
     loop {
         if buffer.at(data) == '^' && buffer.at(data + 1) == '^' {
             delim = buffer.at(data + 2);
             data += 3;
         }
-        match buffer.separate(data, delim, BLOCK_PAIRS) {
-            Some(tokens) => {
-                for token in tokens {
-                    block
-                        .pairs
-                        .push(pair(&mut buffer, token));
-                }
-            }
-            None => block
+        let split = buffer.separate(data, delim, BLOCK_PAIRS);
+        if split.unreadable_head {
+            block
                 .pairs
                 .push(Pair {
                     key: untrace(buffer.c_str(data)),
                     effect: PairEffect::Unreadable,
-                }),
+                });
+        } else {
+            for token in split.tokens {
+                block
+                    .pairs
+                    .push(pair(buffer, token.start));
+            }
         }
-        match next.take() {
-            Some(at) => data = at,
+        match second.take() {
+            Some(close) => data = close,
             None => break,
         }
     }
-    block.rewrites_following_text = buffer
-        .c_str(end + 1)
-        .iter()
+    block.rewrites_following_text = chars(buffer.c_str(next)) != following;
+    Some(Parsed {
+        block,
+        next,
+        splits_past_close_by_byte: false,
+    })
+}
+
+fn chars(text: &[Traced]) -> Vec<char> {
+    text.iter()
         .map(|&(c, ..)| c)
-        .ne(text[end + 1..]
-            .iter()
-            .map(|&(c, ..)| c));
-    Some((block, end + 1))
+        .collect()
 }
 
 /// Where `switch_event_create_brackets` reads more pairs after the first: the close of a block
@@ -495,14 +615,21 @@ impl Block {
 /// The pair the `=` split reads of the token at `index`, in place.
 fn pair(buffer: &mut CBuffer, index: usize) -> Pair {
     let token = untrace(buffer.c_str(index));
-    let Some(fields) = buffer.separate(index, '=', 2) else {
+    let split = buffer.separate(index, '=', 2);
+    if split.unreadable_head {
         return Pair {
             key: token,
             effect: PairEffect::Unreadable,
         };
-    };
-    let field = |at: Option<&usize>| at.map_or_else(String::new, |&at| untrace(buffer.c_str(at)));
-    let key = field(fields.first());
+    }
+    let fields: Vec<usize> = split
+        .tokens
+        .iter()
+        .map(|field| field.start)
+        .collect();
+    let key = fields
+        .first()
+        .map_or_else(String::new, |&at| untrace(buffer.c_str(at)));
     let effect = match fields[..] {
         [_, value] => match untrace(buffer.c_str(value)) {
             value if value.is_empty() => PairEffect::Cleared,

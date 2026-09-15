@@ -120,8 +120,8 @@ pub enum LegWarning {
         /// Variable name.
         key: String,
     },
-    /// The value holds `${`, which the switch refuses unless
-    /// `origination_nested_vars=true` appears in the list.
+    /// The value holds `${`, which the switch refuses unless `origination_nested_vars=true`
+    /// appears in the leg's thread or a `<>` block ahead of an enterprise split sets it true.
     NestedVarsRefused {
         /// Index among the leg's blocks.
         block: usize,
@@ -134,8 +134,8 @@ pub enum LegWarning {
         /// Index among the leg's blocks.
         block: usize,
     },
-    /// Parsing the block writes into the leg's text after it, as a block of `^^` alone does, so
-    /// what the leg dials is not the endpoint shown.
+    /// Parsing the block writes into the leg's text after it, as a block of `^^` alone does. The
+    /// endpoint is read from the rewritten text, so a render of the leg reads differently.
     BlockRewritesFollowingText {
         /// Index among the leg's blocks.
         block: usize,
@@ -164,7 +164,7 @@ pub enum ListWarning {
         block: usize,
     },
     /// Parsing a list or thread block writes into the text after it, as a block of `^^` alone
-    /// does, so what follows is not what the switch reads.
+    /// does. What follows is read from the rewritten text, so a render of the list reads differently.
     BlockRewritesFollowingText {
         /// Index among the list's blocks and then each thread's, in reading order.
         block: usize,
@@ -188,6 +188,9 @@ pub enum FlattenedDialStringError {
     },
     /// The text ends in `\n`, as a reply body does before its suffix is stripped.
     TrailingNewline,
+    /// A split the switch runs on a non-ASCII `^^` separator's first byte reaches text no string
+    /// carries: a group or leg opening such a head, or a block with one ending in a backslash.
+    SplitSeparatorUnreadable,
 }
 
 /// Renders a [`FlattenedDialString`]. Returned by
@@ -218,7 +221,6 @@ impl FlattenedDialString {
         let DialList {
             blocks,
             threads,
-            nested_vars,
             quote_spans_legs,
             carrier_expands,
         } = list;
@@ -255,9 +257,7 @@ impl FlattenedDialString {
             let separator_start = kept
                 .last()
                 .map_or(raw.start, |(before, _)| before.end);
-            if let Some(read) =
-                FlattenedThread::read(input, thread, &blocks, nested_vars, separator_start)
-            {
+            if let Some(read) = FlattenedThread::read(input, thread, &blocks, separator_start) {
                 kept.push((raw, read));
             }
         }
@@ -501,13 +501,13 @@ impl FlattenedThread {
         input: &str,
         thread: Thread,
         list_blocks: &[Block],
-        nested_vars: bool,
         separator_start: usize,
     ) -> Option<Self> {
         let Thread {
             raw,
             blocks,
             groups: pipeline_groups,
+            nested_vars,
         } = thread;
         let inherited: Arc<[Block]> = list_blocks
             .iter()
@@ -631,9 +631,10 @@ impl FlattenedLeg {
     /// The value the leg's channel receives, after the list and thread blocks
     /// are installed in the order `local_var_clobber` decides.
     ///
-    /// A value naming a variable is refused at install, as the switch refuses
-    /// it, unless `origination_nested_vars=true` appears in the list. On a
-    /// channel with `CF_NO_PRESENCE`, originate deletes `presence_id`.
+    /// A value naming a variable is refused at install, as the switch refuses it, unless
+    /// `origination_nested_vars=true` appears in the leg's thread or a `<>` block ahead of an
+    /// enterprise split sets it true. On a channel with `CF_NO_PRESENCE`, originate deletes
+    /// `presence_id`.
     pub fn variable(&self, name: impl VariableName) -> Option<&str> {
         pipeline::resolve(
             self.inherited
@@ -724,6 +725,7 @@ impl FlattenedDialStringError {
             PipelineError::Empty => Self::Empty,
             PipelineError::ArgvSplit => Self::ArgvSplit,
             PipelineError::UnclosedBlock { leg } => Self::UnclosedBlock { leg },
+            PipelineError::SplitSeparatorUnreadable => Self::SplitSeparatorUnreadable,
         }
     }
 }
@@ -818,6 +820,9 @@ impl fmt::Display for FlattenedDialStringError {
             Self::ArgvSplit => f.write_str("originate's argument split cuts the dial string"),
             Self::UnclosedBlock { leg } => write!(f, "a block on leg {leg} never closes"),
             Self::TrailingNewline => f.write_str("dial string ends in a newline"),
+            Self::SplitSeparatorUnreadable => f.write_str(
+                "a split on a non-ASCII ^^ separator's first byte reaches past its text",
+            ),
         }
     }
 }
