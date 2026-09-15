@@ -154,11 +154,6 @@ async fn live_inline_argument_keeps_a_hostile_value() {
     );
 }
 
-/// The boundary the builder's refusal is drawn at: one quote arrives, so
-/// refusing it would be over-strict. A second is stripped, which is why two are
-/// refused — that half cannot be asserted here, because the builder will not
-/// produce the command that would demonstrate it.
-///
 /// The argument carries a space so the action list is wrapped in quotes, which
 /// is the case where the escaping is load-bearing rather than incidental.
 #[tokio::test]
@@ -199,6 +194,32 @@ async fn live_inline_argument_keeps_an_edge_space_and_a_tab() {
         run_and_read_back(&cmd, "probe_edge").await,
         Some(value.to_string())
     );
+}
+
+/// Two quotes in one value pair with each other at either split unless each is escaped
+/// for both, and a `cond` over quoted operands is the expression that pairing breaks.
+#[tokio::test]
+#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+async fn live_inline_argument_keeps_two_quotes() {
+    for (value, want) in [
+        ("x'a'y z", "x'a'y z"),
+        ("${cond('${probe_unset}' == '' ? empty : full)}", "empty"),
+    ] {
+        let cmd = Originate::inline(
+            parked_loopback(),
+            [
+                Application::new("set", Some(format!("probe_quotes={value}"))),
+                Application::park(),
+            ],
+        )
+        .expect("inline builder rejected a valid list");
+
+        assert_eq!(
+            run_and_read_back(&cmd, "probe_quotes").await,
+            Some(want.to_string()),
+            "{value}"
+        );
+    }
 }
 
 /// An argument rewritten after construction still renders correctly, which is

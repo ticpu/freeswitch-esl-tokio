@@ -78,6 +78,12 @@ dialplan misfire. `dialplan`, `dialplan_raw` and config load refuse both;
 `set_dialplan` and a target swapped through `target_mut` cannot until they
 return `Result`.
 
+### `Originate::validate_inline` and `OriginateError::UndeliverableArgument` refuse nothing
+
+Every inline argument is escaped for the splits that read it, so the check is
+always `Ok` and the variant is never returned. Remove both; `inline` then fails
+only on an empty list.
+
 ### Consider removing `Display` for `Variables` and `Endpoint`
 
 Both render for `DialStringCarrier::EslApi` at the default `BlockParse`, which

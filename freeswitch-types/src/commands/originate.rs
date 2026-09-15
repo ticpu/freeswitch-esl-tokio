@@ -30,32 +30,6 @@ pub(super) const DEFAULT_CONTEXT: &str = "default";
 /// The separator an inline action list uses unless one is named.
 pub(super) const DEFAULT_INLINE_DELIMITER: char = ',';
 
-/// Reject an application whose arguments an inline action list cannot carry.
-///
-/// One single quote arrives intact, escaped or not. A second is read as the
-/// close of a quoted region, so `cleanup_separated_string` strips both and the
-/// application receives a value with the quotes silently missing — which is how
-/// `${cond('${v}' != '' ? a : b)}` reaches `cond` with no operands and returns
-/// `-ERR` into a channel variable. No escape count avoids it: the characters
-/// are read as quoting rather than as an escape sequence.
-fn check_deliverable(apps: &[Application]) -> Result<(), OriginateError> {
-    for app in apps {
-        let quotes = app
-            .args()
-            .unwrap_or_default()
-            .matches('\'')
-            .count();
-        if quotes > 1 {
-            return Err(OriginateError::UndeliverableArgument {
-                application: app
-                    .name()
-                    .to_string(),
-            });
-        }
-    }
-    Ok(())
-}
-
 /// Reject a target `originate_function` reads as something else: it runs any target opening `&`
 /// and more as an application, and ends that application's arguments at the first `)`.
 pub(super) fn check_target_readable(target: &OriginateTarget) -> Result<(), OriginateError> {
@@ -528,10 +502,10 @@ impl Originate {
     /// [`target_mut`](Self::target_mut), or by substituting into a template —
     /// cannot leave the command inconsistent.
     ///
-    /// Returns `Err` if the iterator yields no applications, or if one carries
-    /// an argument an inline action list cannot deliver — see
-    /// [`validate_inline`](Self::validate_inline), which is the same check and
-    /// is what to call after substituting into an argument.
+    /// Each action is escaped for the hunt's split and again for the line's, so quotes,
+    /// backslashes and edge spaces in an argument arrive as written.
+    ///
+    /// Returns `Err` if the iterator yields no applications.
     pub fn inline(
         endpoint: Endpoint,
         apps: impl IntoIterator<Item = Application>,
@@ -542,7 +516,6 @@ impl Originate {
         if apps.is_empty() {
             return Err(OriginateError::EmptyInlineApplications);
         }
-        check_deliverable(&apps)?;
         Ok(Self {
             endpoint,
             target: OriginateTarget::InlineApplications(apps),
@@ -583,7 +556,6 @@ impl Originate {
         if delimiter == ':' || delimiter == '\\' || !delimiter.is_ascii() {
             return Err(OriginateError::InvalidInlineDelimiter(delimiter));
         }
-        check_deliverable(&apps)?;
         Ok(Self {
             endpoint,
             target: OriginateTarget::InlineApplications(apps),
@@ -640,21 +612,10 @@ impl Originate {
         self.argv_separator
     }
 
-    /// Re-check that every inline argument is one the switch can deliver.
-    ///
-    /// The constructors run this, but they only see the arguments they were
-    /// given. Call it again after rewriting one — through
-    /// [`args_mut`](Application::args_mut), through [`target_mut`](Self::target_mut),
-    /// or by substituting a rendered value into a template — because the
-    /// substituted text is where an undeliverable value appears without anyone
-    /// having written it.
-    ///
-    /// A non-inline target is always deliverable, so this is `Ok` for one.
+    /// Always `Ok`: every inline argument is escaped for the splits that read it, so none is
+    /// undeliverable.
     pub fn validate_inline(&self) -> Result<(), OriginateError> {
-        match &self.target {
-            OriginateTarget::InlineApplications(apps) => check_deliverable(apps),
-            _ => Ok(()),
-        }
+        Ok(())
     }
 
     /// Set the dialplan type.
@@ -1104,8 +1065,8 @@ pub enum OriginateError {
     UnknownEndpointType(String),
     /// The requested inline separator cannot separate a list at all. Carries it.
     InvalidInlineDelimiter(char),
-    /// An inline argument carries more than one single quote, which the switch
-    /// strips as quoting rather than delivering. Names the application.
+    /// An inline argument the switch cannot deliver. Not returned: every inline argument is
+    /// escaped for the splits that read it.
     UndeliverableArgument {
         /// The application whose arguments cannot be delivered.
         application: String,
@@ -1161,9 +1122,7 @@ impl std::fmt::Display for OriginateError {
             }
             Self::UndeliverableArgument { application } => write!(
                 f,
-                "the {application} argument carries more than one single quote, \
-                 which an inline action list strips as quoting rather than \
-                 delivering; no escaping avoids it"
+                "the {application} argument cannot be delivered in an inline action list"
             ),
             Self::UnknownEndpointType(s) => {
                 write!(f, "unknown endpoint type ({} bytes)", s.len())
@@ -2240,84 +2199,40 @@ mod tests {
         );
     }
 
-    /// One quote survives an inline action list; a pair is read as quoting and
-    /// both are stripped, so the application receives a value the caller never
-    /// wrote. Measured on a live switch, both wrapped and bare.
+    /// Escaped for the hunt's split and again for the line's, a pair of quotes reaches the
+    /// application as written; measured on a live switch.
     #[test]
-    fn inline_refuses_an_argument_carrying_two_quotes() {
-        let err = Originate::inline(
-            null_endpoint(),
-            [Application::new(
-                "set",
-                Some("c=${cond('${v}' != '' ? red : black)}"),
-            )],
-        )
-        .unwrap_err();
-
-        assert!(matches!(
-            err,
-            OriginateError::UndeliverableArgument { ref application } if application == "set"
-        ));
-    }
-
-    #[test]
-    fn inline_allows_the_single_quote_that_does_arrive() {
-        Originate::inline(
-            null_endpoint(),
-            [Application::new("set", Some("greeting=it's_me"))],
-        )
-        .expect("one quote is deliverable");
-    }
-
-    #[test]
-    fn inline_with_delimiter_refuses_two_quotes_as_well() {
-        let err = Originate::inline_with_delimiter(
-            null_endpoint(),
-            [Application::new("playback", Some("a'b'c"))],
-            '|',
-        )
-        .unwrap_err();
-        assert!(matches!(err, OriginateError::UndeliverableArgument { .. }));
-    }
-
-    #[test]
-    fn undeliverable_argument_names_the_application_not_the_value() {
-        let msg = Originate::inline(
-            null_endpoint(),
-            [Application::new("set", Some("secret=a'b'c"))],
-        )
-        .unwrap_err()
-        .to_string();
-
-        assert!(
-            msg.contains("set"),
-            "message should name the application: {msg}"
-        );
-        assert!(!msg.contains("secret"), "message quoted its input: {msg}");
-        assert!(!msg.contains("a'b'c"), "message quoted its input: {msg}");
-    }
-
-    /// The constructors cannot see a value substituted afterwards, so the same
-    /// check has to be reachable at the point a caller is about to send.
-    #[test]
-    fn validate_inline_catches_a_value_introduced_after_construction() {
-        let mut cmd = Originate::inline(
-            null_endpoint(),
-            [Application::new("set", Some("c=${placeholder}"))],
-        )
-        .unwrap();
-        cmd.validate_inline()
-            .expect("clean at construction");
-
-        let OriginateTarget::InlineApplications(apps) = cmd.target_mut() else {
-            panic!("expected InlineApplications");
-        };
-        *apps[0].args_mut() = Some("c=${cond('x' != '' ? a : b)}".to_string());
-
-        assert!(matches!(
-            cmd.validate_inline(),
-            Err(OriginateError::UndeliverableArgument { .. })
-        ));
+    fn inline_delivers_an_argument_carrying_two_quotes() {
+        let cases = [
+            (
+                Originate::inline(
+                    null_endpoint(),
+                    [Application::new(
+                        "set",
+                        Some("c=${cond('${v}' != '' ? red : black)}"),
+                    )],
+                )
+                .unwrap(),
+                r"originate loopback/9199 'set:c=${cond(\\\'${v}\\\' != \\\'\\\' ? red : black)}' inline",
+            ),
+            (
+                Originate::inline_with_delimiter(
+                    null_endpoint(),
+                    [Application::new("playback", Some("a'b'c"))],
+                    '|',
+                )
+                .unwrap(),
+                r"originate loopback/9199 'm:|:playback:a\\\'b\\\'c' inline",
+            ),
+        ];
+        for (cmd, wire) in cases {
+            assert_eq!(cmd.validate_inline(), Ok(()));
+            assert_eq!(cmd.to_string(), wire);
+            let parsed: Originate = wire
+                .parse()
+                .unwrap_or_else(|e| panic!("{wire:?} failed to parse: {e}"));
+            assert_eq!(parsed.target(), cmd.target(), "{wire:?}");
+        }
     }
 
     #[test]

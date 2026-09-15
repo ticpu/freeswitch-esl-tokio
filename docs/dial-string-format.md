@@ -298,24 +298,22 @@ nothing of it survives into the extension — a masquerade onto another channel
 carries the actions, never the prefix. `Originate::inline_with_delimiter` emits
 it, and escapes the named separator the same way.
 
-**One single quote arrives; a pair does not.** With the list wrapped in quotes —
-which happens whenever any argument contains a space — a bare quote loses the
-value entirely and `\'` delivers it. Unwrapped, both forms deliver it. A second
-quote in the same value is read as closing a quoted region, so both are stripped
-and the application receives the value with them missing:
+**A quote is escaped for both splits.** Written into the line with one
+backslash, a quote reaches the hunt's split bare. With the list wrapped in
+quotes — which happens whenever any argument contains a space — a bare quote
+loses the value entirely, and a second one in the same value is read as closing
+a quoted region, so both are stripped:
 
 ```
 set:v=a\'b with space     -> a'b with space
 set:v=x\'a\'y with space  -> xay with space
 ```
 
-No escape count avoids the second case; the characters are read as quoting
-rather than as an escape sequence. This is what breaks a rendered
-`${cond('${x}' != '' ? a : b)}`: `cond` receives no operands and returns `-ERR`
-into the channel variable, which then rides out on the wire. `Originate::inline`
-refuses an argument carrying more than one quote for that reason, and
-`Originate::validate_inline` re-runs the check after a value has been
-substituted into an argument.
+This is what breaks a hand-written `${cond('${x}' != '' ? a : b)}`: `cond`
+receives no operands and returns `-ERR` into the channel variable. Escaped once
+for the hunt and again for the line, `\\\'` on the blank split, every quote
+arrives: `x'a'y z` and a `cond` over quoted operands were measured intact, and
+that is what `Originate::inline` writes.
 
 ### `^^X` block separator
 
