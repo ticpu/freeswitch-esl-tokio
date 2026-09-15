@@ -11,7 +11,10 @@ use freeswitch_esl_tokio::{
     EslError, EslEvent, EslEventPriority, EslEventType, EventFormat, EventHeader,
     EventSubscription, HeaderLookup, ReplyStatus,
 };
-use live_common::{connect, custom_roundtrip};
+use live_common::{
+    connect, custom_roundtrip, custom_roundtrip_as, percent_escape_tree, switch_version,
+    PercentEscape,
+};
 use std::time::Duration;
 use tokio::time::Instant;
 
@@ -132,6 +135,42 @@ async fn live_recv_custom_sendevent_percent_decoded() {
         evt.lossy_values()
             .is_empty(),
         "valid UTF-8 is not lossy"
+    );
+}
+
+/// `switch_event_serialize` encodes each value with `switch_url_encode`. Upstream copies a `%`
+/// opening a valid `%XX` through unescaped, so such a value decodes to something the switch never
+/// held; the 1.10.13 fork writes every `%` as `%25` and the value survives. A JSON event
+/// escapes nothing by URL and carries the value intact on either.
+#[tokio::test]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
+async fn live_event_value_with_a_valid_percent_escape_by_tree() {
+    let (client, mut events, _permit) = connect().await;
+    let version = switch_version(&client).await;
+
+    let sent = "a%41b c%zz";
+    let plain = custom_roundtrip(&client, &mut events, &[("X-Percent-Test", sent)]).await;
+    let json = custom_roundtrip_as(
+        &client,
+        &mut events,
+        EventFormat::Json,
+        &[("X-Percent-Test", sent)],
+    )
+    .await;
+
+    let want = match percent_escape_tree(version) {
+        PercentEscape::KeepsValidEscapes => "aAb c%zz",
+        PercentEscape::EncodesEveryPercent => sent,
+    };
+    assert_eq!(
+        plain.header_str("X-Percent-Test"),
+        Some(want),
+        "plain, FreeSWITCH {version}"
+    );
+    assert_eq!(
+        json.header_str("X-Percent-Test"),
+        Some(sent),
+        "json, FreeSWITCH {version}"
     );
 }
 

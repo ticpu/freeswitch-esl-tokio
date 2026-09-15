@@ -21,8 +21,9 @@ use freeswitch_esl_tokio::{
 };
 use live_common::{
     bgapi_originate_ok, block_parse_under_test, carried_in, channel_exists, connect,
-    escaping_block, getvar, kill_channel, target_under_test, wait_for_own_event, wait_for_var,
-    ChannelReaper, ESCAPING_CASES, ESCAPING_SEPARATOR,
+    escaping_block, getvar, kill_channel, percent_escape_tree, switch_version, target_under_test,
+    wait_for_own_event, wait_for_var, ChannelReaper, PercentEscape, ESCAPING_CASES,
+    ESCAPING_SEPARATOR,
 };
 use std::collections::HashSet;
 use std::time::Duration;
@@ -732,6 +733,55 @@ async fn live_sofia_destination_arrives_on_either_carrier() {
     }
 }
 
+/// With URL encoding left on, `protect_dest_uri` encodes the user part of a destination carrying an
+/// unsafe character. Upstream keeps a valid `%XX` there; the 1.10.13 fork encodes its `%`.
+///
+/// Read off a JSON event: a plain one carries the value through `switch_event_serialize`, which
+/// upstream leaves ambiguous for a valid `%XX`.
+#[tokio::test]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
+async fn live_sofia_destination_encodes_the_user_part_by_tree() {
+    let (client, mut events, _permit) = connect().await;
+    client
+        .subscribe_events(EventFormat::Json, &[EslEventType::ChannelCreate])
+        .await
+        .unwrap();
+
+    let version = switch_version(&client).await;
+    let user = match percent_escape_tree(version) {
+        PercentEscape::KeepsValidEscapes => "a%41%20b",
+        PercentEscape::EncodesEveryPercent => "a%2541%20b",
+    };
+
+    for carrier in CARRIERS {
+        let uuid = create_uuid(&client).await;
+        let endpoint = Endpoint::Sofia(
+            SofiaEndpoint::new("lab-lo", "sip:a%41 b@127.0.0.1:9")
+                .with_variables(uuid_block(&uuid, &[])),
+        );
+
+        let mut reaper = ChannelReaper::new(&client);
+        reaper.track(&uuid);
+        if let Some(anchor) = dial_without_waiting(&client, &endpoint, carrier).await {
+            reaper.track(anchor);
+        }
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let created =
+            wait_for_own_event(&mut events, &uuid, EslEventType::ChannelCreate, deadline).await;
+        reaper
+            .reap()
+            .await;
+
+        let created =
+            created.unwrap_or_else(|| panic!("{carrier:?}: {endpoint} was never created"));
+        assert_eq!(
+            created.variable(SofiaVariable::SipDestinationUrl),
+            Some(format!("sip:{user}@127.0.0.1:9").as_str()),
+            "{carrier:?}: {endpoint} on FreeSWITCH {version}"
+        );
+    }
+}
+
 /// The log line `user_outgoing_channel` writes when the directory holds no such user, found by
 /// the uuid the name opens with.
 async fn wait_for_user_lookup(
@@ -1188,6 +1238,90 @@ async fn live_empty_value_still_never_reaches_the_channel() {
         Some("SENTINEL"),
         "the block itself must be well-formed, or the assertion above proves nothing"
     );
+
+    drop(permit);
+}
+
+/// The `variable_*` headers of `uuid`'s dump whose name matches `name` ignoring case, as written.
+async fn dumped_spellings(client: &EslClient, uuid: &str, name: &str) -> Vec<(String, String)> {
+    let body = client
+        .api(&format!("uuid_dump {uuid}"))
+        .await
+        .expect("uuid_dump transport error")
+        .body()
+        .expect("uuid_dump must return a body")
+        .to_owned();
+    let dump = parse_channel_dump(&body).unwrap_or_else(|e| panic!("uuid_dump {uuid}: {e}"));
+    let wanted = format!("variable_{name}");
+    dump.headers()
+        .iter()
+        .filter(|(key, _)| key.eq_ignore_ascii_case(&wanted))
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect()
+}
+
+/// The refusals of a key carrying `[` and of two keys differing only in case rest on this: the
+/// block's event and the channel's variables both replace a name by `strcasecmp`, and
+/// `switch_event_base_add_header` reads `[` as an array index. Written by hand because `Variables`
+/// will not build either. A `_body` key is not among them: it arrives as a variable.
+///
+/// Failing here is good news — the refusal it names should then be revisited rather than kept.
+#[tokio::test]
+#[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
+async fn live_keys_the_switch_collapses_or_reads_as_an_index() {
+    type Spellings<'a> = &'a [(&'a str, &'a str)];
+    type Dialled<'a> = (&'a str, &'a [(&'a str, Spellings<'a>)]);
+
+    let (client, _events, permit) = connect().await;
+
+    let cases: &[Dialled] = &[
+        (
+            "{k=lower,K=upper,a[1]=arr,b[x=idx,_body=text,sentinel=S}null/escaping",
+            &[
+                ("k", &[("variable_K", "upper")]),
+                ("a", &[("variable_a", "arr")]),
+                ("a[1]", &[]),
+                ("b", &[("variable_b", "idx")]),
+                ("_body", &[("variable__body", "text")]),
+                ("sentinel", &[("variable_sentinel", "S")]),
+            ],
+        ),
+        ("{k=g}[K=l]null/escaping", &[("k", &[("variable_k", "g")])]),
+        (
+            "{local_var_clobber=true,k=g}[K=l]null/escaping",
+            &[("k", &[("variable_K", "l")])],
+        ),
+    ];
+
+    for (dial, want) in cases {
+        let uuid = client
+            .api(&format!("originate {dial} &park()"))
+            .await
+            .expect("originate transport error")
+            .api_result()
+            .unwrap_or_else(|e| panic!("originate {dial} rejected: {e}"))
+            .to_string();
+        let mut reaper = ChannelReaper::new(&client);
+        reaper.track(&uuid);
+        let mut got = Vec::new();
+        for (name, _) in *want {
+            got.push(dumped_spellings(&client, &uuid, name).await);
+        }
+        reaper
+            .reap()
+            .await;
+
+        for ((name, want), got) in want
+            .iter()
+            .zip(got)
+        {
+            let want: Vec<(String, String)> = want
+                .iter()
+                .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+                .collect();
+            assert_eq!(got, want, "{name} from {dial}");
+        }
+    }
 
     drop(permit);
 }

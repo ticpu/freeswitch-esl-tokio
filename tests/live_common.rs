@@ -10,7 +10,8 @@ use freeswitch_esl_tokio::commands::{
 };
 use freeswitch_esl_tokio::{
     parse_api_body, EslClient, EslConnectOptions, EslEvent, EslEventPriority, EslEventStream,
-    EslEventType, EventFormat, EventHeader, HeaderLookup, Originate, UNDEF_VALUE,
+    EslEventType, EventFormat, EventHeader, FreeswitchVersion, HeaderLookup, Originate,
+    UNDEF_VALUE,
 };
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
@@ -171,6 +172,16 @@ pub async fn custom_roundtrip(
     events: &mut EslEventStream,
     headers: &[(&str, &str)],
 ) -> EslEvent {
+    custom_roundtrip_as(client, events, EventFormat::Plain, headers).await
+}
+
+/// [`custom_roundtrip`], delivered in `format`.
+pub async fn custom_roundtrip_as(
+    client: &EslClient,
+    events: &mut EslEventStream,
+    format: EventFormat,
+    headers: &[(&str, &str)],
+) -> EslEvent {
     static NEXT_SUBCLASS: AtomicU32 = AtomicU32::new(0);
     let subclass = format!(
         "esl_test::rt_{}_{}",
@@ -179,7 +190,7 @@ pub async fn custom_roundtrip(
     );
 
     client
-        .subscribe_events_raw(EventFormat::Plain, &format!("CUSTOM {subclass}"))
+        .subscribe_events_raw(format, &format!("CUSTOM {subclass}"))
         .await
         .expect("subscribe to the test subclass");
 
@@ -214,6 +225,47 @@ pub async fn custom_roundtrip(
         }
     }
     panic!("did not receive the CUSTOM event sent on {subclass}");
+}
+
+/// The switch's own version, from the `version` API.
+pub async fn switch_version(client: &EslClient) -> FreeswitchVersion {
+    let resp = client
+        .api("version")
+        .await
+        .expect("version transport error");
+    let body = resp
+        .api_result()
+        .expect("version rejected");
+    let short = body
+        .split_whitespace()
+        .skip_while(|word| *word != "Version")
+        .nth(1)
+        .and_then(|word| {
+            word.split('+')
+                .next()
+        })
+        .unwrap_or_else(|| panic!("no version in {body:?}"));
+    short
+        .parse()
+        .unwrap_or_else(|e| panic!("{short:?}: {e}"))
+}
+
+/// How `switch_url_encode` treats a `%` that opens a valid `%XX`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PercentEscape {
+    /// Upstream: the escape is copied through, so it reads back decoded.
+    KeepsValidEscapes,
+    /// The 1.10.13 fork: every `%` is written `%25`.
+    EncodesEveryPercent,
+}
+
+/// The measured tree behind `version`; a version neither tree was measured at panics.
+pub fn percent_escape_tree(version: FreeswitchVersion) -> PercentEscape {
+    match (version.major(), version.minor(), version.micro()) {
+        (1, 10, 13) => PercentEscape::EncodesEveryPercent,
+        (1, minor, _) if minor >= 11 => PercentEscape::KeepsValidEscapes,
+        _ => panic!("no measured %XX behaviour for FreeSWITCH {version}"),
+    }
 }
 
 /// Kill a channel by UUID, ignoring errors (channel may already be gone).
