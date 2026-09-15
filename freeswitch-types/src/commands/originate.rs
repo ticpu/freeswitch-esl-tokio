@@ -8,7 +8,8 @@ use std::time::Duration;
 
 use super::endpoint::{EndpointFieldFault, ParseGroupCallOrderError};
 use super::variables::{
-    write_escaped, BlockParse, DialStringCarrier, DialStringTarget, InvalidArgvSeparator,
+    breaks_a_split, write_escaped, BlockParse, DialStringCarrier, DialStringTarget,
+    InvalidArgvSeparator,
 };
 use super::{clean_argument, originate_quote, originate_split};
 use crate::channel::ParseHangupCauseError;
@@ -29,6 +30,15 @@ pub(super) const DEFAULT_CONTEXT: &str = "default";
 
 /// The separator an inline action list uses unless one is named.
 pub(super) const DEFAULT_INLINE_DELIMITER: char = ',';
+
+/// Reject an inline separator the hunt's split breaks on, or `:`, where it splits an application
+/// from its data.
+pub(super) fn check_inline_delimiter(delimiter: char) -> Result<(), OriginateError> {
+    if delimiter == ':' || breaks_a_split(delimiter) {
+        return Err(OriginateError::InvalidInlineDelimiter(delimiter));
+    }
+    Ok(())
+}
 
 /// Reject a target `originate_function` reads as something else: it runs any target opening `&`
 /// and more as an application, and ends that application's arguments at the first `)`.
@@ -541,10 +551,10 @@ impl Originate {
     /// choice never has to depend on the data.
     ///
     /// Returns `Err` if the iterator yields no applications, or if `delimiter`
-    /// cannot separate a list at all: `:` never can, because the hunt splits an
-    /// application from its data on the first colon, and `\` never can because
-    /// it is what the escaping uses. `inline_dialplan_hunt` reads the separator
-    /// as a single byte, so it must be ASCII.
+    /// cannot separate a list: `:`, where the hunt splits an application from its
+    /// data, and what [`DialStringTarget::with_argv_separator`] refuses for the
+    /// switch's reasons, since the hunt's split is the same one: space, controls,
+    /// non-ASCII, `\`, `'` and lowercase `n r t s`. Parse refuses the same.
     pub fn inline_with_delimiter(
         endpoint: Endpoint,
         apps: impl IntoIterator<Item = Application>,
@@ -556,9 +566,7 @@ impl Originate {
         if apps.is_empty() {
             return Err(OriginateError::EmptyInlineApplications);
         }
-        if delimiter == ':' || delimiter == '\\' || !delimiter.is_ascii() {
-            return Err(OriginateError::InvalidInlineDelimiter(delimiter));
-        }
+        check_inline_delimiter(delimiter)?;
         Ok(Self {
             endpoint,
             target: OriginateTarget::InlineApplications(apps),
@@ -1066,7 +1074,7 @@ pub enum OriginateError {
     },
     /// A dial string whose leading path segment names no endpoint type.
     UnknownEndpointType(String),
-    /// The requested inline separator cannot separate a list at all. Carries it.
+    /// An inline separator the hunt's split breaks on, or `:`. Carries it.
     InvalidInlineDelimiter(char),
     /// An inline argument the switch cannot deliver. Not returned: every inline argument is
     /// escaped for the splits that read it.
@@ -1135,8 +1143,8 @@ impl std::fmt::Display for OriginateError {
             Self::UnknownGroupCallOrder { value, .. } => {
                 write!(f, "unknown group_call order suffix ({} bytes)", value.len())
             }
-            Self::InvalidInlineDelimiter(delimiter) => {
-                write!(f, "{delimiter:?} cannot separate this inline action list")
+            Self::InvalidInlineDelimiter(_) => {
+                f.write_str("the named separator cannot separate an inline action list")
             }
             Self::UndeliverableArgument { application } => write!(
                 f,

@@ -416,7 +416,11 @@ An `m:<delim>:` prefix immediately before the first action changes the separator
 for the list, the way `^^` does for a block. It is consumed by the hunt, so
 nothing of it survives into the extension — a masquerade onto another channel
 carries the actions, never the prefix. `Originate::inline_with_delimiter` emits
-it, and escapes the named separator the same way.
+it, and escapes the named separator the same way. The hunt's split is the one
+a `^^X` argument separator names, so the constructor and parse refuse what
+`with_argv_separator` refuses for the switch's reasons, and `:`, where each
+action splits into application and data: under `m:s:` an edge space written
+`\s` arrives as `s`.
 
 **A quote is escaped for both splits.** Written into the line with one
 backslash, a quote reaches the hunt's split bare. With the list wrapped in

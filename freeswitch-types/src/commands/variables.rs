@@ -348,7 +348,7 @@ impl std::error::Error for InvalidArgvSeparator {}
 
 /// Space, controls, non-ASCII, `\`, `'` and lowercase `n r t s`, which break a split on `sep` or
 /// the escapes its cleanup reads.
-fn breaks_a_split(sep: char) -> bool {
+pub(super) fn breaks_a_split(sep: char) -> bool {
     !sep.is_ascii_graphic() || matches!(sep, '\\' | '\'' | 'n' | 'r' | 't' | 's')
 }
 

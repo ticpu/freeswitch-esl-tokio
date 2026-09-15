@@ -52,7 +52,7 @@ pub use variables::{
 use crate::tokenizer::{
     blank_delim_spans, char_delim_spans, cleanup, delimiter_override, separate, trace, untrace,
 };
-use originate::{check_target_readable, DEFAULT_INLINE_DELIMITER};
+use originate::{check_inline_delimiter, check_target_readable, DEFAULT_INLINE_DELIMITER};
 
 /// Find the index of the closing bracket matching the opener at position 0.
 ///
@@ -166,7 +166,7 @@ pub fn originate_split(line: &str, split_at: char) -> Result<Vec<String>, Origin
 pub(crate) fn split_inline_prefix(s: &str) -> (Option<char>, &str) {
     let bytes = s.as_bytes();
     match bytes {
-        [b'm', b':', delimiter, b':', ..] if delimiter.is_ascii() && *delimiter != b':' => {
+        [b'm', b':', delimiter, b':', ..] if delimiter.is_ascii() => {
             (Some(*delimiter as char), &s[4..])
         }
         _ => (None, s),
@@ -214,6 +214,7 @@ pub fn parse_originate_target(
     } else if matches!(dialplan, Some(DialplanType::Inline)) {
         let (delimiter, s) = split_inline_prefix(s);
         let delimiter = delimiter.unwrap_or(DEFAULT_INLINE_DELIMITER);
+        check_inline_delimiter(delimiter)?;
         let mut apps = Vec::new();
         for action in split_inline_actions(s, delimiter) {
             let part = action.trim_start_matches(' ');
