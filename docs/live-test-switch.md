@@ -188,6 +188,12 @@ another test's channel. For a loopback pair, both legs carry the partner's UUID
 in `other_loopback_leg_uuid`, which ties either leg back to the originate
 without a second API call.
 
+**Count legs by how they end.** The session thread announces CHANNEL_CREATE from
+`CS_INIT`, so a leg that loses a simultaneous ring before its thread runs that
+state is hung up unannounced. Every leg reaches CHANNEL_HANGUP_COMPLETE, which
+carries the channel's variables too; a test comparing every leg an originate
+dialled reads that.
+
 **Reap what you create, before you assert.** A panic between creating a channel
 and killing it strands that channel for the rest of the run, and stranded
 channels burn the session budget until later originates start failing. Collect
