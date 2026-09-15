@@ -4,7 +4,8 @@ use proptest::prelude::*;
 use proptest::sample::select;
 
 use super::{
-    argument_head, cleanup, find_end_paren, separate, separate_on, separate_string_string, Head,
+    argument_head, cleanup, escape_inside_token, find_end_paren, separate, separate_on,
+    separate_string_string, Head,
 };
 use crate::switch_passes::{trace, untrace};
 use freeswitch_c_oracle::against_the_c;
@@ -109,6 +110,77 @@ fn char_and_blank_splits_match_the_switch() {
                 input,
                 char::from(delim),
                 limit
+            );
+            Ok(())
+        },
+    );
+}
+
+/// Text escaped inside a token reads back as written through the switch's char split and cleanup.
+#[test]
+fn escaped_text_reads_back_through_the_switch() {
+    against_the_c(
+        file!(),
+        "escaped_text_reads_back_through_the_switch",
+        (text(), select(CLEANUP_DELIMS)),
+        |c, (input, delim)| {
+            let delimiter = (delim != 0).then_some(char::from(delim));
+            let token = format!("a{}b", escape_inside_token(&input, delimiter));
+            let want = format!("a{input}b").into_bytes();
+            match delim {
+                0 => prop_assert_eq!(c.cleanup(token.as_bytes(), 0), want, "{:?}", token),
+                delim => prop_assert_eq!(
+                    c.char_delim(token.as_bytes(), delim, 1024),
+                    vec![want],
+                    "{:?} on {:?}",
+                    token,
+                    char::from(delim)
+                ),
+            }
+            Ok(())
+        },
+    );
+}
+
+/// Every fmtp a codec string renders is what the switch's entry split leaves after the `~`.
+#[cfg(feature = "sdp")]
+#[test]
+fn codec_string_fmtp_reaches_the_switch() {
+    use crate::sdp::{CodecString, CodecStringEntry};
+    use proptest::collection::vec;
+
+    against_the_c(
+        file!(),
+        "codec_string_fmtp_reaches_the_switch",
+        vec(text(), 1..4),
+        |c, fmtps| {
+            let codecs: CodecString = fmtps
+                .iter()
+                .filter_map(|fmtp| {
+                    CodecStringEntry::new("PCMU")
+                        .and_then(|entry| entry.with_module("mod_x"))
+                        .and_then(|entry| entry.with_fmtp(fmtp.as_str()))
+                        .ok()
+                })
+                .collect();
+            let want: Vec<Vec<u8>> = codecs
+                .iter()
+                .map(|entry| {
+                    format!(
+                        "mod_x.PCMU~{}",
+                        entry
+                            .fmtp()
+                            .unwrap_or_default()
+                    )
+                    .into_bytes()
+                })
+                .collect();
+            let line = codecs.to_string();
+            prop_assert_eq!(
+                c.char_delim(line.as_bytes(), b',', 1024),
+                want,
+                "{:?}",
+                line
             );
             Ok(())
         },
