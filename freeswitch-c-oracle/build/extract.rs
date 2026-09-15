@@ -12,39 +12,16 @@ pub enum Directive<'a> {
     Define { path: &'a str, name: &'a str },
     /// `//@ function <path> <name>`: the definition of `name`.
     Function { path: &'a str, name: &'a str },
-    /// `//@ block <path> <function> <marker>`: the statement opening on `marker` in `function`.
+    /// `//@ block <path> <function> [<anchor> => ]<marker>`: the statement opening on `marker` in
+    /// `function`, or on the first `marker` after `anchor`.
     Block {
         path: &'a str,
         function: &'a str,
+        anchor: Option<&'a str>,
         marker: &'a str,
     },
     /// `//@ declaration <path> <name>`: the declaration, `typedef` or struct definition of `name`.
     Declaration { path: &'a str, name: &'a str },
-    /// `//@ after <path> <function> <anchor> => <marker>`: the statement opening on the first line
-    /// reading `marker` after the one line of `function` reading `anchor`.
-    After {
-        path: &'a str,
-        function: &'a str,
-        anchor: &'a str,
-        marker: &'a str,
-    },
-    /// `//@ before <path> <function> <anchor> => <marker>`: the statement opening on the last line
-    /// reading `marker` before the one line of `function` reading `anchor`.
-    Before {
-        path: &'a str,
-        function: &'a str,
-        anchor: &'a str,
-        marker: &'a str,
-    },
-}
-
-/// Which side of its anchor a marker is looked for on.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Side {
-    /// The first marker after the anchor.
-    After,
-    /// The last marker before the anchor.
-    Before,
 }
 
 /// One file's text and its C syntax tree.
@@ -213,9 +190,7 @@ impl Directive<'_> {
             Directive::Define { path, .. }
             | Directive::Function { path, .. }
             | Directive::Block { path, .. }
-            | Directive::Declaration { path, .. }
-            | Directive::After { path, .. }
-            | Directive::Before { path, .. } => path,
+            | Directive::Declaration { path, .. } => path,
         }
     }
 
@@ -225,23 +200,12 @@ impl Directive<'_> {
             Directive::Define { name, .. } => define(file, name),
             Directive::Function { name, .. } => function(file, name),
             Directive::Block {
-                function, marker, ..
-            } => block(file, function, marker).map_err(|e| format!("{function}: {e}")),
+                function,
+                anchor,
+                marker,
+                ..
+            } => block(file, function, anchor, marker).map_err(|e| format!("{function}: {e}")),
             Directive::Declaration { name, .. } => declaration(file, name),
-            Directive::After {
-                function,
-                anchor,
-                marker,
-                ..
-            } => beside(file, function, anchor, marker, Side::After)
-                .map_err(|e| format!("{function}: {e}")),
-            Directive::Before {
-                function,
-                anchor,
-                marker,
-                ..
-            } => beside(file, function, anchor, marker, Side::Before)
-                .map_err(|e| format!("{function}: {e}")),
         }
     }
 }
@@ -277,9 +241,14 @@ pub fn directive(line: &str) -> Result<Option<Directive<'_>>, String> {
             let Some((function, marker)) = argument.split_once(' ') else {
                 return Err(format!("block directive {line:?} names no marker"));
             };
+            let (anchor, marker) = match marker.split_once(" => ") {
+                Some((anchor, marker)) => (Some(anchor), marker),
+                None => (None, marker),
+            };
             Directive::Block {
                 path,
                 function,
+                anchor,
                 marker,
             }
         }
@@ -287,31 +256,6 @@ pub fn directive(line: &str) -> Result<Option<Directive<'_>>, String> {
             path,
             name: argument,
         },
-        kind @ ("after" | "before") => {
-            let Some((function, rest)) = argument.split_once(' ') else {
-                return Err(format!("{kind} directive {line:?} names no anchor"));
-            };
-            let Some((anchor, marker)) = rest.split_once(" => ") else {
-                return Err(format!(
-                    "{kind} directive {line:?} names no marker after =>"
-                ));
-            };
-            if kind == "after" {
-                Directive::After {
-                    path,
-                    function,
-                    anchor,
-                    marker,
-                }
-            } else {
-                Directive::Before {
-                    path,
-                    function,
-                    anchor,
-                    marker,
-                }
-            }
-        }
         other => return Err(format!("directive {line:?} has unknown kind {other}")),
     };
     Ok(Some(directive))
@@ -341,49 +285,30 @@ pub fn function(file: &Parsed, name: &str) -> Result<String, String> {
     ))
 }
 
-/// The statement opening on the one line of `function` that reads `marker`, `else` chain included.
-pub fn block(file: &Parsed, function: &str, marker: &str) -> Result<String, String> {
-    let body = file.definition(function)?;
-    let starts = file.reading(body.start_byte(), body.end_byte(), marker);
-    let [start] = starts[..] else {
-        return Err(format!(
-            "reads {marker:?} on {} lines, not one",
-            starts.len()
-        ));
-    };
-    let (start, end) = file.statement_at(start)?;
-    Ok(file.lines(start, end))
-}
-
-/// The statement opening on the nearest line of `function` reading `marker` on `side` of the one
-/// line reading `anchor`.
-pub fn beside(
+/// The statement opening on the one line of `function` reading `marker`, or on the first after the
+/// one line reading `anchor`, `else` chain included.
+pub fn block(
     file: &Parsed,
     function: &str,
-    anchor: &str,
+    anchor: Option<&str>,
     marker: &str,
-    side: Side,
 ) -> Result<String, String> {
     let body = file.definition(function)?;
     let (from, to) = (body.start_byte(), body.end_byte());
-    let anchors = file.reading(from, to, anchor);
-    let [at] = anchors[..] else {
-        return Err(format!(
-            "reads {anchor:?} on {} lines, not one",
-            anchors.len()
-        ));
+    let once = |line: &str| match file.reading(from, to, line)[..] {
+        [at] => Ok(at),
+        ref found => Err(format!("reads {line:?} on {} lines, not one", found.len())),
     };
-    let markers = file.reading(from, to, marker);
-    let start = match side {
-        Side::After => markers
-            .into_iter()
-            .find(|&found| found > at),
-        Side::Before => markers
-            .into_iter()
-            .rev()
-            .find(|&found| found < at),
-    }
-    .ok_or_else(|| format!("reads no {marker:?} beside {anchor:?}"))?;
+    let start = match anchor {
+        None => once(marker)?,
+        Some(anchor) => {
+            let at = once(anchor)?;
+            file.reading(at, to, marker)
+                .into_iter()
+                .find(|&found| found > at)
+                .ok_or_else(|| format!("reads no {marker:?} after {anchor:?}"))?
+        }
+    };
     let (start, end) = file.statement_at(start)?;
     Ok(file.lines(start, end))
 }
@@ -527,8 +452,8 @@ typedef enum {
         }
         let marker = "if (s[0] == '{') {";
         assert_eq!(
-            block(&file, "helper", marker),
-            block(&drifted, "helper", marker)
+            block(&file, "helper", None, marker),
+            block(&drifted, "helper", None, marker)
         );
     }
 
@@ -536,11 +461,11 @@ typedef enum {
     fn a_block_follows_braces_through_else_and_literals() {
         let file = parsed(FILE);
         assert_eq!(
-            block(&file, "helper", "if (s[0] == '{') {"),
+            block(&file, "helper", None, "if (s[0] == '{') {"),
             Ok("\tif (s[0] == '{') {\n\t\tx = n;\n\t} else if (s[0] == '}') {\n\t\tx = -n;\n\t}\n\telse {\n\t\tx = 0;\n\t}\n".to_owned())
         );
         assert_eq!(
-            block(&file, "helper_function", "if (p) {"),
+            block(&file, "helper_function", None, "if (p) {"),
             Ok("\tif (p) {\n\t\t*p++ = '\\0';\n\t}\n".to_owned())
         );
     }
@@ -549,11 +474,16 @@ typedef enum {
     fn a_block_without_a_brace_is_its_statement() {
         let file = parsed(FILE);
         assert_eq!(
-            block(&file, "helper_function", "char *p = strchr(cmd, '/');"),
+            block(
+                &file,
+                "helper_function",
+                None,
+                "char *p = strchr(cmd, '/');"
+            ),
             Ok("\tchar *p = strchr(cmd, '/');\n".to_owned())
         );
         assert_eq!(
-            block(&file, "helper_function", "/* { in a comment */"),
+            block(&file, "helper_function", None, "/* { in a comment */"),
             Err("opens no statement at line 34".to_owned())
         );
     }
@@ -562,60 +492,42 @@ typedef enum {
     fn a_marker_must_occur_exactly_once() {
         let file = parsed(FILE);
         assert_eq!(
-            block(&file, "helper", "x = 0;"),
+            block(&file, "helper", None, "x = 0;"),
             Ok("\t\tx = 0;\n".to_owned())
         );
         let twice = parsed(&FILE.replace("x = n;", "x = 0;"));
         assert_eq!(
-            block(&twice, "helper", "x = 0;"),
+            block(&twice, "helper", None, "x = 0;"),
             Err("reads \"x = 0;\" on 2 lines, not one".to_owned())
         );
         assert_eq!(
-            block(&file, "helper", "if (t) {"),
+            block(&file, "helper", None, "if (t) {"),
             Err("reads \"if (t) {\" on 0 lines, not one".to_owned())
         );
     }
 
     #[test]
-    fn a_marker_beside_its_anchor_is_the_nearest_one() {
-        let file = parsed("static int f(void)\n{\n\tx = 1;\n\tif (a) {\n\t\ty();\n\t}\n\tx = 2;\n\tanchor();\n\tx = 1;\n\tz();\n\tx = 1;\n}\n");
+    fn a_marker_after_its_anchor_is_the_nearest_one() {
+        let file =
+            parsed("static int f(void)\n{\n\tx = 1;\n\tanchor();\n\tz();\n\tx = 1;\n\tx = 1;\n}\n");
         assert_eq!(
-            beside(&file, "f", "anchor();", "x = 1;", Side::After),
+            block(&file, "f", Some("anchor();"), "x = 1;"),
             Ok("\tx = 1;\n".to_owned())
         );
         assert_eq!(
-            beside(&file, "f", "if (a) {", "x = 1;", Side::Before),
-            Ok("\tx = 1;\n".to_owned())
-        );
-        assert_eq!(
-            beside(&file, "f", "x = 1;", "z();", Side::After),
+            block(&file, "f", Some("x = 1;"), "z();"),
             Err("reads \"x = 1;\" on 3 lines, not one".to_owned())
         );
-        assert!(beside(&file, "f", "anchor();", "missing();", Side::After).is_err());
-        assert!(beside(&file, "f", "if (a) {", "z();", Side::Before).is_err());
-    }
-
-    #[test]
-    fn beside_directives_name_an_anchor_and_a_marker() {
+        assert!(block(&file, "f", Some("z();"), "anchor();").is_err());
         assert_eq!(
-            directive("//@ after src/a.c f anchor(); => x = 1;"),
-            Ok(Some(Directive::After {
+            directive("//@ block src/a.c f anchor(); => x = 1;"),
+            Ok(Some(Directive::Block {
                 path: "src/a.c",
                 function: "f",
-                anchor: "anchor();",
+                anchor: Some("anchor();"),
                 marker: "x = 1;"
             }))
         );
-        assert_eq!(
-            directive("\t//@ before src/a.c f if (a) { => x = 1;"),
-            Ok(Some(Directive::Before {
-                path: "src/a.c",
-                function: "f",
-                anchor: "if (a) {",
-                marker: "x = 1;"
-            }))
-        );
-        assert!(directive("//@ before src/a.c f anchor();").is_err());
     }
 
     #[test]
@@ -652,6 +564,7 @@ typedef enum {
             Ok(Some(Directive::Block {
                 path: "src/a.c",
                 function: "helper",
+                anchor: None,
                 marker: "if (s[0] == '{') {"
             }))
         );

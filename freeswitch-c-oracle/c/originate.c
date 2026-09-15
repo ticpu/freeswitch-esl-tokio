@@ -50,7 +50,7 @@ static void oracle_originate(const char *bridgeto)
 	oracle_log_line[0] = '\0';
 	switch_event_create_plain(&var_event, SWITCH_EVENT_CHANNEL_DATA);
 
-	//@ after src/switch_ivr_originate.c switch_ivr_originate switch_channel_process_export(caller_channel, NULL, var_event, SWITCH_EXPORT_VARS_VARIABLE); => while (data && *data && *data == ' ') {
+	//@ block src/switch_ivr_originate.c switch_ivr_originate switch_channel_process_export(caller_channel, NULL, var_event, SWITCH_EXPORT_VARS_VARIABLE); => while (data && *data && *data == ' ') {
 
 	//@ block src/switch_ivr_originate.c switch_ivr_originate if ((ovars && switch_true(switch_event_get_header(ovars,"origination_nested_vars"))) ||
 
@@ -64,13 +64,13 @@ static void oracle_originate(const char *bridgeto)
 
 	oracle_report_headers(var_event);
 
-	//@ after src/switch_ivr_originate.c switch_ivr_originate while (*data == '{') { => while (data && *data && *data == ' ') {
+	//@ block src/switch_ivr_originate.c switch_ivr_originate while (*data == '{') { => while (data && *data && *data == ' ') {
 
 	//@ block src/switch_ivr_originate.c switch_ivr_originate if (zstr(data) && !dh) {
 
 	//@ block src/switch_ivr_originate.c switch_ivr_originate loop_data = strdup(data);
 
-	//@ after src/switch_ivr_originate.c switch_ivr_originate loop_data = strdup(data); => if (dh) {
+	//@ block src/switch_ivr_originate.c switch_ivr_originate loop_data = strdup(data); => if (dh) {
 
 	//@ block src/switch_ivr_originate.c switch_ivr_originate if (or_argc <= 0) {
 
@@ -91,13 +91,13 @@ static void oracle_originate(const char *bridgeto)
 
 			//@ block src/switch_ivr_originate.c switch_ivr_originate if (!(chan_type = peer_names[i])) {
 
-			//@ after src/switch_ivr_originate.c switch_ivr_originate if (!(chan_type = peer_names[i])) { => while (chan_type && *chan_type && *chan_type == ' ') {
+			//@ block src/switch_ivr_originate.c switch_ivr_originate if (!(chan_type = peer_names[i])) { => while (chan_type && *chan_type && *chan_type == ' ') {
 
 			//@ block src/switch_ivr_originate.c switch_ivr_originate if (*chan_type == '[') {
 
 			//@ block src/switch_ivr_originate.c switch_ivr_originate while (*chan_type == '[') {
 
-			//@ after src/switch_ivr_originate.c switch_ivr_originate while (*chan_type == '[') { => while (chan_type && *chan_type && *chan_type == ' ') {
+			//@ block src/switch_ivr_originate.c switch_ivr_originate while (*chan_type == '[') { => while (chan_type && *chan_type && *chan_type == ' ') {
 
 			oracle_record(ORACLE_ENDPOINT, chan_type, NULL);
 
@@ -143,13 +143,13 @@ static void oracle_enterprise_originate(const char *bridgeto)
 	oracle_log_line[0] = '\0';
 	switch_event_create_plain(&var_event, SWITCH_EVENT_CHANNEL_DATA);
 
-	//@ before src/switch_ivr_originate.c switch_ivr_enterprise_originate while (data && *data == '<') { => while (data && *data && *data == ' ') {
+	//@ block src/switch_ivr_originate.c switch_ivr_enterprise_originate /* strip leading spaces */ => while (data && *data && *data == ' ') {
 
 	//@ block src/switch_ivr_originate.c switch_ivr_enterprise_originate while (data && *data == '<') {
 
 	oracle_report_headers(var_event);
 
-	//@ after src/switch_ivr_originate.c switch_ivr_enterprise_originate while (data && *data == '<') { => while (data && *data && *data == ' ') {
+	//@ block src/switch_ivr_originate.c switch_ivr_enterprise_originate while (data && *data == '<') { => while (data && *data && *data == ' ') {
 
 	//@ block src/switch_ivr_originate.c switch_ivr_enterprise_originate if (data) {
 
