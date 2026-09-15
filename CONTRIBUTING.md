@@ -35,3 +35,5 @@ cargo test --test 'live_*' -- --ignored
 ```
 
 They run in parallel against that one switch and raise its `sessions-per-second` to make that safe. [live-test-switch.md](docs/live-test-switch.md) documents the dialplan, modules, and directory users they expect, and the two rules for writing a new one.
+
+The tokenizer port in freeswitch-types is also checked byte for byte against the switch's own C. The unpublished workspace crate freeswitch-c-oracle reads src/switch_utils.c at the commit pinned in hooks/source-refs.yaml out of the clone `FREESWITCH_SOURCE` names, extracts the string tokenizer functions into its build directory and compiles them there; nothing of the FreeSWITCH tree is committed. Without that variable, or with a clone that lacks the pinned commit, its build prints a cargo warning naming the reason and each oracle test prints one skip line and passes. The pre-commit hook exports the variable, so they run there.

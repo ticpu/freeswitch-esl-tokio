@@ -1,0 +1,12 @@
+[package]
+name = "freeswitch-c-oracle"
+version = "0.0.0"
+edition = "2021"
+authors = ["Jérôme Poulin <jeromepoulin@gmail.com>"]
+description = "FreeSWITCH's string tokenizer compiled from a pinned source checkout, for differential tests"
+license = "MIT OR Apache-2.0"
+rust-version = "1.86"
+publish = false
+
+[build-dependencies]
+cc = "1.4"

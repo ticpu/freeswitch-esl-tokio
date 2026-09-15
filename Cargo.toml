@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "freeswitch-types"]
+members = [".", "freeswitch-types", "freeswitch-c-oracle"]
 resolver = "2"
 
 [package]
