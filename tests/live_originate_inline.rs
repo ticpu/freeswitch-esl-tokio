@@ -180,6 +180,27 @@ async fn live_inline_argument_keeps_a_single_quote() {
     );
 }
 
+/// The hunt's split trims a space at an action's end and reads escapes in it, so the
+/// argument is escaped for that split. No backslash: `set` expands its value itself.
+#[tokio::test]
+#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+async fn live_inline_argument_keeps_an_edge_space_and_a_tab() {
+    let value = "a\tb it's ";
+    let cmd = Originate::inline(
+        parked_loopback(),
+        [
+            Application::new("set", Some(format!("probe_edge={value}"))),
+            Application::park(),
+        ],
+    )
+    .expect("inline builder rejected a valid list");
+
+    assert_eq!(
+        run_and_read_back(&cmd, "probe_edge").await,
+        Some(value.to_string())
+    );
+}
+
 /// An argument rewritten after construction still renders correctly, which is
 /// the property that separator selection could not offer.
 #[tokio::test]

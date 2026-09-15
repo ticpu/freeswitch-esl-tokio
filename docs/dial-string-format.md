@@ -286,9 +286,11 @@ nothing. One backslash reaching the action split is enough, because
 `cleanup_separated_string` unescapes a character only when it is the delimiter
 of the split being cleaned up after: the originate line is split on spaces
 first, where `\,` is left alone, then the action list is split on its own
-separator, where the same `\,` becomes a comma. `Originate::inline` writes that
-`\,`, then quotes the whole list through `originate_quote`, which doubles the
-backslash for the space split to consume.
+separator, where the same `\,` becomes a comma. The same cleanup reads `\\`,
+`\'`, `\"`, `\n`, `\r`, `\t` and `\s` and trims a space at an action's end, so
+`Originate::inline` escapes each action once for that split, as an argument is
+escaped under a `^^X` separator, then quotes the whole list through
+`originate_quote`, which doubles every backslash for the space split to consume.
 
 An `m:<delim>:` prefix immediately before the first action changes the separator
 for the list, the way `^^` does for a block. It is consumed by the hunt, so

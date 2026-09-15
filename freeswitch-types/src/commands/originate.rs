@@ -99,23 +99,26 @@ fn check_dialplan_fits(
     }
 }
 
-/// Render `apps` as one inline action list, escaping the separator wherever it
-/// occurs inside an application.
-///
-/// The switch's own `cleanup_separated_string` reverses this: it unescapes a
-/// character only when that character is the delimiter of the split it is
-/// cleaning up after. The originate line is split on spaces first, where a
-/// `\,` is left alone, then the action list is split on its own separator,
-/// where the same `\,` becomes a literal comma the application receives.
+/// Render `apps` as one inline action list, each action escaped once for the split
+/// `inline_dialplan_hunt` runs on `delimiter`, whose cleanup reads the escapes and trims
+/// the action's edges; the originate line's own split escapes the whole list again.
 fn render_inline(apps: &[Application], delimiter: char) -> String {
-    let escape = format!("\\{delimiter}");
-    apps.iter()
-        .map(|app| {
-            app.to_string_with_dialplan(&DialplanType::Inline)
-                .replace(delimiter, &escape)
-        })
-        .collect::<Vec<_>>()
-        .join(&delimiter.to_string())
+    let mut list = String::new();
+    for (i, app) in apps
+        .iter()
+        .enumerate()
+    {
+        if i > 0 {
+            list.push(delimiter);
+        }
+        // Writing to a String cannot fail.
+        let _ = write_escaped(
+            &mut list,
+            delimiter,
+            app.to_string_with_dialplan(&DialplanType::Inline),
+        );
+    }
+    list
 }
 
 /// FreeSWITCH dialplan type for originate commands.
@@ -2680,7 +2683,7 @@ mod tests {
                     .unwrap()
                     .dialplan(DialplanType::Inline)
                     .unwrap(),
-                r"originate loopback/9199 'set:a=it\'s\\,b' inline",
+                r"originate loopback/9199 'set:a=it\\\'s\\,b' inline",
             ),
             (
                 Originate::application(
@@ -2704,6 +2707,47 @@ mod tests {
             .parse()
             .unwrap();
         assert_eq!(parsed.caller_id_name(), Some("it's"));
+    }
+
+    /// The hunt's split cleans each action up, reading `\\`, `\'`, `\n`, `\s` and the rest and
+    /// trimming a space at the action's end, so an argument escapes for it once.
+    #[test]
+    fn an_inline_argument_escapes_for_the_hunt_split() {
+        let cases = [
+            (
+                Some("v= "),
+                None,
+                r"originate loopback/9199 'set:v=\\s,park' inline",
+            ),
+            (
+                Some(r"v=a\nb"),
+                None,
+                r"originate loopback/9199 'set:v=a\\\\nb,park' inline",
+            ),
+            (
+                Some("v=a\tb "),
+                Some('~'),
+                r"originate ^^~loopback/9199~set:v=a\\tb\\s,park~inline",
+            ),
+        ];
+        for (args, sep, wire) in cases {
+            let cmd = Originate::inline(
+                null_endpoint(),
+                [Application::new("set", args), Application::park()],
+            )
+            .unwrap();
+            let cmd = match sep {
+                Some(sep) => cmd
+                    .with_argv_separator(sep)
+                    .unwrap(),
+                None => cmd,
+            };
+            assert_eq!(cmd.to_string(), wire);
+            let parsed: Originate = wire
+                .parse()
+                .unwrap_or_else(|e| panic!("{wire:?} failed to parse: {e}"));
+            assert_eq!(parsed.target(), cmd.target(), "{wire:?}");
+        }
     }
 
     /// `originate_function` hands the target to the inline hunt only under the inline dialplan;

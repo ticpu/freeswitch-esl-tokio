@@ -50,7 +50,7 @@ pub use variables::{
 };
 
 use crate::tokenizer::{
-    blank_delim_spans, char_delim_spans, cleanup, delimiter_override, trace, untrace,
+    blank_delim_spans, char_delim_spans, cleanup, delimiter_override, separate, trace, untrace,
 };
 use originate::{check_target_readable, DEFAULT_INLINE_DELIMITER};
 
@@ -173,34 +173,16 @@ pub(crate) fn split_inline_prefix(s: &str) -> (Option<char>, &str) {
     }
 }
 
-/// Split an inline action list on unescaped separators, unescaping the escaped
-/// ones as `cleanup_separated_string` would.
+/// `argv` in `inline_dialplan_hunt`: the most actions its split keeps.
+const INLINE_ACTIONS: usize = 128;
+
+/// The actions `inline_dialplan_hunt` splits an action list into, each through its cleanup.
 fn split_inline_actions(s: &str, delimiter: char) -> Vec<String> {
-    let mut parts = Vec::new();
-    let mut current = String::new();
-    let mut chars = s.chars();
-
-    while let Some(ch) = chars.next() {
-        if ch == '\\' {
-            match chars.next() {
-                // Only the separator is unescaped here, matching a cleanup
-                // whose delim is this one; anything else keeps its backslash.
-                Some(next) if next == delimiter => current.push(next),
-                Some(next) => {
-                    current.push(ch);
-                    current.push(next);
-                }
-                None => current.push(ch),
-            }
-        } else if ch == delimiter {
-            parts.push(std::mem::take(&mut current));
-        } else {
-            current.push(ch);
-        }
-    }
-    parts.push(current);
-
-    parts
+    separate(&trace(s), delimiter, INLINE_ACTIONS)
+        .tokens
+        .iter()
+        .map(|token| untrace(&token.text))
+        .collect()
 }
 
 /// Parse the target argument of an originate command.
@@ -233,11 +215,12 @@ pub fn parse_originate_target(
         let (delimiter, s) = split_inline_prefix(s);
         let delimiter = delimiter.unwrap_or(DEFAULT_INLINE_DELIMITER);
         let mut apps = Vec::new();
-        for part in split_inline_actions(s, delimiter) {
+        for action in split_inline_actions(s, delimiter) {
+            let part = action.trim_start_matches(' ');
             let (name, args) = match part.split_once(':') {
                 Some((n, "")) => (n, None),
                 Some((n, a)) => (n, Some(a)),
-                None => (part.as_str(), None),
+                None => (part, None),
             };
             apps.push(Application::new(name, args));
         }
