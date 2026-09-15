@@ -362,6 +362,10 @@ pub const ESCAPING_CASES: &[(&str, &[(&str, &str)])] = &[
         "escaped argv separators",
         &[("p1", r"a\~b\!c"), ("p2", "SENTINEL")],
     ),
+    (
+        "a dollar pair where expansion runs",
+        &[("p1", "pa$$word"), ("p2", r"C:\path"), ("p3", "SENTINEL")],
+    ),
 ];
 
 /// `lead` goes in first, so a value that eats its separator damages a variable

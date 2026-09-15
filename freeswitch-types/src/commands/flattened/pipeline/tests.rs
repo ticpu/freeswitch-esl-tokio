@@ -388,6 +388,8 @@ fn the_port_reads_back_every_value_the_renderer_writes() {
         "a  ",
         " ",
         r"a\ ",
+        "$$",
+        "pa$$ word",
     ];
     let targets = [
         API.into(),

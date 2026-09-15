@@ -9,7 +9,7 @@ use std::fmt;
 use std::fmt::Write as _;
 use std::str::FromStr;
 
-use super::flattened::pipeline::ENTERPRISE_DELIM;
+use super::flattened::pipeline::{names_a_variable, ENTERPRISE_DELIM};
 use super::originate::OriginateError;
 use crate::tokenizer::{sole_argument, trace, untrace, ArgvCut, Token, Traced};
 use crate::version::FreeswitchVersion;
@@ -101,8 +101,8 @@ pub enum DialStringCarrier {
 
 impl DialStringCarrier {
     /// Dialplan variable expansion deletes an escaped quote outright, where every
-    /// other pass unescapes it.
-    fn deletes_escaped_quote(self) -> bool {
+    /// other pass unescapes it, and drops the first `$` of a `$$`.
+    fn expands(self) -> bool {
         matches!(self, Self::Dialplan)
     }
 }
@@ -579,7 +579,7 @@ impl DialStringTarget {
     fn quote_escape(self, scope: VariablesType) -> String {
         let consumed_by_carrier = if self
             .carrier
-            .deletes_escaped_quote()
+            .expands()
         {
             2
         } else {
@@ -703,6 +703,12 @@ fn escape_value(
     let escaped = value
         .replace('\\', &target.backslash_escape(vars_type))
         .replace('\'', &target.quote_escape(vars_type));
+    let dollars = protects_dollars(value, target);
+    let escaped = if dollars {
+        escaped.replace('$', "\\$")
+    } else {
+        escaped
+    };
     // `\,` and `\|` keep one backslash: a pass consumes `\x` only before a
     // quote, a backslash, a named escape or that pass's own delimiter.
     let escaped = if commas_separate {
@@ -724,11 +730,26 @@ fn escape_value(
         Some(rest) => format!("{rest}{space}"),
         None => escaped,
     };
+    let escaped = if dollars {
+        format!("\\'{escaped}")
+    } else {
+        escaped
+    };
     if escaped.contains(' ') {
         format!("'{}'", escaped)
     } else {
         escaped
     }
+}
+
+/// Expansion drops the first `$` of a `$$` opening no reference. `\$` keeps it only while
+/// expansion runs, which a leading `\'` guarantees and expansion then deletes.
+fn protects_dollars(value: &str, target: DialStringTarget) -> bool {
+    target
+        .carrier()
+        .expands()
+        && value.contains("$$")
+        && !names_a_variable(value)
 }
 
 /// Inverts [`escape_value`], undoing each substitution in the reverse order it
@@ -744,6 +765,17 @@ fn unescape_value(
         .strip_prefix('\'')
         .and_then(|s| s.strip_suffix('\''))
         .unwrap_or(value);
+    // Every other escape at this carrier opens with at least two backslashes.
+    let (dollars, s) = match s.strip_prefix("\\'") {
+        Some(rest)
+            if target
+                .carrier()
+                .expands() =>
+        {
+            (true, rest)
+        }
+        _ => (false, s),
+    };
     let space = target.space_escape(vars_type);
     let (lead, s) = match s.strip_prefix(space.as_str()) {
         Some(rest) => (" ", rest),
@@ -774,6 +806,7 @@ fn unescape_value(
     } else {
         s
     };
+    let s = if dollars { s.replace("\\$", "$") } else { s };
     let s = s
         .replace(&target.quote_escape(vars_type), "'")
         .replace(&target.backslash_escape(vars_type), "\\");
@@ -1259,6 +1292,9 @@ mod tests {
             (DialStringCarrier::EslApi, "a,b", r"a\,b"),
             (DialStringCarrier::Dialplan, "a|b", "a|b"),
             (DialStringCarrier::EslApi, "a|b", "a|b"),
+            (DialStringCarrier::Dialplan, "pa$$word", r"\'pa\$\$word"),
+            (DialStringCarrier::Dialplan, "a$b", "a$b"),
+            (DialStringCarrier::EslApi, "pa$$word", "pa$$word"),
         ];
         for (carrier, value, want) in cases {
             assert_eq!(

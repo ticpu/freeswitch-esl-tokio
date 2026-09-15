@@ -377,6 +377,10 @@ Consequences worth knowing before hand-writing a block:
 - Two quotes that reach the last pass bare pair with each other inside the
   value, and both are stripped. The value stays otherwise intact, so a document
   that loses every apostrophe is still well-formed and nothing fails.
+- Expansion, whenever it runs over the argument, drops the first `$` of a `$$`
+  that opens no reference, and `\$` keeps it only while expansion runs. Through
+  a dialplan application a value holding `$$` has every `$` written `\$` behind
+  a leading `\'`, which makes expansion run and is deleted by it.
 - A log line is not evidence either way. `mod_logfile` splits its own output
   with the same tokenizer, so a value is mangled in the log whether or not it
   was mangled on the wire. Read values back with `uuid_getvar` or `uuid_dump`.
