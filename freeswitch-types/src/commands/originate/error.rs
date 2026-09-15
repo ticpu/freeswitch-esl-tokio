@@ -4,6 +4,7 @@ use std::num::ParseIntError;
 
 use crate::channel::ParseHangupCauseError;
 use crate::commands::endpoint::{EndpointFieldFault, ParseGroupCallOrderError};
+use crate::commands::execute_on::ExecuteOnFault;
 use crate::commands::variables::InvalidArgvSeparator;
 
 /// Errors from originate command parsing or construction.
@@ -84,6 +85,14 @@ pub enum OriginateError {
         /// The endpoint type.
         endpoint: &'static str,
     },
+    /// An [`ExecuteOn`](crate::commands::ExecuteOn) name or argument the application does not
+    /// receive as written.
+    UndeliverableExecuteOn {
+        /// The part of the value.
+        part: &'static str,
+        /// What the switch does with it.
+        fault: ExecuteOnFault,
+    },
 }
 
 impl std::fmt::Display for OriginateError {
@@ -152,6 +161,9 @@ impl std::fmt::Display for OriginateError {
                 "a {endpoint} expression reaches originate unexpanded at the API carrier; \
                  only a dialplan application or the expand API expands it"
             ),
+            Self::UndeliverableExecuteOn { part, fault } => {
+                write!(f, "the {part} of an execute_on value {fault}")
+            }
         }
     }
 }
@@ -176,7 +188,8 @@ impl std::error::Error for OriginateError {
             | Self::InlineApplicationsWithDialplan
             | Self::UndeliverableEndpointField { .. }
             | Self::BracketSpansLegs { .. }
-            | Self::UnexpandedExpression { .. } => None,
+            | Self::UnexpandedExpression { .. }
+            | Self::UndeliverableExecuteOn { .. } => None,
         }
     }
 }

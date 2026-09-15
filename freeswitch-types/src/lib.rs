@@ -71,7 +71,7 @@ pub use channel::{
 pub use commands::{
     Application, BlockParse, BridgeDialString, BridgeDialStringDisplay, DialString,
     DialStringCarrier, DialStringTarget, DialplanType, Endpoint, EndpointDisplay,
-    EndpointFieldFault, ExecuteOn, GroupCallOrder, InvalidArgvSeparator, Originate,
+    EndpointFieldFault, ExecuteOn, ExecuteOnFault, GroupCallOrder, InvalidArgvSeparator, Originate,
     OriginateDisplay, OriginateError, OriginateTarget, ParseBlockParseError,
     ParseDialplanTypeError, ParseGroupCallOrderError, ParseHoldActionError, ParseMuteActionError,
     UnvouchedVersion, UuidAnswer, UuidBridge, UuidDeflect, UuidGetVar, UuidHold, UuidKill,

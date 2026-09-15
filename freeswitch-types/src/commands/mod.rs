@@ -34,7 +34,7 @@ pub use endpoint::{
     GroupCallOrder, LoopbackEndpoint, ParseGroupCallOrderError, SofiaContact, SofiaEndpoint,
     SofiaGateway, UserEndpoint,
 };
-pub use execute_on::ExecuteOn;
+pub use execute_on::{ExecuteOn, ExecuteOnFault};
 pub use flattened::{
     CauseReading, ErrorLeg, FlattenedDialString, FlattenedDialStringDisplay,
     FlattenedDialStringError, FlattenedGroup, FlattenedLeg, FlattenedThread, LegTarget, LegWarning,
