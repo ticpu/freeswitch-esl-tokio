@@ -41,6 +41,16 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.toml') }}
           restore-keys: ${{ runner.os }}-cargo-
 
+      # The C oracle and the enum checks read the switch at the commit the source-ref index pins.
+      - name: Fetch pinned FreeSWITCH source
+        run: |
+          pin=$(awk '$1 == "commit:" { print $2; exit }' hooks/source-refs.yaml)
+          src="$RUNNER_TEMP/freeswitch"
+          git init --quiet "$src"
+          git -C "$src" fetch --quiet --depth 1 https://github.com/signalwire/freeswitch "$pin"
+          git -C "$src" checkout --quiet --detach FETCH_HEAD
+          echo "FREESWITCH_SOURCE=$src" >>"$GITHUB_ENV"
+
       - name: Check feature combinations
         run: scripts/check-feature-matrix.sh
 
