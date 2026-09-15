@@ -258,6 +258,35 @@ fn dial_lists_match_the_switch() {
     );
 }
 
+/// A non-ASCII `^^` block chaining a second block splits that block on the separator's first byte,
+/// which here cuts the text holding `:_:`; the port refuses rather than read it by char.
+#[test]
+fn a_chained_block_split_by_a_non_ascii_byte_is_refused() {
+    let input = "<^^é><<>:_:[>],é|[[]";
+    assert!(matches!(
+        dial_list(&trace(input), 0..input.len(), false),
+        Err(PipelineError::SplitSeparatorUnreadable)
+    ));
+    for (tree, c) in freeswitch_c_oracle::oracles() {
+        let dial = c.dial(input.as_bytes());
+        let endpoints: Vec<_> = dial
+            .threads
+            .iter()
+            .flat_map(|thread| {
+                thread
+                    .groups
+                    .iter()
+                    .flatten()
+            })
+            .map(|leg| {
+                leg.endpoint
+                    .clone()
+            })
+            .collect();
+        assert_eq!(endpoints, [Some(b"]".to_vec())], "tree {tree}: {dial:?}");
+    }
+}
+
 #[test]
 fn switch_true_matches_the_switch() {
     let word = select(

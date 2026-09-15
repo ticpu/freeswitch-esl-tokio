@@ -138,10 +138,11 @@ pub(crate) fn parse_block(
             .rev()
             .take_while(|&&(c, ..)| c == '\\')
             .count();
+        let chains_a_block = following_block(buffer, next, open, close).is_some();
         return Some(Parsed {
             block,
             next,
-            splits_past_close_by_byte: trailing_backslashes % 2 == 1,
+            splits_past_close_by_byte: trailing_backslashes % 2 == 1 || chains_a_block,
         });
     }
     let following = chars(buffer.c_str(next));
