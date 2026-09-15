@@ -125,12 +125,12 @@ only in the module prefix.
 
 Channel variables can be set on the B-leg (destination) of an originate or
 bridge via bracket notation in the dial string. Three bracket types exist
-with different scopes, listed in order of precedence (highest first):
+with different scopes; [Combined example](#combined-example) says which wins
+when they name the same variable.
 
 ### `[k=v]` -- channel (local) scope
 
-Applies only to the **immediately following endpoint**. Highest precedence --
-overrides global and enterprise variables.
+Applies only to the **immediately following endpoint**.
 
 ```
 [origination_caller_id_number=1234]sofia/internal/1000@domain
@@ -172,7 +172,7 @@ blocks accumulate.
 ### `<k=v>` -- enterprise (ultra-global) scope
 
 Applies across **all threads** in an enterprise originate (`:_:` separated
-sections). Lowest precedence.
+sections).
 
 ```
 <originate_timeout=60>{thread1_var=a}endpoint1:_:{thread2_var=b}endpoint2
@@ -185,7 +185,15 @@ sections). Lowest precedence.
 ```
 
 Effective variables on the channel: `ultra_global=1`, `thread_global=2`,
-`per_endpoint=3`. If a key appears in multiple scopes, the narrower scope wins.
+`per_endpoint=3`.
+
+When two scopes name the same variable, the wider one wins.
+`switch_ivr_originate` installs a leg's `[]` variables first and the
+originate-wide `<>` and `{}` variables after them, so `{k=g}[k=l]` and
+`<k=e>[k=l]` both deliver the wider value. `local_var_clobber=true` among the
+originate-wide variables reverses the order, and the leg's value wins. `<>` and
+`{}` share one event, parsed in that order, so `{}` beats `<>`. Within one scope
+the block parsed last wins. All measured over `originate`.
 
 ## Variable value escaping
 
@@ -526,7 +534,21 @@ ${sofia_contact(*/user@domain)}
 The `*` searches all profiles. An optional `~user_agent` suffix filters by
 User-Agent header.
 
-Source: `sofia_contact_function` (`mod_sofia.c:4105-4236`).
+Source: `sofia_contact_function` and `contact_callback` in `mod_sofia.c`. Each
+registration becomes one leg, `sofia/<profile>/sip:<contact>`, comma-joined:
+
+- A text after a `/` following the domain is pasted in front of every leg.
+- The contact's scheme is cut at its first colon, so a `sips:` contact reads
+  `sip:`.
+- The `*` search drops a contact that is a substring of one already written.
+- Row order is not stable between calls.
+
+Over ESL, `eval` has no session, so `sip_exclude_contact` and
+`sip_match_user_agent` are not applied.
+
+Contacts over TCP, behind NAT detection (`fs_nat=yes`) and with a bracketed IPv6
+host have been captured from a registrar; a contact carrying `fs_path` and one
+registered as `sips:` have not.
 
 ### `group_call`
 
@@ -539,8 +561,46 @@ ${group_call(group@domain+E)}
 ${group_call(group@domain+F)}
 ```
 
-Flags: `A` = all (simultaneous), `E` = enterprise (`:_:` separated),
-`F` = first match only.
+The flag picks the separator written between members: `A` a comma
+(simultaneous, also the default), `E` `:_:` (enterprise), `F` a `|` (failover).
+The last flag letter wins. The separator goes only between members: a member's
+own dial string keeps whatever separators it holds, so `+F` over a member with
+two registrations still yields a comma pair inside the failover list.
+
+What `group_call_function` and `output_flattened_dial_string` in
+`mod_commands.c` do to each member, all measured:
+
+- **No dial string.** A member without a `dial-string` or `group-dial-string`
+  becomes `user/<id>@<domain>`. A `group-dial-string` wins over a `dial-string`
+  at the same level.
+- **Expansion.** The member's dial string is expanded once, and only when it
+  holds a variable reference or escaped data (`\\`, `\n`, `\s`, `\t`, `\'`).
+- **Flattening.** Every `{}` and `<>` block is rewritten to `[]` and repeated
+  ahead of each leg, so the output is channel scope throughout. Block order on a
+  leg follows `local_var_clobber`, found by a case-sensitive substring match:
+
+  | Member has | `local_var_clobber` | Emitted order |
+  |---|---|---|
+  | own `[]` block | none | `[ent][all][leg]` |
+  | own `[]` block | in `{}` | `[ent][leg][all]` |
+  | own `[]` block | in `<>` | `[all][leg][ent]` |
+  | own `[]` block | in both | `[leg][all][ent]` |
+  | no `[]` block | any | `[all][ent]` |
+
+  The last block on a leg wins, so in the last row `<>` beats `{}`.
+- **Values that break once flattened.** A `]` inside a `{}` value closes the
+  rewritten block early. A `|` in a value is read by the leg split.
+- **Trailing separator.** The strip cuts at the first separator found in the
+  member's last three bytes, not only at a trailing one.
+- **Empty expansion.** A member that expands to nothing still gets a separator,
+  giving `x,,y`. A group whose members all expand empty returns `,`.
+- **Empty or missing group.** Output is `error/NO_ROUTE_DESTINATION`, uppercase.
+- **Pointers.** A pointer resolves to the first `<user>` whose id matches, and
+  groups are searched before the domain's `<users>`, so a pointer placed before
+  the real user resolves to itself and yields `user/<id>@<domain>`.
+
+A seat therefore owns as many legs as it has registrations, repeated under one
+`presence_id`.
 
 ### `eval` prefix (API evaluation)
 

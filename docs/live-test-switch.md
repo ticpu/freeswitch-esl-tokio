@@ -119,6 +119,36 @@ breaks it. See [freeswitch-directory-users.md](freeswitch-directory-users.md).
 local port and originates with the `socket` application pointed back at it, so
 FreeSWITCH must be able to reach `127.0.0.1` on an arbitrary high port.
 
+## Directory groups for switch-produced dial strings
+
+`live_flattened.rs` reads real `group_call` output, so the switch needs the
+`flattened-probe` groups in domain `default`: one group per member shape (a
+`^^` block, `{}`/`<>`/`[]` scopes with every `local_var_clobber` placement, a
+`|` or `:_:` inside a member, an empty expansion, each `error/` cause spelling,
+the escaping and quoting cases), a group mixing them, an empty group and one
+whose pointer names no user. Their captured output is committed under
+`freeswitch-types/tests/fixtures/flattened/`, whose README lists the
+substitution applied to it.
+
+Define the real users inside the first `<group>` and point at them from the
+rest. A pointer resolves to the first `<user>` whose id matches, groups are
+searched before the domain's `<users>`, and a pointer entry matches its own id:
+with the real users only under `<users>`, every pointer resolves to itself and
+`group_call` emits `user/<id>@<domain>` for all of them.
+
+Registered members come from the `lab-lo` profile registering to itself:
+
+- `multiple-registrations` set to `contact`, or the second registration replaces
+  the first and a member never yields two legs. It takes a profile restart.
+- Two gateways registering as the same directory user, each with its own name so
+  their contacts differ, `realm` and `from-domain` equal to the directory domain.
+- Their `extension` naming an extension in context `test` that answers and hangs
+  up by itself. The context's catch-all bridges to a real gateway, and every
+  INVITE a test sends to a registered contact lands there otherwise.
+
+A self-registering IPv6 twin of that profile never sends its REGISTER on the
+measured build, so bracketed contacts come only from the captured PBX output.
+
 ## Escaping tests and the parser revision
 
 The escaping tests in `live_channel.rs` render for the crate's default block-parser

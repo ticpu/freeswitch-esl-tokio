@@ -17,7 +17,6 @@ refs:
 - src/mod/codecs/mod_opus/mod_opus.c:287 b1b16c3b31d7
 - src/mod/codecs/mod_silk/mod_silk.c:152 e0b609ea7d99
 - src/mod/codecs/mod_siren/mod_siren.c:78 ec417b139391
-- src/mod/endpoints/mod_sofia/mod_sofia.c:4105-4236 54042dc582b7
 - src/mod/event_handlers/mod_event_socket/mod_event_socket.c:2225 3d858a547bda
 - src/mod/formats/mod_native_file/mod_native_file.c:182-191 a25b3424011c
 - src/switch_core.c:1903 5f9158623ff5
