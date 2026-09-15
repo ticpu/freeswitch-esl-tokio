@@ -293,6 +293,14 @@ cleanup keeps a lone quote only while no partner follows it in the same field,
 so a block carrying one such value measures fine and a value carrying two loses
 both.
 
+Dial-string text the switch produced, such as a directory group's expansion, is
+read by porting the switch's own passes for the named target rather than by
+inverting this crate's render, which only undoes what it escaped itself. The
+tokenizer behind those passes is ported once and shared by every such reader.
+Each leg keeps its source text beside the typed view, so a caller can forward the
+list unchanged, and a failure takes the scope the switch gives it: the whole list
+where the originate aborts, one leg where only that leg fails.
+
 ### Serde on command builders for config-driven deployments
 
 The serde derives on `Originate`, `Endpoint`, `Variables`, and
@@ -366,7 +374,8 @@ encoding — the switch discards the first without logging it and truncates the
 block on the second — so both are rejected at every boundary that can fail,
 config load included. A newline is safe as data and dangerous only on the wire;
 these are impossible at any layer, and a silent drop is indistinguishable from
-success for as long as nobody reads the channel back.
+success for as long as nobody reads the channel back. Text the switch itself
+produced is exempt: the switch accepts it, so such a pair is reported, not refused.
 
 ## Credentials and wire content in logs
 
