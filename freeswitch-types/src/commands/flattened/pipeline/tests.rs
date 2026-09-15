@@ -35,7 +35,23 @@ fn legs(list: &DialList) -> Vec<(&Thread, &Leg)> {
 
 fn value<'a>(list: &'a DialList, leg: usize, key: &str) -> Option<&'a str> {
     let (thread, leg) = legs(list)[leg];
-    resolve(list, thread, leg, key)
+    resolve_on(list, thread, leg, key)
+}
+
+fn resolve_on<'a>(
+    list: &'a DialList,
+    thread: &'a Thread,
+    leg: &'a Leg,
+    key: &str,
+) -> Option<&'a str> {
+    resolve(
+        list.blocks
+            .iter()
+            .chain(&thread.blocks),
+        leg,
+        key,
+        list.nested_vars,
+    )
 }
 
 fn effect(list: &DialList, leg: usize, key: &str) -> Vec<PairEffect> {
@@ -83,7 +99,7 @@ fn registered_contacts_keep_their_uri_and_their_seat() {
     let legs = legs(&list);
     let seat_1436: Vec<&str> = legs
         .iter()
-        .filter(|(t, l)| resolve(&list, t, l, "presence_id") == Some("1436@pbx.example.com"))
+        .filter(|(t, l)| resolve_on(&list, t, l, "presence_id") == Some("1436@pbx.example.com"))
         .map(|(_, l)| {
             l.endpoint
                 .as_str()
@@ -313,7 +329,14 @@ fn an_empty_pair_is_ignored_or_clears_by_the_depth_it_arrives_at() {
 fn a_nested_variable_is_named_and_the_opt_in_is_seen_anywhere() {
     let list = read_at(fixture!("g-fp-esc-nested.A"), API);
     assert!(!list.nested_vars);
-    assert!(names_a_variable(value(&list, 0, "nv").unwrap()));
+    assert!(matches!(
+        effect(&list, 0, "nv").last(),
+        Some(PairEffect::Set(v)) if names_a_variable(v)
+    ));
+    assert_eq!(value(&list, 0, "nv"), None);
+    assert_eq!(value(&list, 0, "sentinel"), Some("s"));
+    let opted_in = read_at("{origination_nested_vars=true}[nv=${x}]null/a", API);
+    assert_eq!(value(&opted_in, 0, "nv"), Some("${x}"));
     assert!(read_at("{origination_nested_vars=true}[nv=${x}]null/a", API).nested_vars);
 
     assert!(names_a_variable("${x}"));

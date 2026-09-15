@@ -20,7 +20,7 @@ mod tests;
 pub(crate) const MAX_PEERS: usize = 128;
 
 /// `SWITCH_ENT_ORIGINATE_DELIM`.
-const ENTERPRISE_DELIM: &str = ":_:";
+pub(crate) const ENTERPRISE_DELIM: &str = ":_:";
 /// What `switch_ivr_originate` turns a `[]` block's comma into before the leg split.
 const QUOTED_ESC_COMMA: char = '\u{1}';
 const UNQUOTED_ESC_COMMA: char = '\u{2}';
@@ -65,6 +65,7 @@ pub(crate) struct Leg {
 /// One `:_:` thread, or the whole dial string when there is none.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Thread {
+    pub(crate) raw: Range<usize>,
     pub(crate) blocks: Vec<Block>,
     pub(crate) groups: Vec<Vec<Leg>>,
 }
@@ -241,6 +242,7 @@ struct Reader {
 
 impl Reader {
     fn thread(&mut self, text: &[Traced]) -> Result<Thread, PipelineError> {
+        let raw = byte_range(text, 0..text.len());
         let (blocks, data) = head_blocks(skip_spaces(text), &[('<', '>'), ('{', '}')], self.legs)?;
         let data = skip_spaces(data);
         if data.is_empty() {
@@ -253,7 +255,11 @@ impl Reader {
             .into_iter()
             .map(|group| self.group(group.text))
             .collect::<Result<_, _>>()?;
-        Ok(Thread { blocks, groups })
+        Ok(Thread {
+            raw,
+            blocks,
+            groups,
+        })
     }
 
     fn group(&mut self, mut text: Vec<Traced>) -> Result<Vec<Leg>, PipelineError> {
@@ -386,19 +392,15 @@ fn pair(text: &[Traced]) -> Pair {
     Pair { key, effect }
 }
 
-/// The value `key` ends with on a leg's channel: `inherited`, the enterprise then thread
-/// blocks, installs after the leg's own unless `local_var_clobber` is true among them.
+/// The value `key` ends with on a leg's channel: `inherited` (enterprise then thread) installs after
+/// the leg's own unless `local_var_clobber` says otherwise, refusing `${` values unless `nested_vars`.
 pub(crate) fn resolve<'a>(
-    list: &'a DialList,
-    thread: &'a Thread,
+    inherited: impl IntoIterator<Item = &'a Block>,
     leg: &'a Leg,
     key: &str,
+    nested_vars: bool,
 ) -> Option<&'a str> {
-    let global = install(
-        list.blocks
-            .iter()
-            .chain(&thread.blocks),
-    );
+    let global = install(inherited);
     let local = install(&leg.blocks);
     let clobber = global
         .iter()
@@ -409,15 +411,14 @@ pub(crate) fn resolve<'a>(
     } else {
         (local, global)
     };
-    [last, first]
+    first
         .iter()
-        .find_map(|headers| {
-            headers
-                .iter()
-                .rev()
-                .find(|(name, _)| name.eq_ignore_ascii_case(key))
-                .map(|&(_, value)| value)
+        .chain(&last)
+        .filter(|(name, value)| {
+            name.eq_ignore_ascii_case(key) && (nested_vars || !names_a_variable(value))
         })
+        .map(|&(_, value)| value)
+        .next_back()
 }
 
 /// The headers of an originate event, which has no `EF_UNIQ_HEADERS`: a set

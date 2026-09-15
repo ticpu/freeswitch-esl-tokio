@@ -6,13 +6,18 @@
 //! and [`FlattenedDialString::display_raw`] forwards the kept legs unchanged.
 
 use std::fmt;
+use std::ops::Range;
 use std::sync::Arc;
 
 use crate::channel::HangupCause;
 use crate::commands::endpoint::Endpoint;
-use crate::commands::variables::DialStringTarget;
+use crate::commands::originate::OriginateError;
+use crate::commands::variables::{DialStringTarget, Variables, VariablesType};
 use crate::variables::VariableName;
-use pipeline::{Block, Leg};
+use pipeline::{
+    names_a_variable, str2cause, Block, DialList, Leg, Pair, PairEffect, PipelineError, Thread,
+    ENTERPRISE_DELIM,
+};
 
 pub(crate) mod pipeline;
 #[cfg(test)]
@@ -52,6 +57,7 @@ pub struct FlattenedLeg {
     raw: String,
     leg: Leg,
     inherited: Arc<[Block]>,
+    nested_vars: bool,
     target: LegTarget,
     warnings: Vec<LegWarning>,
 }
@@ -79,6 +85,7 @@ pub struct ErrorLeg {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnparsedLeg {
     endpoint: String,
+    error: OriginateError,
 }
 
 /// How `switch_channel_str2cause` reads the text after `error/`.
@@ -170,7 +177,52 @@ impl FlattenedDialString {
         input: &str,
         target: impl Into<DialStringTarget>,
     ) -> Result<Self, FlattenedDialStringError> {
-        todo!("{input} {:?}", target.into())
+        if input.ends_with('\n') {
+            return Err(FlattenedDialStringError::TrailingNewline);
+        }
+        let list = pipeline::read(input, target.into())
+            .map_err(FlattenedDialStringError::from_pipeline)?;
+        let DialList {
+            blocks,
+            threads,
+            nested_vars,
+            quote_spans_legs,
+            carrier_expands,
+        } = list;
+        let warnings = [
+            (quote_spans_legs, ListWarning::QuoteSpansLegs),
+            (carrier_expands, ListWarning::CarrierExpands),
+        ]
+        .into_iter()
+        .filter_map(|(raised, warning)| raised.then_some(warning))
+        .collect();
+        let mut kept: Vec<(Range<usize>, FlattenedThread)> = Vec::new();
+        for thread in threads {
+            let raw = thread
+                .raw
+                .clone();
+            let separator_start = kept
+                .last()
+                .map_or(raw.start, |(before, _)| before.end);
+            if let Some(read) =
+                FlattenedThread::read(input, thread, &blocks, nested_vars, separator_start)
+            {
+                kept.push((raw, read));
+            }
+        }
+        let (Some((first, _)), Some((last, _))) = (kept.first(), kept.last()) else {
+            return Err(FlattenedDialStringError::Empty);
+        };
+        Ok(Self {
+            head: slice(input, 0..first.start),
+            tail: slice(input, last.end..input.len()),
+            blocks,
+            threads: kept
+                .into_iter()
+                .map(|(_, thread)| thread)
+                .collect(),
+            warnings,
+        })
     }
 
     /// Threads in reading order.
@@ -192,13 +244,117 @@ impl FlattenedDialString {
     }
 
     /// Keep the legs `keep` accepts. A group or thread left with no leg goes too.
-    pub fn retain(&mut self, keep: impl FnMut(&FlattenedLeg) -> bool) {
-        todo!("{:p}", &keep)
+    pub fn retain(&mut self, mut keep: impl FnMut(&FlattenedLeg) -> bool) {
+        for thread in &mut self.threads {
+            for group in &mut thread.groups {
+                group
+                    .legs
+                    .retain(&mut keep);
+            }
+            thread
+                .groups
+                .retain(|group| {
+                    !group
+                        .legs
+                        .is_empty()
+                });
+        }
+        self.threads
+            .retain(|thread| {
+                !thread
+                    .groups
+                    .is_empty()
+            });
     }
 
     /// Whether no leg is left.
     pub fn is_empty(&self) -> bool {
-        todo!()
+        self.threads
+            .is_empty()
+    }
+
+    fn write_raw(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.is_empty() {
+            return Ok(());
+        }
+        f.write_str(&self.head)?;
+        for (t, thread) in self
+            .threads
+            .iter()
+            .enumerate()
+        {
+            if t > 0 {
+                f.write_str(&thread.separator)?;
+            }
+            f.write_str(&thread.head)?;
+            for (g, group) in thread
+                .groups
+                .iter()
+                .enumerate()
+            {
+                if g > 0 {
+                    f.write_str(&group.separator)?;
+                }
+                for (l, leg) in group
+                    .legs
+                    .iter()
+                    .enumerate()
+                {
+                    if l > 0 {
+                        f.write_str(&leg.separator)?;
+                    }
+                    f.write_str(&leg.raw)?;
+                }
+            }
+            f.write_str(&thread.trailer)?;
+        }
+        f.write_str(&self.tail)
+    }
+
+    fn write_for(&self, f: &mut fmt::Formatter<'_>, target: DialStringTarget) -> fmt::Result {
+        if self.is_empty() {
+            return Ok(());
+        }
+        write_blocks(f, &self.blocks, target)?;
+        for (t, thread) in self
+            .threads
+            .iter()
+            .enumerate()
+        {
+            if t > 0 {
+                f.write_str(ENTERPRISE_DELIM)?;
+            }
+            write_blocks(f, &thread.blocks, target)?;
+            for (g, group) in thread
+                .groups
+                .iter()
+                .enumerate()
+            {
+                if g > 0 {
+                    f.write_str("|")?;
+                }
+                for (l, leg) in group
+                    .legs
+                    .iter()
+                    .enumerate()
+                {
+                    if l > 0 {
+                        f.write_str(",")?;
+                    }
+                    write_blocks(
+                        f,
+                        &leg.leg
+                            .blocks,
+                        target,
+                    )?;
+                    f.write_str(
+                        &leg.leg
+                            .endpoint,
+                    )?;
+                }
+            }
+        }
+        Ok(())
     }
 
     /// The input text of the kept legs, joined by the separators that stood
@@ -225,11 +381,127 @@ impl FlattenedDialString {
 
 impl fmt::Display for FlattenedDialStringDisplay<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        todo!()
+        match self.render {
+            Render::Raw => self
+                .list
+                .write_raw(f),
+            Render::For(target) => self
+                .list
+                .write_for(f, target),
+        }
     }
 }
 
+/// Every block through [`Variables`], with only the pairs that set a value.
+fn write_blocks(
+    f: &mut fmt::Formatter<'_>,
+    blocks: &[Block],
+    target: DialStringTarget,
+) -> fmt::Result {
+    for block in blocks {
+        let scope = match block.open {
+            '<' => VariablesType::Enterprise,
+            '{' => VariablesType::Default,
+            _ => VariablesType::Channel,
+        };
+        let mut vars = Variables::new(scope);
+        for pair in &block.pairs {
+            if let PairEffect::Set(value) = &pair.effect {
+                vars.insert(
+                    pair.key
+                        .as_str(),
+                    value.as_str(),
+                );
+            }
+        }
+        if vars.is_empty() {
+            continue;
+        }
+        // A `^^` separator the builder refuses renders comma-separated, which
+        // reads back to the same values.
+        let vars = match block.separator {
+            ',' => vars,
+            sep => vars
+                .clone()
+                .with_separator(sep)
+                .unwrap_or(vars),
+        };
+        write!(f, "{}", vars.display_for(target))?;
+    }
+    Ok(())
+}
+
+/// `range` is a pipeline trace: char-boundary offsets into `input`, in reading order.
+fn slice(input: &str, range: Range<usize>) -> String {
+    debug_assert!(input
+        .get(range.clone())
+        .is_some());
+    input
+        .get(range)
+        .unwrap_or_default()
+        .to_owned()
+}
+
 impl FlattenedThread {
+    fn read(
+        input: &str,
+        thread: Thread,
+        list_blocks: &[Block],
+        nested_vars: bool,
+        separator_start: usize,
+    ) -> Option<Self> {
+        let Thread {
+            raw,
+            blocks,
+            groups: pipeline_groups,
+        } = thread;
+        let inherited: Arc<[Block]> = list_blocks
+            .iter()
+            .chain(&blocks)
+            .cloned()
+            .collect();
+        let mut first_start = None;
+        let mut last_end = None;
+        let mut groups = Vec::new();
+        for group in pipeline_groups {
+            let mut separator = None;
+            let mut legs = Vec::with_capacity(group.len());
+            let mut leg_end = None;
+            for leg in group {
+                let start = leg
+                    .raw
+                    .start;
+                separator.get_or_insert_with(|| slice(input, last_end.unwrap_or(start)..start));
+                first_start.get_or_insert(start);
+                let leg_separator = slice(input, leg_end.unwrap_or(start)..start);
+                leg_end = Some(
+                    leg.raw
+                        .end,
+                );
+                legs.push(FlattenedLeg::read(
+                    input,
+                    leg,
+                    leg_separator,
+                    &inherited,
+                    nested_vars,
+                ));
+            }
+            let Some(separator) = separator else {
+                continue;
+            };
+            last_end = leg_end;
+            groups.push(FlattenedGroup { separator, legs });
+        }
+        let (start, end) = first_start.zip(last_end)?;
+        Some(Self {
+            separator: slice(input, separator_start..raw.start),
+            head: slice(input, raw.start..start),
+            blocks,
+            groups,
+            trailer: slice(input, end..raw.end),
+        })
+    }
+
     /// Groups in the order they are tried.
     pub fn groups(&self) -> impl Iterator<Item = &FlattenedGroup> {
         self.groups
@@ -253,6 +525,39 @@ impl FlattenedGroup {
 }
 
 impl FlattenedLeg {
+    fn read(
+        input: &str,
+        leg: Leg,
+        separator: String,
+        inherited: &Arc<[Block]>,
+        nested_vars: bool,
+    ) -> Self {
+        let warnings = leg
+            .blocks
+            .iter()
+            .enumerate()
+            .flat_map(|(block, parsed)| {
+                parsed
+                    .pairs
+                    .iter()
+                    .filter_map(move |pair| LegWarning::of(block, pair, nested_vars))
+            })
+            .collect();
+        Self {
+            separator,
+            raw: slice(
+                input,
+                leg.raw
+                    .clone(),
+            ),
+            target: LegTarget::read(&leg.endpoint),
+            leg,
+            inherited: Arc::clone(inherited),
+            nested_vars,
+            warnings,
+        }
+    }
+
     /// The leg's own input text.
     pub fn raw(&self) -> &str {
         &self.raw
@@ -261,9 +566,17 @@ impl FlattenedLeg {
     /// The value the leg's channel receives, after the list and thread blocks
     /// are installed in the order `local_var_clobber` decides.
     ///
-    /// On a channel with `CF_NO_PRESENCE`, originate deletes `presence_id`.
+    /// A value naming a variable is refused at install, as the switch refuses
+    /// it, unless `origination_nested_vars=true` appears in the list. On a
+    /// channel with `CF_NO_PRESENCE`, originate deletes `presence_id`.
     pub fn variable(&self, name: impl VariableName) -> Option<&str> {
-        todo!("{}", name.as_str())
+        pipeline::resolve(
+            self.inherited
+                .iter(),
+            &self.leg,
+            name.as_str(),
+            self.nested_vars,
+        )
     }
 
     /// What the leg dials.
@@ -294,7 +607,58 @@ impl ErrorLeg {
     /// The switch ends a zero with `DESTINATION_OUT_OF_ORDER` and an
     /// unrecognized cause with `NORMAL_CLEARING`; this crate fabricates neither.
     pub fn cause(&self) -> Option<HangupCause> {
-        todo!()
+        match self.reading {
+            CauseReading::Name(cause) => Some(cause),
+            CauseReading::Number(number) => u16::try_from(number)
+                .ok()
+                .and_then(HangupCause::from_number),
+            CauseReading::Unrecognized => None,
+        }
+    }
+}
+
+impl LegTarget {
+    fn read(endpoint: &str) -> Self {
+        if let Some(cause) = endpoint.strip_prefix("error/") {
+            return Self::Error(ErrorLeg {
+                as_written: cause.to_owned(),
+                reading: str2cause(cause),
+            });
+        }
+        match Endpoint::parse_bare(endpoint) {
+            Ok(parsed) => Self::Endpoint(parsed),
+            Err(error) => Self::Unparsed(UnparsedLeg {
+                endpoint: endpoint.to_owned(),
+                error,
+            }),
+        }
+    }
+}
+
+impl LegWarning {
+    fn of(block: usize, pair: &Pair, nested_vars: bool) -> Option<Self> {
+        let key = || {
+            pair.key
+                .clone()
+        };
+        match &pair.effect {
+            PairEffect::Ignored => Some(Self::PairIgnored { block, key: key() }),
+            PairEffect::Cleared => Some(Self::PairCleared { block, key: key() }),
+            PairEffect::Set(value) if !nested_vars && names_a_variable(value) => {
+                Some(Self::NestedVarsRefused { block, key: key() })
+            }
+            PairEffect::Set(_) => None,
+        }
+    }
+}
+
+impl FlattenedDialStringError {
+    fn from_pipeline(error: PipelineError) -> Self {
+        match error {
+            PipelineError::Empty => Self::Empty,
+            PipelineError::ArgvSplit => Self::ArgvSplit,
+            PipelineError::UnclosedBlock { leg } => Self::UnclosedBlock { leg },
+        }
     }
 }
 
@@ -303,29 +667,74 @@ impl UnparsedLeg {
     pub fn endpoint(&self) -> &str {
         &self.endpoint
     }
+
+    /// Why no typed endpoint accepts that text.
+    pub fn error(&self) -> &OriginateError {
+        &self.error
+    }
 }
 
 impl fmt::Display for UnparsedLeg {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        todo!()
+        let kind = if self
+            .endpoint
+            .is_empty()
+        {
+            "empty leg"
+        } else {
+            "unrecognized endpoint"
+        };
+        write!(
+            f,
+            "{kind} ({} bytes)",
+            self.endpoint
+                .len()
+        )
     }
 }
 
 impl fmt::Display for LegWarning {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        todo!()
+        match self {
+            Self::PairIgnored { block, key } => {
+                write!(
+                    f,
+                    "pair {key} in block {block} has no value and is not installed"
+                )
+            }
+            Self::PairCleared { block, key } => {
+                write!(
+                    f,
+                    "pair {key} in block {block} is empty and deletes earlier values"
+                )
+            }
+            Self::NestedVarsRefused { block, key } => write!(
+                f,
+                "pair {key} in block {block} names a variable while origination_nested_vars is off"
+            ),
+        }
     }
 }
 
 impl fmt::Display for ListWarning {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        todo!()
+        f.write_str(match self {
+            Self::QuoteSpansLegs => "a quote holds a leg or group separator",
+            Self::CarrierExpands => {
+                "the dialplan carrier expands a variable reference kept as written"
+            }
+        })
     }
 }
 
 impl fmt::Display for FlattenedDialStringError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        todo!()
+        match self {
+            Self::Empty => f.write_str("dial string has no leg to dial"),
+            Self::ArgvSplit => f.write_str("originate's argument split cuts the dial string"),
+            Self::UnclosedBlock { leg } => write!(f, "a block on leg {leg} never closes"),
+            Self::TrailingNewline => f.write_str("dial string ends in a newline"),
+        }
     }
 }
 
