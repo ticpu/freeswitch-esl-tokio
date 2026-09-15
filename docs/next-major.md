@@ -70,6 +70,14 @@ carry `)`, build and render, then run as something else. Parse and config load
 refuse them; the constructors, `target_mut`, `Application::new` and
 `Application::args_mut` cannot until they return `Result`.
 
+### `Originate::set_dialplan` and `target_mut` need to refuse a mismatched dialplan
+
+`originate_function` hands the target to the inline hunt only under the `inline`
+dialplan, so an extension under `inline` and inline applications under any other
+dialplan misfire. `dialplan`, `dialplan_raw` and config load refuse both;
+`set_dialplan` and a target swapped through `target_mut` cannot until they
+return `Result`.
+
 ### Consider removing `Display` for `Variables` and `Endpoint`
 
 Both render for `DialStringCarrier::EslApi` at the default `BlockParse`, which

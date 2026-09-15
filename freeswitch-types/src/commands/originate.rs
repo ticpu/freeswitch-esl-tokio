@@ -83,6 +83,22 @@ pub(super) fn check_target_readable(target: &OriginateTarget) -> Result<(), Orig
     }
 }
 
+/// Reject a dialplan `target` cannot run under: `originate_function` hands the target to the
+/// inline hunt only under `inline`, so an extension there and an action list elsewhere misfire.
+fn check_dialplan_fits(
+    target: &OriginateTarget,
+    dialplan: Option<&Dialplan>,
+) -> Result<(), OriginateError> {
+    let inline = matches!(dialplan, Some(Dialplan::Typed(DialplanType::Inline)));
+    match target {
+        OriginateTarget::Extension(_) if inline => Err(OriginateError::ExtensionWithInlineDialplan),
+        OriginateTarget::InlineApplications(_) if dialplan.is_some() && !inline => {
+            Err(OriginateError::InlineApplicationsWithDialplan)
+        }
+        _ => Ok(()),
+    }
+}
+
 /// Render `apps` as one inline action list, escaping the separator wherever it
 /// occurs inside an application.
 ///
@@ -290,8 +306,9 @@ impl From<Vec<Application>> for OriginateTarget {
 /// Originate command builder: `originate <endpoint> <target> [dialplan] [context] [cid_name] [cid_num] [timeout]`.
 ///
 /// Constructed via [`Originate::extension`], [`Originate::application`], or
-/// [`Originate::inline`]. Invalid states (Extension + Inline dialplan, empty
-/// inline apps) are rejected at construction time rather than at `Display`.
+/// [`Originate::inline`]. Invalid states (Extension + Inline dialplan, inline
+/// apps under another dialplan, empty inline apps) are rejected at construction
+/// time rather than at `Display`.
 ///
 /// Optional fields are set via consuming-self chaining methods:
 ///
@@ -369,11 +386,7 @@ mod serde_support {
                     DialplanField::Typed(dp) => Dialplan::Typed(dp),
                     DialplanField::Named(name) => Dialplan::from_name(name),
                 });
-            if matches!(raw.target, OriginateTarget::Extension(_))
-                && matches!(dialplan, Some(Dialplan::Typed(DialplanType::Inline)))
-            {
-                return Err(OriginateError::ExtensionWithInlineDialplan);
-            }
+            check_dialplan_fits(&raw.target, dialplan.as_ref())?;
             if dialplan
                 .as_ref()
                 .is_some_and(|dp| {
@@ -643,28 +656,26 @@ impl Originate {
 
     /// Set the dialplan type.
     ///
-    /// Returns `Err` if setting `Inline` on an `Extension` target.
-    pub fn dialplan(mut self, dp: DialplanType) -> Result<Self, OriginateError> {
-        if matches!(self.target, OriginateTarget::Extension(_)) && dp == DialplanType::Inline {
-            return Err(OriginateError::ExtensionWithInlineDialplan);
-        }
-        self.dialplan = Some(Dialplan::Typed(dp));
-        Ok(self)
+    /// Returns `Err` if setting `Inline` on an `Extension` target, or anything but `Inline` on
+    /// inline applications, which `originate` would transfer as an extension.
+    pub fn dialplan(self, dp: DialplanType) -> Result<Self, OriginateError> {
+        self.with_dialplan(Dialplan::Typed(dp))
     }
 
     /// Name the dialplan module, for one [`DialplanType`] does not cover. The switch looks the
     /// name up when the channel is transferred, so a name no module registers hangs it up.
     ///
-    /// A name reading as a [`DialplanType`] in any case sets that type through
-    /// [`dialplan`](Self::dialplan), which refuses `inline` on an `Extension` target.
+    /// A name reading as a [`DialplanType`] in any case sets that type. Refused as
+    /// [`dialplan`](Self::dialplan) refuses: `inline` on an `Extension` target, any other name
+    /// on inline applications.
     pub fn dialplan_raw(self, name: impl Into<String>) -> Result<Self, OriginateError> {
-        match Dialplan::from_name(name.into()) {
-            Dialplan::Typed(dp) => self.dialplan(dp),
-            named => Ok(Self {
-                dialplan: Some(named),
-                ..self
-            }),
-        }
+        self.with_dialplan(Dialplan::from_name(name.into()))
+    }
+
+    fn with_dialplan(mut self, dialplan: Dialplan) -> Result<Self, OriginateError> {
+        check_dialplan_fits(&self.target, Some(&dialplan))?;
+        self.dialplan = Some(dialplan);
+        Ok(self)
     }
 
     /// Set the dialplan context. `undef` in any case reads as absent on the switch.
@@ -1108,6 +1119,9 @@ pub enum OriginateError {
         /// The application name.
         application: String,
     },
+    /// Inline applications under a dialplan other than `inline`, which transfers them as an
+    /// extension.
+    InlineApplicationsWithDialplan,
 }
 
 impl std::fmt::Display for OriginateError {
@@ -1163,6 +1177,10 @@ impl std::fmt::Display for OriginateError {
                 "an application's name carries a parenthesis or its arguments carry ), \
                  where originate ends the arguments",
             ),
+            Self::InlineApplicationsWithDialplan => f.write_str(
+                "inline applications run only under the inline dialplan; \
+                 any other transfers them as an extension",
+            ),
         }
     }
 }
@@ -1184,7 +1202,8 @@ impl std::error::Error for OriginateError {
             | Self::UndeliverableArgument { .. }
             | Self::UndefPositional(_)
             | Self::ExtensionReadsAsApplication
-            | Self::ParenthesisInApplication { .. } => None,
+            | Self::ParenthesisInApplication { .. }
+            | Self::InlineApplicationsWithDialplan => None,
         }
     }
 }
@@ -2685,6 +2704,34 @@ mod tests {
             .parse()
             .unwrap();
         assert_eq!(parsed.caller_id_name(), Some("it's"));
+    }
+
+    /// `originate_function` hands the target to the inline hunt only under the inline dialplan;
+    /// under any other it transfers the action list as an extension.
+    #[test]
+    fn inline_applications_refuse_another_dialplan() {
+        let inline = || Originate::inline(null_endpoint(), [Application::simple("park")]).unwrap();
+        for refused in [
+            inline().dialplan(DialplanType::Xml),
+            inline().dialplan_raw(""),
+            inline().dialplan_raw("nosuchdp"),
+        ] {
+            assert_eq!(refused, Err(OriginateError::InlineApplicationsWithDialplan));
+        }
+        assert!(inline()
+            .dialplan(DialplanType::Inline)
+            .is_ok());
+        assert!(inline()
+            .dialplan_raw("INLINE")
+            .is_ok());
+        let json = r#"{"endpoint": {"loopback": {"extension": "9199"}},
+            "inline_applications": [{"name": "park"}], "dialplan": "xml"}"#;
+        assert_eq!(
+            serde_json::from_str::<Originate>(json)
+                .unwrap_err()
+                .to_string(),
+            OriginateError::InlineApplicationsWithDialplan.to_string()
+        );
     }
 
     /// `originate_function` runs a target opening `&` and more as an application and ends its

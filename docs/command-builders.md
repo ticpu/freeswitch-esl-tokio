@@ -280,8 +280,8 @@ Key design choices:
   99% case). Explicit `{scope, vars}` form for Enterprise/Channel scopes.
 - **`Endpoint`** — externally tagged enum with `snake_case` variant names.
 - **`Originate`** — manual `Serialize`/`Deserialize` via `OriginateRaw` intermediate
-  type. Validates invariants (no Extension+Inline, no empty InlineApplications) on
-  deserialize. `BridgeDialString` uses straightforward derives.
+  type. Validates invariants (no Extension+Inline, no InlineApplications under
+  another dialplan, no empty InlineApplications) on deserialize. `BridgeDialString` uses straightforward derives.
 
 ## Dependencies
 
