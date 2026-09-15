@@ -11,11 +11,11 @@ use std::str::FromStr;
 
 use super::originate::OriginateError;
 use super::STRIPPED_WHITESPACE;
-use crate::switch_passes::brackets::same_header;
+use crate::switch_passes::brackets::{same_header, Block, PairEffect};
 use crate::switch_passes::expansion::names_a_variable;
 use crate::switch_passes::originate_legs::{splits_into_threads, ENTERPRISE_DELIM};
 use crate::switch_passes::separate::{sole_argument, ArgvCut, Token};
-use crate::switch_passes::{trace, untrace, Traced};
+use crate::switch_passes::{pipeline, trace, untrace, PipelineError, Traced};
 use crate::version::FreeswitchVersion;
 
 /// Scope for channel variables in an originate command.
@@ -42,6 +42,15 @@ impl VariablesType {
             Self::Enterprise => ('<', '>'),
             Self::Default => ('{', '}'),
             Self::Channel => ('[', ']'),
+        }
+    }
+
+    /// The scope of the block the switch parsed.
+    pub(crate) fn of_block(block: &Block) -> Self {
+        match block.open {
+            '<' => Self::Enterprise,
+            '{' => Self::Default,
+            _ => Self::Channel,
         }
     }
 
@@ -948,104 +957,6 @@ fn protects_dollars(value: &str, target: DialStringTarget) -> bool {
         && !names_a_variable(value)
 }
 
-/// Inverts [`escape_value`].
-fn unescape_value(
-    value: &str,
-    target: DialStringTarget,
-    commas_separate: bool,
-    vars_type: VariablesType,
-) -> String {
-    unescape_field(
-        value,
-        target,
-        EscapedField::Value {
-            scope: vars_type,
-            commas_separate,
-        },
-    )
-}
-
-/// Inverts [`escape_text`] for a key or value, undoing each substitution in the reverse order it
-/// was applied so an escape introduced by a later rule is not read as input to an earlier one.
-fn unescape_field(value: &str, target: DialStringTarget, field: EscapedField) -> String {
-    let (vars_type, commas_separate, key) = match field {
-        EscapedField::Value {
-            scope,
-            commas_separate,
-        } => (scope, commas_separate, false),
-        EscapedField::Key {
-            scope,
-            commas_separate,
-        } => (scope, commas_separate, true),
-        EscapedField::Endpoint => (VariablesType::Default, true, false),
-    };
-    let s = value
-        .strip_prefix('\'')
-        .and_then(|s| s.strip_suffix('\''))
-        .unwrap_or(value);
-    // Every other escape at this carrier opens with at least two backslashes.
-    let (dollars, s) = match s.strip_prefix("\\'") {
-        Some(rest)
-            if target
-                .carrier()
-                .expands() =>
-        {
-            (true, rest)
-        }
-        _ => (false, s),
-    };
-    let caret_guard = target.caret_guard(field);
-    let s = match s.strip_prefix(caret_guard.as_str()) {
-        Some(rest) if key && rest.starts_with("^^") => rest,
-        _ => s,
-    };
-    let space = target.space_escape(field);
-    let (lead, s) = match s.strip_prefix(space.as_str()) {
-        Some(rest) => (" ", rest),
-        None => ("", s),
-    };
-    // A literal backslash before a final `s` also ends in the escape's run, but whole levels deep.
-    let run = s
-        .strip_suffix('s')
-        .map_or(0, |body| {
-            body.len()
-                - body
-                    .trim_end_matches('\\')
-                    .len()
-        });
-    let (trail, s) = if run % (1 << target.passes(field)) == space.len() - 1 {
-        (" ", &s[..s.len() - space.len()])
-    } else {
-        ("", s)
-    };
-    let guard = target.channel_comma_guard();
-    let s: Cow<'_, str> = match (vars_type, commas_separate) {
-        (VariablesType::Channel, true) if !key => Cow::Borrowed(
-            s.strip_suffix(guard.as_str())
-                .unwrap_or(s),
-        ),
-        (VariablesType::Channel, false) => Cow::Owned(s.replace(&format!("{guard},"), ",")),
-        _ => Cow::Borrowed(s),
-    };
-
-    let s = if vars_type == VariablesType::Channel {
-        s.replace("\\|", "|")
-    } else {
-        s.to_string()
-    };
-    let s = if key { s.replace("\\=", "=") } else { s };
-    let s = if commas_separate {
-        s.replace("\\,", ",")
-    } else {
-        s
-    };
-    let s = if dollars { s.replace("\\$", "$") } else { s };
-    let s = s
-        .replace(&target.quote_escape(field), "'")
-        .replace(&target.backslash_escape(field), "\\");
-    format!("{lead}{s}{trail}")
-}
-
 impl Variables {
     /// Create an empty variable set with the given scope.
     pub fn new(vars_type: VariablesType) -> Self {
@@ -1346,11 +1257,14 @@ impl FromStr for Variables {
     }
 }
 
+/// The endpoint text a lone block is read ahead of, so the switch's passes see a whole leg.
+const LONE_BLOCK_ENDPOINT: &str = "null/x";
+
 impl Variables {
-    /// Parse a block written for a named carrier or [`DialStringTarget`],
-    /// mirroring [`display_for`](Self::display_for). [`FromStr`] uses the same
-    /// [`DialStringCarrier::EslApi`] default as [`Display`](fmt::Display), so
-    /// the two round-trip.
+    /// Parse a block written for a named carrier or [`DialStringTarget`], as the switch installs
+    /// it there: the pairs are read through a port of every pass that target applies, so a block
+    /// [`display_for`](Self::display_for) wrote at the same target reads back as built.
+    /// [`FromStr`] uses the [`DialStringCarrier::EslApi`] default of [`Display`](fmt::Display).
     pub fn parse_for(s: &str, target: impl Into<DialStringTarget>) -> Result<Self, OriginateError> {
         let (argument, target) = target
             .into()
@@ -1361,66 +1275,68 @@ impl Variables {
                 "variable block too short".into(),
             ));
         }
-
-        let (vars_type, inner_str) = match (s.as_bytes()[0], s.as_bytes()[s.len() - 1]) {
-            (b'{', b'}') => (VariablesType::Default, &s[1..s.len() - 1]),
-            (b'<', b'>') => (VariablesType::Enterprise, &s[1..s.len() - 1]),
-            (b'[', b']') => (VariablesType::Channel, &s[1..s.len() - 1]),
+        match (s.as_bytes()[0], s.as_bytes()[s.len() - 1]) {
+            (b'{', b'}') | (b'<', b'>') | (b'[', b']') => {}
             (open, close) => {
                 return Err(OriginateError::ParseError(format!(
                     "unknown variable delimiters: {:?}..{:?}",
                     open as char, close as char
                 )));
             }
-        };
-
-        let (sep, var_str) = match inner_str.strip_prefix("^^") {
-            Some(rest) => {
-                let sep = rest
-                    .chars()
-                    .next()
-                    .ok_or_else(|| {
-                        OriginateError::ParseError("^^ without separator character".into())
-                    })?;
-                check_separator(sep, vars_type)?;
-                (sep, &rest[sep.len_utf8()..])
-            }
-            None => (',', inner_str),
-        };
-        let commas_separate = sep == ',';
-
-        let mut inner = IndexMap::new();
-        if !var_str.is_empty() {
-            for (i, part) in split_unescaped(var_str, sep)
-                .into_iter()
-                .enumerate()
-            {
-                let at = unescaped_at(part, '=')
-                    .next()
-                    .ok_or_else(|| {
-                        OriginateError::ParseError(format!("missing = in variable {i}"))
-                    })?;
-                let key = unescape_field(
-                    &part[..at],
-                    target,
-                    EscapedField::Key {
-                        scope: vars_type,
-                        commas_separate,
-                    },
-                );
-                let key = key.as_str();
-                let value = unescape_value(&part[at + 1..], target, commas_separate, vars_type);
-                check_representable(key, &value, vars_type)?;
-                check_case_collision(inner.keys(), key, i)?;
-                if !commas_separate && (key.contains(sep) || value.contains(sep)) {
-                    return Err(OriginateError::ParseError(format!(
-                        "variable {i} contains the block's ^^ separator"
-                    )));
-                }
-                inner.insert(key.to_string(), value);
-            }
         }
+        match read_leg(&format!("{s}{LONE_BLOCK_ENDPOINT}"), target)? {
+            (Some(block), endpoint) if endpoint == LONE_BLOCK_ENDPOINT => Self::from_block(&block),
+            _ => Err(OriginateError::ParseError(
+                "the switch ends the block before its last bracket".into(),
+            )),
+        }
+    }
 
+    /// The variables `block` installs, refusing what no render of this crate delivers.
+    pub(crate) fn from_block(block: &Block) -> Result<Self, OriginateError> {
+        let vars_type = VariablesType::of_block(block);
+        if block.separator != ',' {
+            check_separator(block.separator, vars_type)?;
+        }
+        if block.rewrites_following_text {
+            return Err(OriginateError::ParseError(
+                "the block's parse rewrites the text after it".into(),
+            ));
+        }
+        let mut inner = IndexMap::new();
+        for (i, pair) in block
+            .pairs
+            .iter()
+            .enumerate()
+        {
+            let value = match &pair.effect {
+                PairEffect::Set(value) => value.as_str(),
+                PairEffect::Cleared | PairEffect::Valueless => "",
+                PairEffect::Ignored => {
+                    return Err(OriginateError::ParseError(format!(
+                        "missing = in variable {i}"
+                    )))
+                }
+                PairEffect::Unreadable => {
+                    return Err(OriginateError::ParseError(format!(
+                        "variable {i} opens a non-ASCII ^^ separator the switch splits by byte"
+                    )))
+                }
+            };
+            let key = pair
+                .key
+                .as_str();
+            check_representable(key, value, vars_type)?;
+            check_case_collision(inner.keys(), key, i)?;
+            if block.separator != ','
+                && (key.contains(block.separator) || value.contains(block.separator))
+            {
+                return Err(OriginateError::ParseError(format!(
+                    "variable {i} contains the block's ^^ separator"
+                )));
+            }
+            inner.insert(key.to_owned(), value.to_owned());
+        }
         Ok(Self {
             vars_type,
             inner,
@@ -1429,36 +1345,63 @@ impl Variables {
     }
 }
 
-/// Split on separators that are not escaped by a backslash.
-///
-/// A separator preceded by an odd number of backslashes is escaped (e.g. `\,`).
-/// One preceded by an even number is a real split point (e.g. `\\,` is an
-/// escaped backslash followed by the delimiter).
-fn split_unescaped(s: &str, sep: char) -> Vec<&str> {
-    let mut parts = Vec::new();
-    let mut start = 0;
-    for i in unescaped_at(s, sep) {
-        parts.push(&s[start..i]);
-        start = i + sep.len_utf8();
+/// The one leg the switch reads of `text` at `target`: its one block, if any, and the endpoint
+/// text after it.
+pub(crate) fn read_leg(
+    text: &str,
+    target: DialStringTarget,
+) -> Result<(Option<Block>, String), OriginateError> {
+    let list = pipeline::read(text, target).map_err(read_error)?;
+    let one_leg = || OriginateError::ParseError("the switch reads more than one leg".into());
+    let [thread] = &list.threads[..] else {
+        return Err(one_leg());
+    };
+    let [group] = &thread.groups[..] else {
+        return Err(one_leg());
+    };
+    let [leg] = &group[..] else {
+        return Err(one_leg());
+    };
+    let mut blocks = list
+        .blocks
+        .iter()
+        .chain(&thread.blocks)
+        .chain(&leg.blocks);
+    match (blocks.next(), blocks.next()) {
+        (Some(_), Some(_)) => Err(OriginateError::ParseError(
+            "an endpoint carries one variable block".into(),
+        )),
+        (block, _) => Ok((
+            block.cloned(),
+            leg.endpoint
+                .clone(),
+        )),
     }
-    parts.push(&s[start..]);
-    parts
 }
 
-/// The byte offset of every `sep` behind an even run of backslashes.
-fn unescaped_at(s: &str, sep: char) -> impl Iterator<Item = usize> + '_ {
-    s.char_indices()
-        .filter(move |&(i, ch)| {
-            ch == sep
-                && s.as_bytes()[..i]
-                    .iter()
-                    .rev()
-                    .take_while(|&&b| b == b'\\')
-                    .count()
-                    % 2
-                    == 0
-        })
-        .map(|(i, _)| i)
+/// The variables `block` installs, or `None` for no block or one installing nothing.
+pub(crate) fn installed_variables(
+    block: Option<&Block>,
+) -> Result<Option<Variables>, OriginateError> {
+    Ok(block
+        .map(Variables::from_block)
+        .transpose()?
+        .filter(|vars| !vars.is_empty()))
+}
+
+/// Why the switch reads no dial string from the text.
+pub(crate) fn read_error(error: PipelineError) -> OriginateError {
+    OriginateError::ParseError(
+        match error {
+            PipelineError::Empty => "no endpoint to dial",
+            PipelineError::ArgvSplit => "originate's argument split cuts the dial string",
+            PipelineError::UnclosedBlock { .. } => "a variable block never closes",
+            PipelineError::SplitSeparatorUnreadable => {
+                "a split on a non-ASCII ^^ separator's first byte reaches past its text"
+            }
+        }
+        .into(),
+    )
 }
 
 #[cfg(test)]
@@ -1881,29 +1824,6 @@ mod tests {
     }
 
     #[test]
-    fn split_unescaped_basic() {
-        assert_eq!(split_unescaped("a,b,c", ','), vec!["a", "b", "c"]);
-        assert_eq!(split_unescaped("a~b~c", '~'), vec!["a", "b", "c"]);
-    }
-
-    #[test]
-    fn split_unescaped_escaped() {
-        assert_eq!(split_unescaped(r"a\,b,c", ','), vec![r"a\,b", "c"]);
-    }
-
-    #[test]
-    fn split_unescaped_double_backslash() {
-        // \\, = escaped backslash + comma delimiter
-        assert_eq!(split_unescaped(r"a\\,b", ','), vec![r"a\\", "b"]);
-    }
-
-    #[test]
-    fn split_unescaped_triple_backslash() {
-        // \\\, = escaped backslash + escaped comma (no split)
-        assert_eq!(split_unescaped(r"a\\\,b", ','), vec![r"a\\\,b"]);
-    }
-
-    #[test]
     fn variables_caret_caret_separator() {
         let vars: Variables =
             "[^^:sip_invite_domain=pbx.example.com:presence_id=1211@pbx.example.com]"
@@ -1941,15 +1861,20 @@ mod tests {
         assert_eq!(vars.get("a"), Some("1"));
     }
 
-    /// The switch consumes a backslash only before a quote, another backslash,
-    /// the separator in force, or a character it has an escape for -- so in a
-    /// block separated on something else, `\,` is two literal characters.
+    /// A cleanup consumes a backslash only before a quote, another backslash, its own delimiter
+    /// or an escape letter, so a block separated on something else keeps `\,`; a `[]` block meets
+    /// the `,` leg split first, which reads it as a comma.
     #[test]
-    fn variables_caret_caret_keeps_an_escaped_comma_literal() {
-        let vars: Variables = r"[^^:key=val\,ue:other=x]"
-            .parse()
-            .unwrap();
-        assert_eq!(vars.get("key"), Some(r"val\,ue"));
+    fn variables_caret_caret_keeps_an_escaped_comma_outside_channel_scope() {
+        for (block, want) in [
+            (r"{^^:key=val\,ue:other=x}", r"val\,ue"),
+            (r"[^^:key=val\,ue:other=x]", "val,ue"),
+        ] {
+            let vars: Variables = block
+                .parse()
+                .unwrap_or_else(|e| panic!("{block}: {e}"));
+            assert_eq!(vars.get("key"), Some(want), "{block}");
+        }
     }
 
     #[test]
@@ -2363,10 +2288,13 @@ mod tests {
     #[test]
     fn refusals_do_not_depend_on_the_revision() {
         for &block_parse in REVISIONS {
-            for carrier in [DialStringCarrier::EslApi, DialStringCarrier::Dialplan] {
+            for (carrier, quoted) in [
+                (DialStringCarrier::EslApi, r"[cid=it\\\\\\\'s]"),
+                (DialStringCarrier::Dialplan, r"[cid=it\\\\\\'s]"),
+            ] {
                 let target = DialStringTarget::new(carrier).with_block_parse(block_parse);
                 for block in [
-                    r"[cid=it\\\\\\\'s]",
+                    quoted,
                     "{k=,after=sentinel}",
                     "{k=oops}extra}",
                     "{^^=a=1=b=2}",
@@ -2877,7 +2805,7 @@ mod tests {
             "{SECRET:_:x=v}",
             "{SECRET}=v}",
             "{=v,after=sentinel}",
-            r"[SECRET\\\\\\\'s=v]",
+            r"[SECRET\\\\\\'s=v]",
         ] {
             let msg = Variables::parse_for(block, DialStringCarrier::Dialplan)
                 .expect_err(block)
@@ -3047,7 +2975,10 @@ mod tests {
                                 .as_str(),
                             value.as_str(),
                         )),
-                        PairEffect::Ignored | PairEffect::Cleared | PairEffect::Unreadable => None,
+                        PairEffect::Ignored
+                        | PairEffect::Cleared
+                        | PairEffect::Unreadable
+                        | PairEffect::Valueless => None,
                     })
                     .collect();
                 assert_eq!(

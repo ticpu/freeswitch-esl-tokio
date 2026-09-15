@@ -6,9 +6,11 @@
 use std::fmt;
 use std::str::FromStr;
 
-use super::endpoint::{extract_scoped_variables, read_error, DialString, Endpoint};
+use super::endpoint::{DialString, Endpoint};
 use super::originate::OriginateError;
-use super::variables::{BlockParse, DialStringCarrier, DialStringTarget, Variables, VariablesType};
+use super::variables::{
+    installed_variables, read_error, BlockParse, DialStringCarrier, DialStringTarget, Variables,
+};
 use crate::switch_passes::originate_legs::{scan_group, split_groups};
 use crate::switch_passes::separate::CBuffer;
 use crate::switch_passes::{pipeline, trace};
@@ -18,10 +20,6 @@ use crate::switch_passes::{pipeline, trace};
 /// than the [`DialStringCarrier::EslApi`] default the endpoint types use on
 /// their own.
 const CARRIER: DialStringCarrier = DialStringCarrier::Dialplan;
-
-/// Scopes a leading block may claim for the whole dial string. A channel block
-/// belongs to the endpoint that follows it, so it is left where it stands.
-const GLOBAL_SCOPES: &[VariablesType] = &[VariablesType::Default, VariablesType::Enterprise];
 
 /// Typed bridge dial string.
 ///
@@ -159,7 +157,6 @@ impl BridgeDialString {
             ));
         }
 
-        let (variables, _) = extract_scoped_variables(s, target, GLOBAL_SCOPES)?;
         let list = pipeline::read(s, target).map_err(read_error)?;
         let [thread] = &list.threads[..] else {
             return Err(OriginateError::ParseError(
@@ -178,6 +175,11 @@ impl BridgeDialString {
                 "a bridge dial string carries one leading variable block".into(),
             ));
         }
+        let variables = installed_variables(
+            thread
+                .blocks
+                .first(),
+        )?;
 
         let mut groups = Vec::new();
         for group in &thread.groups {
@@ -201,18 +203,9 @@ impl BridgeDialString {
                         "an endpoint carries one variable block".into(),
                     ));
                 }
-                let raw = s
-                    .get(
-                        leg.raw
-                            .clone(),
-                    )
-                    .ok_or_else(|| {
-                        OriginateError::ParseError("a leg lies outside the dial string".into())
-                    })?;
-                let (vars, _) = extract_scoped_variables(
-                    raw.trim_matches(' '),
-                    target,
-                    &[VariablesType::Channel],
+                let vars = installed_variables(
+                    leg.blocks
+                        .first(),
                 )?;
                 let mut endpoint = Endpoint::parse_bare(&leg.endpoint)?;
                 if vars.is_some() {

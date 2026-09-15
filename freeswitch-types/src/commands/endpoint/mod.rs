@@ -104,13 +104,10 @@ use std::str::FromStr;
 
 use super::originate::OriginateError;
 use super::variables::{
-    escape_text, unbalanced, DialStringCarrier, DialStringTarget, EscapedField, Variables,
-    VariablesType,
+    escape_text, installed_variables, read_leg, unbalanced, DialStringCarrier, DialStringTarget,
+    EscapedField, Variables,
 };
 use crate::switch_passes::originate_legs::splits_into_threads;
-use crate::switch_passes::separate::find_end_paren;
-use crate::switch_passes::trace;
-use crate::switch_passes::{pipeline, PipelineError};
 
 type PrefixParser = fn(&str) -> Result<Endpoint, OriginateError>;
 
@@ -279,111 +276,16 @@ pub(super) fn after_prefix<'a>(
         .ok_or_else(|| OriginateError::ParseError(format!("not a {kind} endpoint")))
 }
 
-/// Parse a dial string written for `target`: its leading block, then the module text the
-/// switch's leg splits leave, through `bare`.
+/// Parse a dial string written for `target`: the one leg the switch reads of it, its block's
+/// variables, and its module text through `bare`.
 pub(super) fn parse_leg<T>(
     s: &str,
     target: DialStringTarget,
     bare: impl FnOnce(&str) -> Result<T, OriginateError>,
 ) -> Result<(Option<Variables>, T), OriginateError> {
     let (argument, target) = target.read_argument(s)?;
-    let (variables, rest) = extract_variables(&argument, target)?;
-    let text = module_text_of(rest, target)?;
-    Ok((variables, bare(&text)?))
-}
-
-/// Why the switch reads no dial string from the text.
-pub(crate) fn read_error(error: PipelineError) -> OriginateError {
-    OriginateError::ParseError(
-        match error {
-            PipelineError::Empty => "no endpoint to dial",
-            PipelineError::ArgvSplit => "originate's argument split cuts the dial string",
-            PipelineError::UnclosedBlock { .. } => "a variable block never closes",
-            PipelineError::SplitSeparatorUnreadable => {
-                "a split on a non-ASCII ^^ separator's first byte reaches past its text"
-            }
-        }
-        .into(),
-    )
-}
-
-/// What the switch's thread and leg splits leave of `rest` as one endpoint's module text.
-fn module_text_of(rest: &str, target: DialStringTarget) -> Result<String, OriginateError> {
-    let list = pipeline::read(rest, target).map_err(read_error)?;
-    let one_leg = || OriginateError::ParseError("the switch reads more than one leg".into());
-    let [thread] = &list.threads[..] else {
-        return Err(one_leg());
-    };
-    let [group] = &thread.groups[..] else {
-        return Err(one_leg());
-    };
-    let [leg] = &group[..] else {
-        return Err(one_leg());
-    };
-    if !list
-        .blocks
-        .is_empty()
-        || !thread
-            .blocks
-            .is_empty()
-        || !leg
-            .blocks
-            .is_empty()
-    {
-        return Err(OriginateError::ParseError(
-            "an endpoint carries one variable block".into(),
-        ));
-    }
-    Ok(leg
-        .endpoint
-        .clone())
-}
-
-/// Every scope an endpoint may carry directly ahead of its module name.
-const ANY_SCOPE: &[VariablesType] = &[
-    VariablesType::Default,
-    VariablesType::Enterprise,
-    VariablesType::Channel,
-];
-
-/// Extract a leading variable block (`{...}`, `[...]`, or `<...>`) from a
-/// dial string, returning the parsed variables and the remaining URI portion.
-fn extract_variables(
-    s: &str,
-    target: DialStringTarget,
-) -> Result<(Option<Variables>, &str), OriginateError> {
-    extract_scoped_variables(s, target, ANY_SCOPE)
-}
-
-/// Extract a leading variable block whose brackets name one of `scopes`, so a
-/// caller that owns only some of them leaves the rest to whoever follows.
-///
-/// Uses depth-aware bracket matching so nested brackets in values (e.g.
-/// `<sip_h_Call-Info=<url>>`) don't cause premature closure.
-pub(super) fn extract_scoped_variables<'a>(
-    s: &'a str,
-    target: DialStringTarget,
-    scopes: &[VariablesType],
-) -> Result<(Option<Variables>, &'a str), OriginateError> {
-    let first = s
-        .as_bytes()
-        .first()
-        .copied();
-    let Some((open, close_ch)) = scopes
-        .iter()
-        .map(|scope| scope.delimiters())
-        .find(|(open, _)| first == Some(*open as u8))
-    else {
-        return Ok((None, s));
-    };
-    let text = trace(s);
-    let close = find_end_paren(&text, open, close_ch)
-        .map(|at| text[at].1)
-        .ok_or_else(|| OriginateError::ParseError(format!("unclosed {} in dial string", open)))?;
-    let var_str = &s[..=close];
-    let vars = Variables::parse_for(var_str, target)?;
-    let vars = if vars.is_empty() { None } else { Some(vars) };
-    Ok((vars, s[close + 1..].trim_matches(' ')))
+    let (block, text) = read_leg(&argument, target)?;
+    Ok((installed_variables(block.as_ref())?, bare(&text)?))
 }
 
 // ---------------------------------------------------------------------------
@@ -666,34 +568,24 @@ mod tests {
     use super::*;
     use crate::commands::variables::VariablesType;
 
-    // --- extract_variables depth-aware bracket matching ---
-
+    /// `switch_find_end_paren` counts depth, so a balanced bracket in a value leaves the block
+    /// closing at its own bracket.
     #[test]
-    fn extract_variables_nested_angle_brackets() {
-        let (vars, rest) = extract_variables(
-            "<sip_h_Call-Info=<url>>sofia/gw/x",
-            DialStringCarrier::EslApi.into(),
-        )
-        .unwrap();
-        assert_eq!(rest, "sofia/gw/x");
-        assert!(vars.is_some());
-    }
-
-    #[test]
-    fn extract_variables_nested_curly_brackets() {
-        let (vars, rest) = extract_variables(
-            "{a={b}}sofia/internal/1000",
-            DialStringCarrier::EslApi.into(),
-        )
-        .unwrap();
-        assert_eq!(rest, "sofia/internal/1000");
-        assert!(vars.is_some());
-    }
-
-    #[test]
-    fn extract_variables_unclosed_returns_error() {
-        let result = extract_variables("{a=b", DialStringCarrier::EslApi.into());
-        assert!(result.is_err());
+    fn a_leading_block_closes_at_its_matching_bracket() {
+        for (input, module_text) in [
+            ("<sip_h_Call-Info=<url>>sofia/gw/x", "sofia/gw/x"),
+            ("{a={b}}sofia/internal/1000", "sofia/internal/1000"),
+        ] {
+            let ep = Endpoint::parse_for(input, DialStringCarrier::EslApi)
+                .unwrap_or_else(|e| panic!("{input}: {e}"));
+            assert!(
+                ep.variables()
+                    .is_some(),
+                "{input}"
+            );
+            assert_eq!(ep.module_text(), module_text, "{input}");
+        }
+        assert!(Endpoint::parse_for("{a=b", DialStringCarrier::EslApi).is_err());
     }
 
     // --- Endpoint enum FromStr dispatch ---

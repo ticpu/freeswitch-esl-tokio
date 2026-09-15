@@ -20,7 +20,9 @@ pub(crate) fn installed<'a>(blocks: impl IntoIterator<Item = &'a Block>) -> Vec<
             let value = match &pair.effect {
                 PairEffect::Set(value) => value.as_str(),
                 PairEffect::Cleared => "",
-                PairEffect::Ignored | PairEffect::Unreadable => return None,
+                PairEffect::Ignored | PairEffect::Unreadable | PairEffect::Valueless => {
+                    return None
+                }
             };
             Some((
                 pair.key

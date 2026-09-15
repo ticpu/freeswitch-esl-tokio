@@ -452,12 +452,7 @@ fn write_blocks(
     target: DialStringTarget,
 ) -> fmt::Result {
     for block in blocks {
-        let scope = match block.open {
-            '<' => VariablesType::Enterprise,
-            '{' => VariablesType::Default,
-            _ => VariablesType::Channel,
-        };
-        let mut vars = Variables::new(scope);
+        let mut vars = Variables::new(VariablesType::of_block(block));
         for pair in &block.pairs {
             if let PairEffect::Set(value) = &pair.effect {
                 vars.insert(
@@ -724,7 +719,9 @@ impl LegWarning {
                 .clone()
         };
         match &pair.effect {
-            PairEffect::Ignored => Some(Self::PairIgnored { block, key: key() }),
+            PairEffect::Ignored | PairEffect::Valueless => {
+                Some(Self::PairIgnored { block, key: key() })
+            }
             PairEffect::Unreadable => Some(Self::PairUnreadable { block }),
             PairEffect::Cleared => Some(Self::PairCleared { block, key: key() }),
             PairEffect::Set(value) if !nested_vars && names_a_variable(value) => {

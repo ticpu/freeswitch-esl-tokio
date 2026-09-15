@@ -305,7 +305,7 @@ fn an_empty_pair_is_ignored_or_clears_by_the_depth_it_arrives_at() {
         let want = if cleared {
             PairEffect::Cleared
         } else {
-            PairEffect::Ignored
+            PairEffect::Valueless
         };
         assert_eq!(
             effect(&list, 0, "k").last(),

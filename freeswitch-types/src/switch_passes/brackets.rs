@@ -22,6 +22,8 @@ pub(crate) enum PairEffect {
     /// A `^^` head names a non-ASCII separator, which the split takes as its first byte; whatever
     /// it installs no string carries.
     Unreadable,
+    /// The pair ends at its `=`, whose empty field the split drops, so nothing is installed.
+    Valueless,
 }
 
 /// One pair, keyed by the name the switch installs it under.
@@ -172,6 +174,10 @@ impl Block {
 /// The pair the `=` split reads of the token at `index`, in place.
 fn pair(buffer: &mut CBuffer, index: usize) -> Pair {
     let token = untrace(buffer.c_str(index));
+    let end = index
+        + buffer
+            .c_str(index)
+            .len();
     let split = buffer.separate(index, '=', 2);
     if split.unreadable_head {
         return Pair {
@@ -192,6 +198,18 @@ fn pair(buffer: &mut CBuffer, index: usize) -> Pair {
             value if value.is_empty() => PairEffect::Cleared,
             value => PairEffect::Set(value),
         },
+        [_] if split
+            .tokens
+            .first()
+            .is_some_and(|field| {
+                field
+                    .raw
+                    .end
+                    < end
+            }) =>
+        {
+            PairEffect::Valueless
+        }
         _ => PairEffect::Ignored,
     };
     Pair { key, effect }
@@ -216,7 +234,7 @@ pub(crate) fn install<'a>(blocks: impl IntoIterator<Item = &'a Block>) -> Vec<(&
                 headers.push((&pair.key, value))
             }
             PairEffect::Cleared => headers.retain(|(name, _)| !same_header(name, &pair.key)),
-            PairEffect::Ignored | PairEffect::Unreadable => {}
+            PairEffect::Ignored | PairEffect::Unreadable | PairEffect::Valueless => {}
         }
     }
     headers
