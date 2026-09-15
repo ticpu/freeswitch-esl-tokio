@@ -2963,6 +2963,104 @@ mod tests {
         assert_eq!(same.get("k"), Some("2"));
     }
 
+    /// Every split ahead of the `=` split reads `\\` as one backslash and leaves `\b` alone, and in
+    /// `[]` the `,` leg split reads `\,` as a comma whatever the block's own separator.
+    #[test]
+    fn parse_reads_a_value_as_the_switch_installs_it() {
+        for (block, target, want) in [
+            (
+                r"{k=a\\\\\\b}",
+                DialStringTarget::new(DialStringCarrier::EslApi),
+                r"a\b",
+            ),
+            (
+                r"{k=a\\\\b}",
+                DialStringTarget::new(DialStringCarrier::Dialplan),
+                r"a\b",
+            ),
+            (
+                r"[^^:k=val\,ue:other=x]",
+                DialStringTarget::new(DialStringCarrier::EslApi),
+                "val,ue",
+            ),
+        ] {
+            let parsed =
+                Variables::parse_for(block, target).unwrap_or_else(|e| panic!("{block}: {e}"));
+            assert_eq!(parsed.get("k"), Some(want), "{block} at {target:?}");
+        }
+    }
+
+    /// A block `parse_for` accepts reads back the pairs the port of the switch's passes installs
+    /// from it, whatever wrote the block.
+    #[test]
+    fn parse_agrees_with_the_switch_port() {
+        use crate::switch_passes::brackets::PairEffect;
+        use crate::switch_passes::pipeline;
+
+        let blocks = [
+            r"{k=a\\\\\\b}",
+            r"{k=a\\\\b}",
+            r"{k=a\b,j=c\\d}",
+            "<k='a b'>",
+            r"{k=\'x\'}",
+            r"[k=a\,b]",
+            r"[^^:k=val\,ue:other=x]",
+            r"{^^;k=a,b;j=\\\\s}",
+            r"{k=\\\\sx\\\\s}",
+            r"[k=a\\\\\\\\\\\\\\\\b]",
+            r"{k=it\\\\\\\'s}",
+            r"{k=it\\\\\\'s}",
+            "{k=v}",
+            r"{k\\=x=v}",
+        ];
+        let targets = [
+            DialStringTarget::new(DialStringCarrier::EslApi),
+            DialStringTarget::new(DialStringCarrier::Dialplan),
+            tilde(),
+        ];
+        for target in targets {
+            for block in blocks {
+                let Ok(parsed) = Variables::parse_for(block, target) else {
+                    continue;
+                };
+                let list = pipeline::read(&format!("{block}null/x"), target)
+                    .unwrap_or_else(|e| panic!("{block:?} at {target:?}: {e:?}"));
+                let installed: Vec<(&str, &str)> = list
+                    .threads
+                    .iter()
+                    .flat_map(|thread| {
+                        thread
+                            .blocks
+                            .iter()
+                            .chain(
+                                thread
+                                    .groups
+                                    .iter()
+                                    .flatten()
+                                    .flat_map(|leg| &leg.blocks),
+                            )
+                    })
+                    .flat_map(|block| &block.pairs)
+                    .filter_map(|pair| match &pair.effect {
+                        PairEffect::Set(value) => Some((
+                            pair.key
+                                .as_str(),
+                            value.as_str(),
+                        )),
+                        PairEffect::Ignored | PairEffect::Cleared | PairEffect::Unreadable => None,
+                    })
+                    .collect();
+                assert_eq!(
+                    parsed
+                        .iter()
+                        .collect::<Vec<_>>(),
+                    installed,
+                    "{block:?} at {target:?}"
+                );
+            }
+        }
+    }
+
     /// The caller has to decide what to name instead, so the refusal says what
     /// would have been accepted.
     #[test]

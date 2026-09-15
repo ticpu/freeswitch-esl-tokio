@@ -1622,6 +1622,19 @@ mod tests {
         .is_ok());
     }
 
+    /// The block ahead of an endpoint meets the same passes as the rest of its leg, each reading
+    /// `\\` as one backslash.
+    #[test]
+    fn parse_reads_the_block_as_the_switch_installs_it() {
+        let ep = Endpoint::parse_for(r"{k=a\\\\\\b}loopback/9199", DialStringCarrier::EslApi)
+            .unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(
+            ep.variables()
+                .and_then(|vars| vars.get("k")),
+            Some(r"a\b")
+        );
+    }
+
     /// `:_:` splits the dial string into threads, so no endpoint carries it.
     #[test]
     fn the_enterprise_separator_is_refused_in_any_field() {

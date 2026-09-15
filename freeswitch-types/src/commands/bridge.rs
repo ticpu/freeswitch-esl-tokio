@@ -776,6 +776,27 @@ mod tests {
         }
     }
 
+    /// The dialplan carrier's expansion, the leg splits over a `[]` block and both of a block's own
+    /// splits each read `\\` as one backslash, and none reads `\b` or `\d`.
+    #[test]
+    fn parse_reads_blocks_as_the_switch_installs_them() {
+        let bridge: BridgeDialString = r"{k=a\\\\b}[j=c\\\\\\\\d]loopback/9199/test"
+            .parse()
+            .unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(
+            bridge
+                .variables()
+                .and_then(|vars| vars.get("k")),
+            Some(r"a\b")
+        );
+        assert_eq!(
+            bridge.groups()[0][0]
+                .variables()
+                .and_then(|vars| vars.get("j")),
+            Some(r"c\d")
+        );
+    }
+
     #[test]
     fn serde_to_display_wire_format() {
         let json = r#"{
