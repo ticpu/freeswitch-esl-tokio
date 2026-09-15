@@ -21,3 +21,4 @@ cc aeedd9193c9a0f8e70e8d0c40cba27effe56b24d45acced11d77fdea05ce6f67 # shrinks to
 cc 05a92a483a91f3ba48370f990f2a7a9104c886cf879d72923853a36adc8e1e79 # shrinks to bare = Loopback(LoopbackEndpoint { extension: "", context: None, dialplan: None, variables: None }), vars = Some((Enterprise, None, [(Some(" "), "=")]))
 cc fe1f53d5ee6d18bdac8aece8f4ac8a04894725b5926ca6e6a0bd799f6e76d36c # shrinks to scope = Enterprise, sep = Some('{'), values = [(None, "$"), (None, " ")]
 cc f8aa4ed29873135b186aba2cc2b8a9c832f4f09eaa839c3935b6c604473d9042 # shrinks to bare = Loopback(LoopbackEndpoint { extension: "", context: None, dialplan: None, variables: None }), vars = Some((Enterprise, Some('$'), [(Some("{"), " ")]))
+cc 4e46e62bbec9d77bc1ab910c4c063bdb88a8ac768a4495d79dc55bb946c58353 # shrinks to bare = SofiaGateway(SofiaGateway { gateway: "_:", destination: "", profile: Some(""), variables: None }), vars = None

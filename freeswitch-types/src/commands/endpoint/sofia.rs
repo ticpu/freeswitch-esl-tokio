@@ -202,6 +202,18 @@ impl SofiaGateway {
                     EndpointFieldFault::ModuleSeparator("::"),
                 ));
             }
+            if format!("{profile}::{}", self.gateway).contains(super::ENTERPRISE_DELIM) {
+                let field = if profile.ends_with(":_") {
+                    "profile"
+                } else {
+                    "gateway"
+                };
+                return Err(undeliverable(
+                    KIND,
+                    field,
+                    EndpointFieldFault::EnterpriseSeparator,
+                ));
+            }
         }
         check_field(KIND, "destination", &self.destination, &[])
     }
