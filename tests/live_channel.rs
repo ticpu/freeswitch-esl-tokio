@@ -118,15 +118,60 @@ type VariableValues<'a> = &'a [(&'a str, Option<&'a str>)];
 #[tokio::test]
 #[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
 async fn live_originate_argv_separator_positionals() {
+    originate_positionals(Some('~')).await;
+}
+
+#[tokio::test]
+#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+async fn live_originate_blank_positionals() {
+    originate_positionals(None).await;
+}
+
+/// `originate_function` answers usage past seven arguments on either split.
+#[tokio::test]
+#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+async fn live_originate_refuses_an_eighth_argument() {
+    let (client, _events, _permit) = connect().await;
+    for line in [
+        "originate loopback/9199/test &park() XML test a b 5 extra",
+        "originate ^^~loopback/9199/test~&park()~XML~test~a~b~5~extra",
+    ] {
+        assert!(
+            line.parse::<Originate>()
+                .is_err(),
+            "{line} parsed"
+        );
+        let resp = client
+            .api(line)
+            .await
+            .unwrap_or_else(|e| panic!("{line}: transport error: {e}"));
+        let reply = resp
+            .api_result()
+            .map(str::to_owned);
+        if let Ok(uuid) = &reply {
+            kill_channel(&client, uuid).await;
+        }
+        let err = reply.expect_err(line);
+        assert!(
+            err.to_string()
+                .contains("USAGE"),
+            "{line} answered {err}"
+        );
+    }
+}
+
+async fn originate_positionals(separator: Option<char>) {
     let (client, mut events, _permit) = connect().await;
     client
         .subscribe_events(EventFormat::Plain, &[EslEventType::ChannelExecute])
         .await
         .expect("subscribe CHANNEL_EXECUTE");
 
-    let separated = |cmd: Originate| {
-        cmd.with_argv_separator('~')
-            .expect("'~' separates originate's arguments")
+    let separated = |cmd: Originate| match separator {
+        Some(sep) => cmd
+            .with_argv_separator(sep)
+            .expect("the separator splits originate's arguments"),
+        None => cmd,
     };
     let park = || {
         Originate::inline(test_9199(), vec![Application::simple("park")])
@@ -151,7 +196,7 @@ async fn live_originate_argv_separator_positionals() {
     assert!(
         empty_last
             .to_string()
-            .ends_with("~''"),
+            .ends_with(&format!("{}''", separator.unwrap_or(' '))),
         "{empty_last}"
     );
 
