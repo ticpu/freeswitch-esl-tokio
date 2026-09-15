@@ -7,7 +7,11 @@
 use std::ops::Range;
 
 #[cfg(feature = "esl")]
+pub(crate) mod api_argument;
+#[cfg(feature = "esl")]
 pub(crate) mod brackets;
+#[cfg(feature = "esl")]
+pub(crate) mod escape;
 #[cfg(feature = "esl")]
 pub(crate) mod expansion;
 #[cfg(feature = "esl")]

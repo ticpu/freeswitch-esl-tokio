@@ -3,9 +3,9 @@
 
 use std::ops::Range;
 
+use super::api_argument::ArgvCut;
 use super::expansion::expand_escapes;
 use super::originate_legs::{dial_list, DialList};
-use super::separate::ArgvCut;
 use super::{byte_range, extent, trace, PipelineError, Traced};
 use crate::commands::variables::{BlockParse, DialStringCarrier, DialStringTarget};
 

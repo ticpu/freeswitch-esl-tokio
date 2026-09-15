@@ -49,12 +49,10 @@ pub use variables::{
     UnvouchedVersion, VariablesDisplay,
 };
 
-use crate::switch_passes::separate::{cleanup, separate, Token};
-use crate::switch_passes::{byte_range, extent, trace, untrace};
+use crate::switch_passes::api_argument::{self, clean_argument, split_line};
+use crate::switch_passes::separate::separate;
+use crate::switch_passes::{trace, untrace};
 use originate::{check_inline_delimiter, check_target_readable, DEFAULT_INLINE_DELIMITER};
-
-/// What `switch_strip_whitespace` strips from both edges of an API command's argument line.
-pub(crate) const STRIPPED_WHITESPACE: [char; 5] = ['\t', '\n', '\u{b}', '\r', ' '];
 
 /// Wrap a token in single quotes for originate command strings.
 ///
@@ -63,11 +61,7 @@ pub(crate) const STRIPPED_WHITESPACE: [char; 5] = ['\t', '\n', '\u{b}', '\r', ' 
 /// as [`quote_for_uuid_setvar`] does, since that command splits on the same blank tokenizer;
 /// any other token is returned as-is.
 pub fn originate_quote(token: &str) -> String {
-    if token.is_empty() || token.contains(STRIPPED_WHITESPACE) || token.contains(['\'', '\\']) {
-        quote_for_uuid_setvar(token)
-    } else {
-        token.to_string()
-    }
+    api_argument::originate_quote(token)
 }
 
 /// Escape and single-quote a value for the argument string of `uuid_setvar`.
@@ -78,28 +72,13 @@ pub fn originate_quote(token: &str) -> String {
 /// or `\` inside the quotes ends or eats a character. The inline originate
 /// `{var=…}` block is a different carrier with different escaping.
 pub fn quote_for_uuid_setvar(value: &str) -> String {
-    let mut out = String::with_capacity(value.len() + 2);
-    out.push('\'');
-    for ch in value.chars() {
-        match ch {
-            '\'' => out.push_str("\\'"),
-            '\\' => out.push_str("\\\\"),
-            c => out.push(c),
-        }
-    }
-    out.push('\'');
-    out
+    api_argument::quote_for_uuid_setvar(value)
 }
 
 /// What the switch delivers of one token of the blank split: its quotes stripped and its
 /// escapes read, the exact inverse of [`originate_quote`].
 pub fn originate_unquote(token: &str) -> String {
     clean_argument(token, None)
-}
-
-/// What the switch's cleanup after splitting on `sep`, or on blanks, leaves of `token`.
-pub(crate) fn clean_argument(token: &str, sep: Option<char>) -> String {
-    untrace(&cleanup(&trace(token), sep))
 }
 
 /// Split a command line the way the `originate` API splits its arguments.
@@ -116,39 +95,10 @@ pub(crate) fn clean_argument(token: &str, sep: Option<char>) -> String {
 /// A quote left open is an error. The switch runs the rest of the line into one
 /// argument instead, a shape nothing this crate renders produces.
 pub fn originate_split(line: &str, split_at: char) -> Result<Vec<String>, OriginateError> {
-    let text = trace(line);
-    let separated = separate(&text, split_at, usize::MAX);
-    let raw = |token: &Token| {
-        &line[byte_range(
-            &text,
-            extent(&text),
-            token
-                .raw
-                .clone(),
-        )]
-    };
-    if separated.delimiter != ' ' {
-        return Ok(separated
-            .tokens
-            .iter()
-            .map(|token| raw(token).to_string())
-            .collect());
-    }
-    if separated.open_quote {
-        let last = separated
-            .tokens
-            .last()
-            .map_or("", raw);
-        return Err(OriginateError::UnclosedQuote(last.to_string()));
-    }
-    Ok(separated
-        .tokens
-        .iter()
-        .map(|token| {
-            raw(token)
-                .trim_start_matches(' ')
-                .to_string()
-        })
+    Ok(split_line(line, split_at)?
+        .arguments
+        .into_iter()
+        .map(|argument| line[argument.raw].to_string())
         .collect())
 }
 
@@ -227,237 +177,6 @@ pub fn parse_originate_target(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn split_with_quotes_ignores_spaces_inside() {
-        let result =
-            originate_split("originate {test='variable with quote'}sofia/test 123", ' ').unwrap();
-        assert_eq!(result[0], "originate");
-        assert_eq!(result[1], "{test='variable with quote'}sofia/test");
-        assert_eq!(result[2], "123");
-    }
-
-    #[test]
-    fn split_missing_quote_returns_error() {
-        let result = originate_split(
-            "originate {test='variable with missing quote}sofia/test 123",
-            ' ',
-        );
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn split_string_starting_ending_with_quote() {
-        let result = originate_split("'this is test'", ' ').unwrap();
-        assert_eq!(result[0], "'this is test'");
-    }
-
-    #[test]
-    fn split_comma_separated() {
-        let result = originate_split("item1,item2", ',').unwrap();
-        assert_eq!(result[0], "item1");
-        assert_eq!(result[1], "item2");
-    }
-
-    #[test]
-    fn split_with_escaped_quotes() {
-        let result = originate_split(
-            "originate {test='variable with quote'}sofia/test let\\'s add a quote",
-            ' ',
-        )
-        .unwrap();
-        assert_eq!(result[0], "originate");
-        assert_eq!(result[1], "{test='variable with quote'}sofia/test");
-        assert_eq!(result[2], "let\\'s");
-        assert_eq!(result[3], "add");
-        assert_eq!(result[4], "a");
-        assert_eq!(result[5], "quote");
-    }
-
-    #[test]
-    fn quote_without_spaces_returns_as_is() {
-        assert_eq!(originate_quote("&park()"), "&park()");
-    }
-
-    #[test]
-    fn quote_with_spaces_wraps_in_single_quotes() {
-        assert_eq!(
-            originate_quote("&socket(127.0.0.1:8040 async full)"),
-            "'&socket(127.0.0.1:8040 async full)'"
-        );
-    }
-
-    #[test]
-    fn quote_with_single_quote_and_spaces_escapes_quote() {
-        assert_eq!(
-            originate_quote("&playback(it's a test file)"),
-            "'&playback(it\\'s a test file)'"
-        );
-    }
-
-    /// A bare quote opens a region the blank split never closes, and a backslash inside the
-    /// wrapping is consumed by that split's cleanup.
-    #[test]
-    fn quote_wraps_any_token_carrying_a_single_quote() {
-        assert_eq!(originate_quote("it's"), r"'it\'s'");
-        assert_eq!(originate_quote(r"a\b it's"), r"'a\\b it\'s'");
-        assert_eq!(originate_quote("a b"), "'a b'");
-        assert_eq!(originate_quote(r"a\b c"), r"'a\\b c'");
-        assert_eq!(originate_quote(r"a\,b"), r"'a\\,b'");
-        assert_eq!(originate_quote(r"x\ny"), r"'x\\ny'");
-        assert_eq!(originate_quote(""), "''");
-        assert_eq!(originate_quote("&park()"), "&park()");
-    }
-
-    /// Every string over the characters the blank split and its cleanup treat specially
-    /// survives quoting, the split and unquoting unchanged.
-    #[test]
-    fn unquote_inverts_quote_through_the_blank_split() {
-        const ALPHABET: [char; 7] = ['a', ' ', '\'', '\\', 'n', 's', '"'];
-        let mut strings = vec![String::new()];
-        for _ in 0..5 {
-            let longer: Vec<String> = strings
-                .iter()
-                .filter(|s| {
-                    s.len()
-                        == strings
-                            .last()
-                            .map_or(0, String::len)
-                })
-                .flat_map(|s| {
-                    ALPHABET
-                        .iter()
-                        .map(move |c| {
-                            let mut next = s.clone();
-                            next.push(*c);
-                            next
-                        })
-                })
-                .collect();
-            strings.extend(longer);
-        }
-        for value in strings {
-            let quoted = originate_quote(&value);
-            assert_eq!(
-                originate_unquote(&quoted),
-                value,
-                "{value:?} via {quoted:?}"
-            );
-            let line = format!("x {quoted} y");
-            let tokens = originate_split(&line, ' ').unwrap_or_else(|e| panic!("{line:?}: {e}"));
-            assert_eq!(tokens.len(), 3, "{line:?} split into {tokens:?}");
-            assert_eq!(originate_unquote(&tokens[1]), value, "{line:?}");
-        }
-    }
-
-    #[test]
-    fn unquote_non_quoted_returns_as_is() {
-        assert_eq!(originate_unquote("&park()"), "&park()");
-    }
-
-    #[test]
-    fn unquote_strips_outer_quotes() {
-        assert_eq!(
-            originate_unquote("'&socket(127.0.0.1:8040 async full)'"),
-            "&socket(127.0.0.1:8040 async full)"
-        );
-    }
-
-    #[test]
-    fn unquote_unescapes_inner_quotes() {
-        assert_eq!(
-            originate_unquote("'&playback(it\\'s a test file)'"),
-            "&playback(it's a test file)"
-        );
-    }
-
-    #[test]
-    fn quote_unquote_round_trip() {
-        let original = "&socket(127.0.0.1:8040 async full)";
-        assert_eq!(originate_unquote(&originate_quote(original)), original);
-    }
-
-    #[test]
-    fn quote_unquote_round_trip_with_inner_quote() {
-        let original = "&playback(it's a test file)";
-        assert_eq!(originate_unquote(&originate_quote(original)), original);
-    }
-
-    #[test]
-    fn split_multiple_consecutive_spaces() {
-        let result = originate_split("originate  sofia/test  123", ' ').unwrap();
-        // Multiple consecutive spaces produce empty tokens that are trimmed/skipped
-        assert_eq!(result[0], "originate");
-        assert_eq!(result[1], "sofia/test");
-        assert_eq!(result[2], "123");
-    }
-
-    #[test]
-    fn split_leading_trailing_spaces() {
-        let result = originate_split("  originate sofia/test  ", ' ').unwrap();
-        assert_eq!(result[0], "originate");
-        assert_eq!(result[1], "sofia/test");
-    }
-
-    /// Measured on a live switch: `\\'` escapes the backslash, so the quote opens
-    /// a region the rest of the line never closes and `originate` answers usage.
-    #[test]
-    fn split_quote_after_escaped_backslash_opens_a_region() {
-        assert!(matches!(
-            originate_split(r"originate {v=x\\'y z}loopback/9199/test &park()", ' '),
-            Err(OriginateError::UnclosedQuote(_))
-        ));
-    }
-
-    /// Measured on a live switch: the backslash escapes the space, one argument.
-    #[test]
-    fn split_escaped_space_does_not_split() {
-        assert_eq!(
-            originate_split(r"originate {v=a\ b}loopback/9199/test &park()", ' ').unwrap(),
-            ["originate", r"{v=a\ b}loopback/9199/test", "&park()"]
-        );
-    }
-
-    /// Only a space separates, and only a space is trimmed.
-    #[test]
-    fn split_keeps_a_tab() {
-        assert_eq!(
-            originate_split("originate x\t y", ' ').unwrap(),
-            ["originate", "x\t", "y"]
-        );
-    }
-
-    /// A comma split toggles on a quote only when another quote follows it, and
-    /// keeps the empty token between two separators.
-    #[test]
-    fn split_on_comma_follows_the_char_delimiter_rules() {
-        assert_eq!(originate_split("a'b,c", ',').unwrap(), ["a'b", "c"]);
-        assert_eq!(originate_split("a,,b", ',').unwrap(), ["a", "", "b"]);
-    }
-
-    #[test]
-    fn split_honours_a_leading_argument_separator() {
-        assert_eq!(
-            originate_split(r"^^~{v=a b}loopback/9199/test~&park()", ' ').unwrap(),
-            ["{v=a b}loopback/9199/test", "&park()"]
-        );
-        assert_eq!(originate_split("^^~a b~c", ',').unwrap(), ["a b", "c"]);
-        assert_eq!(originate_split("^^~é", ' ').unwrap(), ["é"]);
-    }
-
-    #[test]
-    fn split_takes_no_override_without_a_byte_after_it() {
-        assert_eq!(originate_split("^^~", ' ').unwrap(), ["^^~"]);
-        assert_eq!(originate_split("^^~", ',').unwrap(), ["^^~"]);
-    }
-
-    /// The switch splits on the first byte of a non-ASCII separator, which no
-    /// char delimiter can mirror, so the default split runs over the whole line.
-    #[test]
-    fn split_takes_no_override_on_a_non_ascii_separator() {
-        assert_eq!(originate_split("^^éaéb c", ' ').unwrap(), ["^^éaéb", "c"]);
-        assert_eq!(originate_split("^^éaé,b", ',').unwrap(), ["^^éaé", "b"]);
-    }
 
     /// `originate_function` runs `&name(args)` before it reads the dialplan, and takes a lone
     /// `&` as an extension.
@@ -554,19 +273,6 @@ mod tests {
             assert_eq!(apps[1].args(), Some("NORMAL_CLEARING"));
         } else {
             panic!("expected InlineApplications");
-        }
-    }
-
-    #[test]
-    fn setvar_quoting_escapes_for_the_setvar_tokenizer() {
-        let cases: &[(&str, &str)] = &[
-            ("PCMU,PCMA", "'PCMU,PCMA'"),
-            ("mode-set=0; octet-align=1", "'mode-set=0; octet-align=1'"),
-            ("a'b", "'a\\'b'"),
-            ("a\\b", "'a\\\\b'"),
-        ];
-        for (value, expected) in cases {
-            assert_eq!(&quote_for_uuid_setvar(value), expected);
         }
     }
 

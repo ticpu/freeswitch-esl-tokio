@@ -7,14 +7,11 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use super::endpoint::{EndpointFieldFault, ParseGroupCallOrderError};
-use super::variables::{
-    breaks_a_split, write_escaped, BlockParse, DialStringCarrier, DialStringTarget,
-    InvalidArgvSeparator,
-};
-use super::{clean_argument, originate_quote, originate_split, STRIPPED_WHITESPACE};
+use super::variables::{BlockParse, DialStringCarrier, DialStringTarget, InvalidArgvSeparator};
 use crate::channel::ParseHangupCauseError;
-use crate::switch_passes::separate::{argument_head, Head};
-use crate::switch_passes::trace;
+use crate::switch_passes::api_argument::{
+    breaks_a_split, originate_quote, split_line, write_escaped, STRIPPED_WHITESPACE,
+};
 
 pub use super::variables::{Variables, VariablesType};
 
@@ -914,21 +911,21 @@ impl Originate {
             .strip_prefix("originate")
             .unwrap_or(s)
             .trim_matches(STRIPPED_WHITESPACE);
+        let line = split_line(s, ' ')?;
         // `^^ ` names the blank split itself.
-        let sep = match argument_head(&trace(s)) {
-            Head::Picked(sep) if sep != ' ' => Some(sep),
-            Head::Picked(_) | Head::Unreadable | Head::Absent => None,
-        };
+        let sep = (line.delimiter != ' ').then_some(line.delimiter);
         let dial_target = match sep {
             Some(sep) => Self::argv_target(block_parse, sep)?,
             None => Self::dial_target(block_parse),
         };
-        let mut args = originate_split(s, ' ')?.into_iter();
+        let mut arguments = line
+            .arguments
+            .into_iter();
 
-        let endpoint_str = args
+        let endpoint_argument = arguments
             .next()
             .ok_or_else(|| OriginateError::ParseError("empty originate".into()))?;
-        let endpoint = Endpoint::parse_for(&endpoint_str, dial_target)?;
+        let endpoint = Endpoint::parse_for(&s[endpoint_argument.raw], dial_target)?;
 
         let Slots {
             target: target_str,
@@ -937,7 +934,7 @@ impl Originate {
             cid_name,
             cid_num,
             timeout,
-        } = Slots::read(args.map(|token| clean_argument(&token, sep)))?;
+        } = Slots::read(arguments.map(|argument| argument.text))?;
 
         let target = super::parse_originate_target(
             &target_str,
@@ -1197,6 +1194,7 @@ impl std::error::Error for OriginateError {
 mod tests {
     use super::*;
     use crate::commands::endpoint::{LoopbackEndpoint, SofiaEndpoint, SofiaGateway};
+    use crate::commands::originate_split;
 
     /// `switch_strip_whitespace` strips tab, newline, vertical tab, CR and space only.
     #[test]

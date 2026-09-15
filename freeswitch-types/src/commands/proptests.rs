@@ -16,9 +16,9 @@ use super::{
     DialStringCarrier, DialStringTarget, DialplanType, Endpoint, ErrorEndpoint,
     FlattenedDialString, FlattenedLeg, GroupCall, GroupCallOrder, LegTarget, LoopbackEndpoint,
     Originate, SofiaContact, SofiaEndpoint, SofiaGateway, UserEndpoint, Variables, VariablesType,
-    STRIPPED_WHITESPACE,
 };
 use crate::channel::HangupCause;
+use crate::switch_passes::api_argument::STRIPPED_WHITESPACE;
 use crate::switch_passes::brackets::PairEffect;
 use crate::switch_passes::expansion::names_a_variable;
 use crate::switch_passes::pipeline;

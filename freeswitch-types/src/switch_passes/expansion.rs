@@ -5,6 +5,33 @@ use std::ops::Range;
 
 use super::brackets::{install, same_header, Block};
 use super::Traced;
+use crate::commands::variables::DialStringTarget;
+
+/// A quote reading bare once `passes` passes at `target` have run: the dialplan carrier's expansion
+/// deletes a `\'` outright, where every other pass unescapes it.
+pub(crate) fn quote_bare_after(target: DialStringTarget, passes: u32) -> String {
+    let consumed_by_carrier = if target
+        .carrier()
+        .expands()
+    {
+        2
+    } else {
+        1
+    };
+    let run = (1usize << passes) - consumed_by_carrier;
+    format!("{}'", "\\".repeat(run))
+}
+
+/// Expansion drops the first `$` of a `$$` opening no reference and substitutes a reference.
+/// `\$` keeps it only while expansion runs, which a leading `\'` guarantees and expansion then
+/// deletes. Text naming a variable is left to the switch, whichever field carries it.
+pub(crate) fn protects_dollars(value: &str, target: DialStringTarget) -> bool {
+    target
+        .carrier()
+        .expands()
+        && value.contains("$$")
+        && !names_a_variable(value)
+}
 
 #[cfg(test)]
 mod c_oracle;

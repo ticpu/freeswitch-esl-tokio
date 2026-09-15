@@ -12,10 +12,9 @@ use std::sync::Arc;
 use crate::channel::HangupCause;
 use crate::commands::endpoint::Endpoint;
 use crate::commands::originate::OriginateError;
-use crate::commands::variables::{
-    escape_text, DialStringTarget, EscapedField, Variables, VariablesType,
-};
+use crate::commands::variables::{DialStringTarget, Variables, VariablesType};
 use crate::switch_passes::brackets::{Block, Pair, PairEffect};
+use crate::switch_passes::escape::{escape_text, EscapedField};
 use crate::switch_passes::expansion::names_a_variable;
 use crate::switch_passes::originate_legs::{resolve, DialList, Leg, Thread, ENTERPRISE_DELIM};
 use crate::switch_passes::{pipeline, PipelineError};

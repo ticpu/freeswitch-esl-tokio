@@ -1,11 +1,53 @@
 //! Port of `switch_event_create_brackets`, which reads the pairs of a `<>`, `{}` or `[]` block out
 //! of the buffer it is handed, and of the originate event those pairs install into.
 
+use super::api_argument::breaks_a_split;
 use super::separate::{find_end_paren, CBuffer};
 use super::{untrace, PipelineError, Traced};
+use crate::commands::originate::OriginateError;
+use crate::commands::variables::VariablesType;
 
 #[cfg(test)]
 pub(super) mod c_oracle;
+
+/// Why `open` and `close` in `text` move the end the switch counts its way to.
+pub(crate) fn unbalanced(text: &str, (open, close): (char, char)) -> Option<String> {
+    let mut depth = 0i32;
+    for ch in text.chars() {
+        if ch == open {
+            depth += 1;
+        } else if ch == close {
+            depth -= 1;
+            if depth < 0 {
+                return Some(format!(
+                    "closes a '{open}' it never opened, ending the block early"
+                ));
+            }
+        }
+    }
+    (depth != 0).then(|| format!("opens a '{open}' it never closes, swallowing the block's end"))
+}
+
+/// Reject a separator that cannot delimit the block it was chosen for.
+///
+/// Beyond what [`breaks_a_split`], either bracket moves the end the switch counts its way to,
+/// `=` splits the pair instead, `^` leaves the `^^` prefix reading as its own separator, and
+/// `|` in a `[]` block is read by the leg split before the block is parsed. Dialplan expansion
+/// reads `$` then `{` across a pair boundary as a reference, so neither separates.
+pub(crate) fn check_separator(sep: char, vars_type: VariablesType) -> Result<(), OriginateError> {
+    let (open, close) = vars_type.delimiters();
+    if breaks_a_split(sep)
+        || sep == open
+        || sep == close
+        || matches!(sep, '=' | '^' | '$' | '{')
+        || (sep == '|' && vars_type == VariablesType::Channel)
+    {
+        return Err(OriginateError::ParseError(format!(
+            "invalid ^^ separator: '{sep}'"
+        )));
+    }
+    Ok(())
+}
 
 /// `var_array` in `switch_event_create_brackets`.
 const BLOCK_PAIRS: usize = 1024;

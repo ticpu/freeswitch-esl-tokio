@@ -443,40 +443,6 @@ fn read_back(text: &[Traced], cut: impl FnOnce(&mut CBuffer) -> Split) -> Separa
     }
 }
 
-/// A split that must leave its text whole cut it, or a quote held a delimiter.
-#[cfg(feature = "esl")]
-pub(crate) struct ArgvCut;
-
-/// The one token `originate`'s split on `delim` leaves of `text`, or `None` for an empty text.
-/// On a space that split is [`separate`], where a quote may hold a space but not stay open.
-#[cfg(feature = "esl")]
-pub(crate) fn sole_argument(text: &[Traced], delim: char) -> Result<Option<Token>, ArgvCut> {
-    let (separated, quote_cuts) = match delim {
-        ' ' => {
-            let separated = separate(text, ' ', usize::MAX);
-            let open = separated.open_quote;
-            (separated, open)
-        }
-        delim => {
-            let separated = separate_on(text, delim, usize::MAX);
-            let held = separated.held_delimiter;
-            (separated, held)
-        }
-    };
-    if quote_cuts
-        || separated
-            .tokens
-            .len()
-            > 1
-    {
-        return Err(ArgvCut);
-    }
-    Ok(separated
-        .tokens
-        .into_iter()
-        .next())
-}
-
 /// `switch_find_end_paren`: the index of the close matching an opener that follows
 /// any leading spaces. No escape is honoured.
 #[cfg(feature = "esl")]

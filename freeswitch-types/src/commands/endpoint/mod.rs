@@ -104,9 +104,10 @@ use std::str::FromStr;
 
 use super::originate::OriginateError;
 use super::variables::{
-    escape_text, installed_variables, read_leg, unbalanced, DialStringCarrier, DialStringTarget,
-    EscapedField, Variables,
+    installed_variables, read_leg, DialStringCarrier, DialStringTarget, Variables,
 };
+use crate::switch_passes::brackets::unbalanced;
+use crate::switch_passes::escape::{escape_text, EscapedField};
 use crate::switch_passes::originate_legs::splits_into_threads;
 
 type PrefixParser = fn(&str) -> Result<Endpoint, OriginateError>;
