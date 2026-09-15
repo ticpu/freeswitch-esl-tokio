@@ -45,12 +45,27 @@ freeswitch-types/src/
 ├── headers.rs              # EventHeader enum — typed event header names
 ├── macros.rs               # define_header_enum! — generates Display/FromStr/as_str for header enums
 ├── commands/               # API command string builders (→ api()/bgapi())
-│   ├── mod.rs              # Re-exports, originate_split() tokenizer
-│   ├── endpoint/           # Endpoint types, Variables, DialString trait
-│   ├── originate.rs        # Application, Originate, DialplanType
+│   ├── mod.rs              # Re-exports, originate_quote() and originate_split()
+│   ├── variables/          # Variables: its render, parse and refusals
+│   │   └── target.rs       # DialStringCarrier, BlockParse, DialStringTarget
+│   ├── endpoint/           # Endpoint types, DialString trait
+│   ├── originate/          # Originate
+│   │   ├── application.rs  # Application, OriginateTarget, DialplanType
+│   │   └── error.rs        # OriginateError
 │   ├── bridge.rs           # BridgeDialString (multi-endpoint dial strings)
+│   ├── flattened/          # FlattenedDialString, a list the switch produced
 │   ├── channel.rs          # uuid_answer, uuid_bridge, uuid_kill, uuid_setvar, ...
 │   └── conference.rs       # conference mute/unmute/hold/dtmf
+├── switch_passes/          # Ports of the switch's string passes
+│   ├── separate.rs         # switch_separate_string and its cleanup
+│   ├── api_argument.rs     # originate's argument split, its escapes and quoting
+│   ├── expansion.rs        # the dialplan carrier's escape handling
+│   ├── brackets.rs         # switch_event_create_brackets and the event install
+│   ├── originate_legs.rs   # switch_ivr_originate's thread, group and leg splits
+│   ├── escape.rs           # the escapes a render writes for each pass
+│   ├── inline_hunt.rs      # inline_dialplan_hunt's split and render
+│   ├── originate_function.rs  # originate_function's positional read
+│   └── pipeline.rs         # every pass a target applies, in order
 └── variables/              # Channel variable format parsers
     ├── mod.rs              # VariableName trait, re-exports
     ├── core.rs             # ChannelVariable enum — typed variable names
