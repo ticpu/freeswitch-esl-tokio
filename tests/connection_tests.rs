@@ -14,6 +14,7 @@ use mock_server::{
 };
 use std::collections::HashMap;
 use std::time::Duration;
+use tokio::net::TcpSocket;
 
 #[tokio::test]
 async fn test_connect_and_authenticate() {
@@ -343,8 +344,20 @@ async fn test_event_queue_size_zero_clamped() {
 
 #[tokio::test]
 async fn connect_refused_returns_connection_error() {
-    let (listener, port) = setup_raw_pair().await;
-    drop(listener);
+    // Bound and never listening: the kernel refuses every dial to the port, and
+    // no other test's ephemeral bind can take it while this socket holds it.
+    let socket = TcpSocket::new_v6().expect("create an IPv6 socket");
+    socket
+        .bind(
+            "[::]:0"
+                .parse()
+                .expect("a socket address"),
+        )
+        .expect("bind an ephemeral port");
+    let port = socket
+        .local_addr()
+        .expect("a bound socket has a local address")
+        .port();
 
     let err = EslClient::connect("localhost", port, "pw")
         .await
