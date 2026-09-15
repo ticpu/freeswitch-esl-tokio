@@ -135,6 +135,15 @@ variable scoping documentation.
 
 **Originate** — full command: `originate {endpoint} {target} [dialplan] [context] [cid_name] [cid_num] [timeout]`
 
+`originate_function` NULLs every argument reading `undef` in any case, then reads
+the rest strictly by position: the third is the dialplan whatever it says, and
+past seven it answers usage. Both splits parse through one reader with those
+rules, refusing a token naming no dialplan type, an eighth argument, and an
+`undef` target, which the switch asserts is set and aborts on. On the blank
+split an argument is written through `originate_quote()`, an empty one as `''`
+since a run of blanks is one split, and an absent dialplan or context forced by
+a later slot as `XML`/`default`. A line opening `^^ ` parses as the blank split.
+
 With `with_argv_separator(sep)` the line is
 `originate ^^<sep><endpoint><sep><target>[<sep>positional…]`, every argument
 escaped once for that split and none passed through `originate_quote()`. A
