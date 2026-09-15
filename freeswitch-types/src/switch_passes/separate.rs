@@ -4,8 +4,10 @@
 use std::ops::Range;
 
 #[cfg(feature = "esl")]
-use super::{byte_range, extent};
-use super::{trace, untrace, Traced};
+use super::extent;
+use super::Traced;
+#[cfg(feature = "sdp")]
+use super::{trace, untrace};
 
 /// Raw token spans one split cuts, as index ranges into the text it split.
 pub(crate) struct Cut {
@@ -209,6 +211,33 @@ fn cleanup_written(raw: &[Traced], delim: Option<char>) -> (Vec<Traced>, Option<
     (out, end)
 }
 
+/// What the `^^` head opening a `switch_separate_string` argument names.
+#[cfg(feature = "esl")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Head {
+    /// `^^`, the separator picked over the one given, and at least one byte after it.
+    Picked(char),
+    /// A non-ASCII separator, which the switch takes as its first byte and no char split mirrors;
+    /// the split runs on the separator given, over the head.
+    Unreadable,
+    /// No head the switch reads.
+    Absent,
+}
+
+/// The `^^` head of `text`, read as far as its first NUL.
+#[cfg(feature = "esl")]
+pub(crate) fn argument_head(text: &[Traced]) -> Head {
+    let at = |index: usize| {
+        text.get(index)
+            .map_or('\0', |&(c, ..)| c)
+    };
+    match (at(0), at(1), at(2)) {
+        ('^', '^', picked) if picked != '\0' && !picked.is_ascii() => Head::Unreadable,
+        ('^', '^', picked) if picked != '\0' && at(3) != '\0' => Head::Picked(picked),
+        _ => Head::Absent,
+    }
+}
+
 /// A NUL-terminated buffer the switch's splits rewrite in place, a NUL held as `'\0'`.
 #[cfg(feature = "esl")]
 pub(crate) struct CBuffer(Vec<Traced>);
@@ -217,10 +246,13 @@ pub(crate) struct CBuffer(Vec<Traced>);
 #[cfg(feature = "esl")]
 pub(crate) struct Split {
     pub(crate) tokens: Vec<SplitToken>,
+    /// The delimiter the split ran on, a `^^` head's pick included.
+    pub(crate) delimiter: char,
     /// A quote kept a delimiter from splitting.
     pub(crate) held_delimiter: bool,
-    /// A `^^` head named a non-ASCII separator, which the switch takes as a byte; the split ran
-    /// on the delimiter given.
+    /// A quote was still open at the end of the text.
+    pub(crate) open_quote: bool,
+    /// The text opened with [`Head::Unreadable`].
     pub(crate) unreadable_head: bool,
 }
 
@@ -284,29 +316,35 @@ impl CBuffer {
 
     /// `switch_separate_string` on the string at `index`, in place.
     pub(crate) fn separate(&mut self, index: usize, delim: char, limit: usize) -> Split {
-        let (mut buf, mut delim, mut unreadable_head) = (index, delim, false);
-        if self.at(buf) == '^' && self.at(buf + 1) == '^' && self.at(buf + 2) != '\0' {
-            if !self
-                .at(buf + 2)
-                .is_ascii()
-            {
-                unreadable_head = true;
-            } else if self.at(buf + 3) != '\0' {
-                delim = self.at(buf + 2);
-                buf += 3;
-            }
+        match argument_head(self.c_str(index)) {
+            Head::Picked(picked) => self.split(index + 3, picked, limit),
+            Head::Unreadable => Split {
+                unreadable_head: true,
+                ..self.split(index, delim, limit)
+            },
+            Head::Absent => self.split(index, delim, limit),
         }
-        let text = &self.0[buf.min(
+    }
+
+    /// `separate_string_blank_delim` on a space and `separate_string_char_delim` on any other
+    /// `delim`, over the string at `index`, in place.
+    fn split(&mut self, index: usize, delim: char, limit: usize) -> Split {
+        let text = &self.0[index.min(
             self.0
                 .len(),
         )..];
-        let cut = match delim {
-            ' ' => blank_delim(text, limit),
-            delim => char_delim(text, delim, limit),
+        let cut = match (limit, delim) {
+            (0, _) => Cut {
+                spans: Vec::new(),
+                held_delimiter: false,
+                open_quote: false,
+            },
+            (_, ' ') => blank_delim(text, limit),
+            (_, delim) => char_delim(text, delim, limit),
         };
         for span in &cut.spans {
-            if self.at(buf + span.end) == delim {
-                self.terminate(buf + span.end);
+            if self.at(index + span.end) == delim {
+                self.terminate(index + span.end);
             }
         }
         let cleanup_delim = (delim != ' ').then_some(delim);
@@ -314,14 +352,16 @@ impl CBuffer {
             .spans
             .iter()
             .map(|span| SplitToken {
-                raw: buf + span.start..buf + span.end,
-                start: self.cleanup(buf + span.start, cleanup_delim),
+                raw: index + span.start..index + span.end,
+                start: self.cleanup(index + span.start, cleanup_delim),
             })
             .collect();
         Split {
             tokens,
+            delimiter: delim,
             held_delimiter: cut.held_delimiter,
-            unreadable_head,
+            open_quote: cut.open_quote,
+            unreadable_head: false,
         }
     }
 
@@ -347,77 +387,59 @@ pub(crate) struct Token {
     pub(crate) text: Vec<Traced>,
 }
 
+/// What [`separate`] cut, read back out of its buffer.
 #[cfg(feature = "esl")]
 pub(crate) struct Separated {
     pub(crate) tokens: Vec<Token>,
+    /// The delimiter the split ran on, a `^^` head's pick included.
+    pub(crate) delimiter: char,
     pub(crate) held_delimiter: bool,
     pub(crate) open_quote: bool,
 }
 
-/// The delimiter a leading `^^X` picks and the text after it, as `switch_separate_string`
-/// reads one: `X` then at least one byte.
-///
-/// The switch takes `X` as one byte, so a non-ASCII `X` splits on the first byte of its
-/// UTF-8 form. No char delimiter mirrors that, and such a prefix picks nothing here.
-#[cfg(feature = "esl")]
-pub(crate) fn delimiter_override(text: &[Traced]) -> (Option<char>, &[Traced]) {
-    match text {
-        [('^', ..), ('^', ..), (picked, ..), rest @ ..]
-            if picked.is_ascii() && !rest.is_empty() =>
-        {
-            (Some(*picked), rest)
-        }
-        _ => (None, text),
-    }
-}
-
-/// `switch_separate_string`: a `^^X` prefix [`delimiter_override`] accepts picks `X` over
-/// `delim`, a space splits blank and anything else by char.
+/// [`CBuffer::separate`] over a copy of `text`.
 #[cfg(feature = "esl")]
 pub(crate) fn separate(text: &[Traced], delim: char, limit: usize) -> Separated {
-    let (picked, body) = delimiter_override(text);
-    let skipped = text.len() - body.len();
-    let mut separated = separate_on(body, picked.unwrap_or(delim), limit);
-    for token in &mut separated.tokens {
-        token.raw = token
-            .raw
-            .start
-            + skipped
-            ..token
-                .raw
-                .end
-                + skipped;
-    }
-    separated
+    read_back(text, |buffer| buffer.separate(0, delim, limit))
 }
 
-/// [`separate`] on `delim` with no `^^X` prefix read, for text not at the head of a
+/// [`separate`] on `delim` with no `^^` head read, for text not at the head of a
 /// switch argument.
 #[cfg(feature = "esl")]
-pub(crate) fn separate_on(body: &[Traced], delim: char, limit: usize) -> Separated {
-    let (cut, cleanup_delim) = match (limit, delim) {
-        (0, _) => (
-            Cut {
-                spans: Vec::new(),
-                held_delimiter: false,
-                open_quote: false,
-            },
-            None,
-        ),
-        (_, ' ') => (blank_delim(body, limit), None),
-        (_, delim) => (char_delim(body, delim, limit), Some(delim)),
-    };
+pub(crate) fn separate_on(text: &[Traced], delim: char, limit: usize) -> Separated {
+    read_back(text, |buffer| buffer.split(0, delim, limit))
+}
+
+/// The tokens `cut` leaves in a buffer holding `text`, a raw span a backslash carried onto the
+/// terminator ending with the text.
+#[cfg(feature = "esl")]
+fn read_back(text: &[Traced], cut: impl FnOnce(&mut CBuffer) -> Split) -> Separated {
+    let mut buffer = CBuffer::new(text);
+    let split = cut(&mut buffer);
+    let within = |at: usize| at.min(text.len());
     Separated {
-        tokens: cut
-            .spans
-            .into_iter()
-            .map(|span| Token {
-                text: cleanup(&body[span.clone()], cleanup_delim),
-                raw: span,
+        tokens: split
+            .tokens
+            .iter()
+            .map(|token| Token {
+                raw: within(
+                    token
+                        .raw
+                        .start,
+                )
+                    ..within(
+                        token
+                            .raw
+                            .end,
+                    ),
+                text: buffer
+                    .c_str(token.start)
+                    .to_vec(),
             })
             .collect(),
-        held_delimiter: cut.held_delimiter,
-        open_quote: cut.open_quote,
+        delimiter: split.delimiter,
+        held_delimiter: split.held_delimiter,
+        open_quote: split.open_quote,
     }
 }
 
@@ -539,36 +561,13 @@ pub(crate) fn separate_string_char_delim(s: &str, delim: char) -> Vec<String> {
         .collect()
 }
 
-/// The raw tokens `separate_string_char_delim` cuts from `text`, traced from `s`, before
-/// any cleanup.
-#[cfg(feature = "esl")]
-pub(crate) fn char_delim_spans<'s>(s: &'s str, text: &[Traced], delim: char) -> Vec<&'s str> {
-    char_delim(text, delim, usize::MAX)
-        .spans
-        .into_iter()
-        .map(|span| &s[byte_range(text, extent(text), span)])
-        .collect()
-}
-
-/// The raw tokens `separate_string_blank_delim` cuts on spaces from `text`, traced from
-/// `s`, before any cleanup, and whether a quote was still open at the end.
-#[cfg(feature = "esl")]
-pub(crate) fn blank_delim_spans<'s>(s: &'s str, text: &[Traced]) -> (Vec<&'s str>, bool) {
-    let cut = blank_delim(text, usize::MAX);
-    let spans = cut
-        .spans
-        .into_iter()
-        .map(|span| &s[byte_range(text, extent(text), span)])
-        .collect();
-    (spans, cut.open_quote)
-}
-
 #[cfg(all(test, feature = "esl"))]
 mod c_oracle;
 
 #[cfg(all(test, feature = "esl"))]
 mod tiling {
     use super::*;
+    use crate::switch_passes::{byte_range, trace};
     use crate::test_text::TILING_INPUTS;
 
     #[test]

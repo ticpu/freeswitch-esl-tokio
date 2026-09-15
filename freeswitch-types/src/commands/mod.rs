@@ -49,10 +49,8 @@ pub use variables::{
     UnvouchedVersion, VariablesDisplay,
 };
 
-use crate::switch_passes::separate::{
-    blank_delim_spans, char_delim_spans, cleanup, delimiter_override, separate,
-};
-use crate::switch_passes::{trace, untrace};
+use crate::switch_passes::separate::{cleanup, separate, Token};
+use crate::switch_passes::{byte_range, extent, trace, untrace};
 use originate::{check_inline_delimiter, check_target_readable, DEFAULT_INLINE_DELIMITER};
 
 /// What `switch_strip_whitespace` strips from both edges of an API command's argument line.
@@ -119,26 +117,36 @@ pub(crate) fn clean_argument(token: &str, sep: Option<char>) -> String {
 /// argument instead, a shape nothing this crate renders produces.
 pub fn originate_split(line: &str, split_at: char) -> Result<Vec<String>, OriginateError> {
     let text = trace(line);
-    let (picked, body) = delimiter_override(&text);
-    let split_at = picked.unwrap_or(split_at);
-    if split_at != ' ' {
-        return Ok(char_delim_spans(line, body, split_at)
-            .into_iter()
-            .map(str::to_string)
+    let separated = separate(&text, split_at, usize::MAX);
+    let raw = |token: &Token| {
+        &line[byte_range(
+            &text,
+            extent(&text),
+            token
+                .raw
+                .clone(),
+        )]
+    };
+    if separated.delimiter != ' ' {
+        return Ok(separated
+            .tokens
+            .iter()
+            .map(|token| raw(token).to_string())
             .collect());
     }
-    let (spans, open_quote) = blank_delim_spans(line, body);
-    if open_quote {
-        let last = spans
+    if separated.open_quote {
+        let last = separated
+            .tokens
             .last()
-            .copied()
-            .unwrap_or_default();
+            .map_or("", raw);
         return Err(OriginateError::UnclosedQuote(last.to_string()));
     }
-    Ok(spans
-        .into_iter()
-        .map(|t| {
-            t.trim_start_matches(' ')
+    Ok(separated
+        .tokens
+        .iter()
+        .map(|token| {
+            raw(token)
+                .trim_start_matches(' ')
                 .to_string()
         })
         .collect())

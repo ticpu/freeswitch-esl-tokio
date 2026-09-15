@@ -13,7 +13,7 @@ use super::variables::{
 };
 use super::{clean_argument, originate_quote, originate_split, STRIPPED_WHITESPACE};
 use crate::channel::ParseHangupCauseError;
-use crate::switch_passes::separate::delimiter_override;
+use crate::switch_passes::separate::{argument_head, Head};
 use crate::switch_passes::trace;
 
 pub use super::variables::{Variables, VariablesType};
@@ -915,9 +915,10 @@ impl Originate {
             .unwrap_or(s)
             .trim_matches(STRIPPED_WHITESPACE);
         // `^^ ` names the blank split itself.
-        let sep = delimiter_override(&trace(s))
-            .0
-            .filter(|&sep| sep != ' ');
+        let sep = match argument_head(&trace(s)) {
+            Head::Picked(sep) if sep != ' ' => Some(sep),
+            Head::Picked(_) | Head::Unreadable | Head::Absent => None,
+        };
         let dial_target = match sep {
             Some(sep) => Self::argv_target(block_parse, sep)?,
             None => Self::dial_target(block_parse),

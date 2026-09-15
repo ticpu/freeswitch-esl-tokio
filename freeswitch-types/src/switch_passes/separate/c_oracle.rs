@@ -4,9 +4,9 @@ use proptest::prelude::*;
 use proptest::sample::select;
 
 use super::{
-    cleanup, delimiter_override, find_end_paren, separate, separate_on, separate_string_string,
-    trace, untrace,
+    argument_head, cleanup, find_end_paren, separate, separate_on, separate_string_string, Head,
 };
+use crate::switch_passes::{trace, untrace};
 use crate::test_text::{against_the_c, opens_with_a_non_ascii_head, text};
 
 /// Text that may open with a `^^X` head, ASCII or not.
@@ -62,9 +62,7 @@ fn separate_matches_the_switch() {
             let text = trace(&input);
             let port = separate(&text, char::from(delim), limit as usize);
             if opens_with_a_non_ascii_head(&input) {
-                prop_assert!(delimiter_override(&text)
-                    .0
-                    .is_none());
+                prop_assert_eq!(argument_head(&text), Head::Unreadable);
                 return Ok(());
             }
             let port = owned(
