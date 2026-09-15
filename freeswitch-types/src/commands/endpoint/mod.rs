@@ -1076,4 +1076,225 @@ mod tests {
         let ep: Endpoint = inner.into();
         assert_eq!(ep, Endpoint::Error(inner));
     }
+
+    // --- Endpoint text through the leg splits ---
+
+    fn tilde() -> DialStringTarget {
+        DialStringTarget::new(DialStringCarrier::EslApi)
+            .with_argv_separator('~')
+            .expect("'~' separates originate's arguments")
+    }
+
+    /// Endpoint text meets the carrier's pass and both leg splits, so it escapes like a `{}`
+    /// value with the leg separators added.
+    #[test]
+    fn endpoint_text_is_escaped_for_the_leg_splits() {
+        let api = DialStringTarget::new(DialStringCarrier::EslApi);
+        let dialplan = DialStringTarget::new(DialStringCarrier::Dialplan);
+        let separators: Endpoint = LoopbackEndpoint::new("a,b")
+            .with_context("c|d")
+            .into();
+        let cases: [(DialStringTarget, Endpoint, &str); 9] = [
+            (api, separators.clone(), r"loopback/a\,b/c\|d"),
+            (dialplan, separators, r"loopback/a\,b/c\|d"),
+            (
+                api,
+                LoopbackEndpoint::new(r"C:\x").into(),
+                r"loopback/C:\\\\\\\\x",
+            ),
+            (
+                api,
+                LoopbackEndpoint::new("it's").into(),
+                r"loopback/it\\\\\\\'s",
+            ),
+            (
+                dialplan,
+                LoopbackEndpoint::new("it's").into(),
+                r"loopback/it\\\\\\'s",
+            ),
+            (
+                api,
+                SofiaEndpoint::new("internal", "a b").into(),
+                "'sofia/internal/a b'",
+            ),
+            (
+                api,
+                UserEndpoint::new("bob")
+                    .with_domain("end ")
+                    .into(),
+                r"user/bob@end\\\\s",
+            ),
+            (
+                dialplan,
+                SofiaEndpoint::new("internal", "pa$$").into(),
+                r"\'sofia/internal/pa\$\$",
+            ),
+            (
+                dialplan,
+                SofiaEndpoint::new("internal", "${v}").into(),
+                r"\'sofia/internal/\${v}",
+            ),
+        ];
+        for (target, ep, want) in cases {
+            assert_eq!(
+                ep.display_for(target)
+                    .to_string(),
+                want,
+                "{ep:?} at {target:?}"
+            );
+        }
+    }
+
+    const HOSTILE_FIELDS: &[&str] = &[
+        "a b", "it's", r"C:\p", "x,y", "p|q", " edge ", "pa$$", "${v}", "x~y", "q\"r", "[b]",
+        "tab\t", r"a\,b",
+    ];
+
+    fn hostile_endpoints(field: &str) -> [Endpoint; 5] {
+        [
+            SofiaEndpoint::new("internal", field).into(),
+            SofiaGateway::new("gw", field)
+                .with_profile("external")
+                .into(),
+            LoopbackEndpoint::new(field)
+                .with_context(field)
+                .into(),
+            UserEndpoint::new(field)
+                .with_domain(field)
+                .into(),
+            Endpoint::Alsa(AudioEndpoint::new().with_destination(field)),
+        ]
+    }
+
+    /// The port of the switch's passes reads back the module text, and the parser the endpoint.
+    #[test]
+    fn hostile_fields_arrive_and_round_trip_at_every_target() {
+        use crate::commands::flattened::pipeline;
+
+        let targets = [
+            DialStringTarget::new(DialStringCarrier::EslApi),
+            DialStringTarget::new(DialStringCarrier::Dialplan),
+            tilde(),
+        ];
+        for field in HOSTILE_FIELDS {
+            for ep in hostile_endpoints(field) {
+                for target in targets {
+                    let rendered = ep
+                        .display_for(target)
+                        .to_string();
+                    let list = pipeline::read(&rendered, target)
+                        .unwrap_or_else(|e| panic!("{rendered:?} at {target:?}: {e:?}"));
+                    let legs: Vec<&str> = list
+                        .threads
+                        .iter()
+                        .flat_map(|thread| &thread.groups)
+                        .flatten()
+                        .map(|leg| {
+                            leg.endpoint
+                                .as_str()
+                        })
+                        .collect();
+                    assert_eq!(legs, [ep.module_text()], "{rendered:?} at {target:?}");
+                    assert_eq!(
+                        Endpoint::parse_for(&rendered, target)
+                            .unwrap_or_else(|e| panic!("{rendered:?} at {target:?}: {e}")),
+                        ep,
+                        "{rendered:?} at {target:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Each value carries `SECRET`, which no refusal may quote.
+    #[test]
+    fn fields_the_switch_cannot_receive_are_refused_at_parse() {
+        for input in [
+            "sofia/GATEWAY/SECRET/1000",
+            "sofia/SECRET^x/1000",
+            "sofia/gateway/SECRET^x/1000",
+            "loopback/SECRET//xml",
+            "loopback/SECRET/test/",
+            "loopback/SECRET:_:x/test",
+            "user/SECRET:_:x@example.com",
+        ] {
+            let msg = Endpoint::parse_for(input, DialStringCarrier::Dialplan)
+                .expect_err(input)
+                .to_string();
+            assert!(
+                !msg.contains("SECRET"),
+                "{input}: error quoted its input: {msg}"
+            );
+        }
+    }
+
+    #[test]
+    fn fields_the_switch_cannot_receive_are_refused_at_config_load() {
+        for json in [
+            r#"{"sofia":{"profile":"SECRET/x","destination":"1"}}"#,
+            r#"{"sofia":{"profile":"GateWay","destination":"SECRET"}}"#,
+            r#"{"sofia":{"profile":"SECRET^x","destination":"1"}}"#,
+            r#"{"sofia":{"profile":"internal","destination":"SECRET:_:x"}}"#,
+            r#"{"sofia_gateway":{"gateway":"SECRET::x","destination":"1"}}"#,
+            r#"{"sofia_gateway":{"gateway":"g","profile":"SECRET::x","destination":"1"}}"#,
+            r#"{"sofia_gateway":{"gateway":"g","profile":"SECRET:","destination":"1"}}"#,
+            r#"{"sofia_gateway":{"gateway":"SECRET/x","destination":"1"}}"#,
+            r#"{"sofia_gateway":{"gateway":"SECRET^x","destination":"1"}}"#,
+            r#"{"loopback":{"extension":"SECRET/x"}}"#,
+            r#"{"loopback":{"extension":"SECRET","context":""}}"#,
+            r#"{"loopback":{"extension":"9199","context":"SECRET/x"}}"#,
+            r#"{"loopback":{"extension":"SECRET","dialplan":""}}"#,
+            r#"{"loopback":{"extension":"app=bridge:SECRET","context":"test"}}"#,
+            r#"{"loopback":{"extension":"APP=SECRET/x:y"}}"#,
+            r#"{"user":{"name":"SECRET@x","domain":"example.com"}}"#,
+            r#"{"user":{"name":"bob","domain":"SECRET:_:x"}}"#,
+            r#"{"portaudio":{"destination":"SECRET:_:x"}}"#,
+        ] {
+            let msg = serde_json::from_str::<Endpoint>(json)
+                .expect_err(json)
+                .to_string();
+            assert!(
+                !msg.contains("SECRET"),
+                "{json}: error quoted its input: {msg}"
+            );
+        }
+        for json in [
+            r#"{"loopback":{"extension":"app=bridge:null/farend"}}"#,
+            r#"{"sofia":{"profile":"internal","destination":"sip:a/b^c@example.com"}}"#,
+            r#"{"sofia":{"profile":"a::b","destination":"1"}}"#,
+            r#"{"sofia_gateway":{"gateway":":g","profile":"p","destination":"1"}}"#,
+            r#"{"sofia_gateway":{"gateway":"g::h","profile":"p","destination":"1"}}"#,
+            r#"{"loopback":{"extension":"9199","dialplan":"a/b"}}"#,
+            r#"{"user":{"name":"bob","domain":"a@b"}}"#,
+        ] {
+            assert!(serde_json::from_str::<Endpoint>(json).is_ok(), "{json}");
+        }
+        assert!(
+            serde_json::from_str::<LoopbackEndpoint>(r#"{"extension":"SECRET","context":""}"#)
+                .is_err()
+        );
+    }
+
+    /// mod_loopback runs `app=<name>[:<args>]` and reads no context or dialplan after it, so the
+    /// whole text is the extension.
+    #[test]
+    fn a_loopback_application_is_one_extension() {
+        let ep: LoopbackEndpoint = "loopback/app=bridge:null/farend"
+            .parse()
+            .unwrap();
+        assert_eq!(ep.extension, "app=bridge:null/farend");
+        assert_eq!(ep.context, None);
+        assert_eq!(ep.to_string(), "loopback/app=bridge:null/farend");
+    }
+
+    /// `:_:` splits the dial string into threads, so no endpoint carries it.
+    #[test]
+    fn the_enterprise_separator_is_refused_in_any_field() {
+        for input in ["loopback/9199/SECRET:_:x", "{k=v}sofia/internal/SECRET:_:x"] {
+            let msg = Endpoint::parse_for(input, DialStringCarrier::EslApi)
+                .expect_err(input)
+                .to_string();
+            assert!(!msg.contains("SECRET"), "{input}: {msg}");
+        }
+    }
 }

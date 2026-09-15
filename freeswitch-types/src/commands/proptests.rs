@@ -202,27 +202,6 @@ fn canonical(endpoint: &Endpoint) -> Endpoint {
     endpoint
 }
 
-/// Endpoint text is written verbatim, escaped for no pass, so a character any pass or the
-/// module's own grammar reads is outside what the renderer carries.
-fn endpoint_text_is_verbatim_safe(endpoint: &Endpoint) -> bool {
-    let text = endpoint.to_string();
-    let gateway_splits_elsewhere = match endpoint {
-        Endpoint::SofiaGateway(gw) => match &gw.profile {
-            Some(profile) => profile.contains("::") || profile.ends_with(':'),
-            None => gw
-                .gateway
-                .contains("::"),
-        },
-        _ => false,
-    };
-    !gateway_splits_elsewhere
-        && !text.contains([
-            ' ', '\t', '\'', '"', '\\', ',', '|', '{', '}', '[', ']', '<', '>', '^', '$', '(', ')',
-            '&',
-        ])
-        && !text.contains(":_:")
-}
-
 #[derive(Debug, Clone)]
 enum TargetSpec {
     Extension(String),
@@ -705,9 +684,6 @@ proptest! {
         bare in bare_endpoint(),
         vars in option::of((scope(), block_separator(), vec(text(), 1..3))),
     ) {
-        if !endpoint_text_is_verbatim_safe(&bare) {
-            return Ok(());
-        }
         let mut endpoint = bare.clone();
         if let Some((scope, sep, values)) = &vars {
             let Some(vars) = build_vars(*scope, "v", values, *sep) else {
@@ -730,7 +706,7 @@ proptest! {
             let got = read_single_leg(&rendered, target);
             let delivered = got.as_ref().is_ok_and(|(installed, text)| {
                 *installed == want
-                    && *text == bare.to_string()
+                    && *text == bare.module_text()
                     && Endpoint::parse_bare(text).as_ref() == Ok(&canonical(&bare))
             });
             let parsed = Endpoint::parse_for(&rendered, target);
@@ -866,36 +842,62 @@ proptest! {
     }
 }
 
-/// The pairs and endpoint `originate_function` and `switch_event_create_brackets` read of a line
-/// opening with one `{}` or `<>` block, every split done by the switch's own C.
-fn c_reads_the_block(
+const BUILT: &str = "against_the_c runs only with the oracle built";
+
+/// The pairs and endpoint text `originate_function`, `switch_event_create_brackets` and
+/// `switch_ivr_originate`'s leg splits read of a line opening with at most one `{}` or `<>`
+/// block, every split done by the switch's own C.
+fn c_reads_the_leg(
     line: &str,
-    open: u8,
-    close: u8,
+    block: Option<(u8, u8)>,
 ) -> Result<(Vec<(String, String)>, String), String> {
-    const BUILT: &str = "against_the_c runs only with the oracle built";
     let utf8 = |bytes: &[u8]| String::from_utf8(bytes.to_vec()).map_err(|e| e.to_string());
     let argv = freeswitch_c_oracle::separate_string(strip_whitespace(line).as_bytes(), b' ', 10)
         .expect(BUILT);
     let dial = argv
         .first()
         .ok_or("no argument")?;
-    let end = freeswitch_c_oracle::find_end_paren(dial, open, close)
-        .expect(BUILT)
-        .ok_or("the block never closes")?;
-    let (separator, content) = match &dial[1..end] {
-        [b'^', b'^', picked, rest @ ..] => (*picked, rest),
-        content => (b',', content),
-    };
     let mut installed = Vec::new();
-    for pair in freeswitch_c_oracle::separate_string(content, separator, 1024).expect(BUILT) {
-        if let [key, value] =
-            &freeswitch_c_oracle::separate_string(&pair, b'=', 2).expect(BUILT)[..]
-        {
-            installed.push((utf8(key)?, utf8(value)?));
+    let data = match block {
+        Some((open, close)) => {
+            let end = freeswitch_c_oracle::find_end_paren(dial, open, close)
+                .expect(BUILT)
+                .ok_or("the block never closes")?;
+            let (separator, content) = match &dial[1..end] {
+                [b'^', b'^', picked, rest @ ..] => (*picked, rest),
+                content => (b',', content),
+            };
+            for pair in freeswitch_c_oracle::separate_string(content, separator, 1024).expect(BUILT)
+            {
+                if let [key, value] =
+                    &freeswitch_c_oracle::separate_string(&pair, b'=', 2).expect(BUILT)[..]
+                {
+                    installed.push((utf8(key)?, utf8(value)?));
+                }
+            }
+            &dial[end + 1..]
         }
+        None => &dial[..],
+    };
+    let [group] = &freeswitch_c_oracle::separate_string(data, b'|', 128).expect(BUILT)[..] else {
+        return Err("not one group".to_owned());
+    };
+    let [leg] = &freeswitch_c_oracle::separate_string(group, b',', 128).expect(BUILT)[..] else {
+        return Err("not one leg".to_owned());
+    };
+    let endpoint = leg
+        .iter()
+        .position(|&b| b != b' ')
+        .map_or(&leg[leg.len()..], |at| &leg[at..]);
+    Ok((installed, utf8(endpoint)?))
+}
+
+/// The line `originate` reads for `dial` at `target`, the dial string its first argument.
+fn originate_line(dial: &str, target: DialStringTarget) -> String {
+    match target.argv_separator() {
+        Some(argv) => format!("^^{argv}{dial}{argv}&park()"),
+        None => format!("{dial} &park()"),
     }
-    Ok((installed, utf8(&dial[end + 1..])?))
 }
 
 /// `{}` and `<>` blocks at the API targets read by the switch's C rather than the port; the dialplan
@@ -926,12 +928,76 @@ fn variables_arrive_through_the_c_passes() {
                 let block = vars
                     .display_for(target)
                     .to_string();
-                let line = match target.argv_separator() {
-                    Some(argv) => format!("^^{argv}{block}null/drift{argv}&park()"),
-                    None => format!("{block}null/drift &park()"),
-                };
+                let line = originate_line(&format!("{block}null/drift"), target);
                 prop_assert_eq!(
-                    &c_reads_the_block(&line, open, close),
+                    &c_reads_the_leg(&line, Some((open, close))),
+                    &want,
+                    "{:?} at {:?}",
+                    line,
+                    target
+                );
+            }
+            Ok(())
+        },
+    );
+}
+
+/// Endpoints under `{}`, `<>` or no block at the API targets, read by the switch's C; the
+/// comma scan ahead of the leg split only rewrites an unescaped comma, and endpoint text has none.
+#[test]
+fn endpoints_arrive_through_the_c_passes() {
+    let scope = prop_oneof![
+        Just(VariablesType::Default),
+        Just(VariablesType::Enterprise)
+    ];
+    against_the_c(
+        file!(),
+        "endpoints_arrive_through_the_c_passes",
+        (
+            bare_endpoint(),
+            option::of((scope, block_separator(), vec(text(), 1..3))),
+        ),
+        |(bare, vars)| {
+            let mut endpoint = bare.clone();
+            let mut want = Vec::new();
+            let mut block = None;
+            if let Some((scope, sep, values)) = vars {
+                let Some(vars) = build_vars(scope, "v", &values, sep) else {
+                    return Ok(());
+                };
+                if left_to_the_switch(&vars) || config_refuses_vars(&vars) {
+                    return Ok(());
+                }
+                want = pairs(&vars);
+                block = Some(match scope {
+                    VariablesType::Enterprise => (b'<', b'>'),
+                    _ => (b'{', b'}'),
+                });
+                endpoint.set_variables(Some(vars));
+            }
+            if endpoint
+                .variables()
+                .is_none()
+            {
+                want.clear();
+                block = None;
+            }
+            let refused = serde_json::to_value(&endpoint)
+                .and_then(serde_json::from_value::<Endpoint>)
+                .is_err();
+            if refused {
+                return Ok(());
+            }
+            let want = Ok((want, bare.module_text()));
+            for target in api_targets() {
+                let line = originate_line(
+                    &endpoint
+                        .display_for(target)
+                        .to_string(),
+                    target,
+                );
+                prop_assert_eq!(
+                    &c_reads_the_leg(&line, block),
                     &want,
                     "{:?} at {:?}",
                     line,

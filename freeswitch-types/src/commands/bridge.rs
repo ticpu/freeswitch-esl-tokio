@@ -650,6 +650,40 @@ mod tests {
         assert!(result.is_err());
     }
 
+    /// A separator inside endpoint text is escaped for the leg split that would read it.
+    #[test]
+    fn a_separator_in_endpoint_text_round_trips() {
+        let bridge = BridgeDialString::new(vec![
+            vec![
+                SofiaEndpoint::new("internal", "a,b").into(),
+                SofiaEndpoint::new("internal", "c|d").into(),
+            ],
+            vec![LoopbackEndpoint::new("it's a").into()],
+        ]);
+        let rendered = bridge.to_string();
+        let back: BridgeDialString = rendered
+            .parse()
+            .unwrap_or_else(|e| panic!("{rendered} failed to parse: {e}"));
+        assert_eq!(back, bridge, "rendered {rendered}");
+    }
+
+    /// The switch's comma scan protects commas from a `[` to its matching `]`, whichever leg
+    /// holds either, so a range crossing a leg separator merges the legs.
+    #[test]
+    fn a_bracket_spanning_legs_is_refused_at_config_load() {
+        let spanning = r#"{"groups":[[{"sofia":{"profile":"internal","destination":"x["}},{"sofia":{"profile":"internal","destination":"y]"}}]]}"#;
+        assert!(serde_json::from_str::<BridgeDialString>(spanning).is_err());
+        for fine in [
+            r#"{"groups":[[{"sofia":{"profile":"internal","destination":"x[]"}},{"sofia":{"profile":"internal","destination":"y]"}}]]}"#,
+            r#"{"groups":[[{"sofia":{"profile":"internal","destination":"x["}}],[{"sofia":{"profile":"internal","destination":"y]"}}]]}"#,
+        ] {
+            assert!(
+                serde_json::from_str::<BridgeDialString>(fine).is_ok(),
+                "{fine}"
+            );
+        }
+    }
+
     #[test]
     fn serde_to_display_wire_format() {
         let json = r#"{
