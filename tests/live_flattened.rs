@@ -9,17 +9,20 @@
 mod live_common;
 
 use freeswitch_esl_tokio::channel::CallDirection;
+use freeswitch_esl_tokio::commands::originate::VariablesType;
 use freeswitch_esl_tokio::commands::{
-    originate_split, BlockParse, CauseReading, DialStringCarrier, DialStringTarget,
-    FlattenedDialString, FlattenedDialStringError, FlattenedLeg, LegTarget, LegWarning,
-    OriginateError, UuidGetVar,
+    originate_split, CauseReading, DialStringCarrier, FlattenedDialString,
+    FlattenedDialStringError, FlattenedLeg, LegTarget, LegWarning, OriginateError, UuidGetVar,
 };
 use freeswitch_esl_tokio::variables::VariableName;
 use freeswitch_esl_tokio::{
     CommandFailure, Endpoint, EslClient, EslEvent, EslEventStream, EslEventType, EslResult,
     EventFormat, ExecuteOptions, HangupCause, HeaderLookup, UNDEF_VALUE,
 };
-use live_common::{channel_exists, connect, getvar, kill_channel, wait_for_var, ChannelReaper};
+use live_common::{
+    carried_in, channel_exists, connect, escaping_block, getvar, kill_channel, target_under_test,
+    wait_for_var, ChannelReaper, ESCAPING_CASES, ESCAPING_SEPARATOR,
+};
 use std::collections::BTreeMap;
 use std::time::Duration;
 use tokio::time::Instant;
@@ -56,22 +59,6 @@ impl VariableName for Var<'_> {
     fn as_str(&self) -> &str {
         self.0
     }
-}
-
-/// The revision these tests read for: `FREESWITCH_BLOCK_PARSE` names one to
-/// measure a switch against, and unset is the crate default.
-fn block_parse_under_test() -> BlockParse {
-    match std::env::var("FREESWITCH_BLOCK_PARSE") {
-        Ok(name) => name
-            .parse()
-            .unwrap_or_else(|e| panic!("FREESWITCH_BLOCK_PARSE: {e}")),
-        Err(std::env::VarError::NotPresent) => BlockParse::default(),
-        Err(e) => panic!("FREESWITCH_BLOCK_PARSE: {e}"),
-    }
-}
-
-fn target_under_test(carrier: DialStringCarrier) -> DialStringTarget {
-    DialStringTarget::new(carrier).with_block_parse(block_parse_under_test())
 }
 
 fn parse(input: &str, carrier: DialStringCarrier) -> FlattenedDialString {
@@ -911,4 +898,128 @@ async fn live_argv_split_matches_originate_split() {
         let received = typed_view_against_channel(&client, case, dial_string, API, &["v"]).await;
         assert_eq!(received, [Some(value.to_owned())], "{case}");
     }
+}
+
+/// Every escaping case the renderer carries in `scope`, rendered for `carrier`,
+/// read through the typed view and off the channel the same dial string creates.
+async fn escaping_through_the_typed_view(carrier: DialStringCarrier, scope: VariablesType) {
+    let (client, _events, _permit) = connect().await;
+
+    for separator in [None, Some(ESCAPING_SEPARATOR)] {
+        for (case, pairs) in ESCAPING_CASES {
+            if !carried_in(scope, pairs) {
+                continue;
+            }
+            let label =
+                format!("{case} in {scope:?} scope, separator {separator:?}, at {carrier:?}");
+            // The dialplan carrier finds its far leg by a pre-assigned uuid.
+            let b_uuid = match carrier {
+                DialStringCarrier::EslApi => None,
+                _ => Some(
+                    client
+                        .api("create_uuid")
+                        .await
+                        .expect("create_uuid transport error")
+                        .api_result()
+                        .expect("create_uuid failed")
+                        .to_owned(),
+                ),
+            };
+            let lead: Vec<(&str, &str)> = b_uuid
+                .iter()
+                .map(|uuid| ("origination_uuid", uuid.as_str()))
+                .collect();
+            let vars = escaping_block(&lead, pairs, separator, scope);
+            let dial_string = format!(
+                "{}null/escaping",
+                vars.display_for(target_under_test(carrier))
+            );
+
+            let list = parse(&dial_string, carrier);
+            let legs: Vec<&FlattenedLeg> = list
+                .legs()
+                .collect();
+            let [leg] = legs[..] else {
+                panic!("{label}: {dial_string:?} is not a single leg");
+            };
+            let keys: Vec<&str> = pairs
+                .iter()
+                .map(|(key, _)| *key)
+                .collect();
+            let typed: Vec<Option<String>> = keys
+                .iter()
+                .map(|key| {
+                    leg.variable(Var(key))
+                        .map(str::to_owned)
+                })
+                .collect();
+
+            let (received, channels) = received_over(&client, carrier, &dial_string, &keys).await;
+            let mut reaper = ChannelReaper::new(&client);
+            for uuid in channels
+                .iter()
+                .chain(&b_uuid)
+            {
+                reaper.track(uuid);
+            }
+            reaper
+                .reap()
+                .await;
+
+            let received = received.unwrap_or_else(|e| panic!("{label}: {dial_string:?}: {e}"));
+            if let Some(b_uuid) = &b_uuid {
+                assert_eq!(
+                    channels.last(),
+                    Some(b_uuid),
+                    "{label}: the far leg of {dial_string:?} is not its origination_uuid"
+                );
+            }
+            for (((key, want), typed), got) in pairs
+                .iter()
+                .zip(typed)
+                .zip(received)
+            {
+                assert!(
+                    typed.as_deref() == Some(*want) && got.as_deref() == Some(*want),
+                    "{label}: {key} of {dial_string:?}: expected {want:?}, typed {typed:?}, switch {got:?}"
+                );
+            }
+        }
+    }
+}
+
+#[tokio::test]
+#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+async fn live_typed_view_reads_escaping_depths_over_the_api() {
+    escaping_through_the_typed_view(API, VariablesType::Default).await;
+}
+
+#[tokio::test]
+#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+async fn live_typed_view_reads_escaping_depths_over_the_dialplan() {
+    escaping_through_the_typed_view(DIALPLAN, VariablesType::Default).await;
+}
+
+#[tokio::test]
+#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+async fn live_typed_view_reads_escaping_depths_over_the_api_in_enterprise_scope() {
+    escaping_through_the_typed_view(API, VariablesType::Enterprise).await;
+}
+
+#[tokio::test]
+#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+async fn live_typed_view_reads_escaping_depths_over_the_dialplan_in_enterprise_scope() {
+    escaping_through_the_typed_view(DIALPLAN, VariablesType::Enterprise).await;
+}
+
+#[tokio::test]
+#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+async fn live_typed_view_reads_escaping_depths_over_the_api_in_channel_scope() {
+    escaping_through_the_typed_view(API, VariablesType::Channel).await;
+}
+
+#[tokio::test]
+#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+async fn live_typed_view_reads_escaping_depths_over_the_dialplan_in_channel_scope() {
+    escaping_through_the_typed_view(DIALPLAN, VariablesType::Channel).await;
 }
