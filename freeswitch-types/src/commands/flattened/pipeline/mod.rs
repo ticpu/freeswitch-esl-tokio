@@ -4,6 +4,7 @@
 
 use std::ops::Range;
 
+use super::CauseReading;
 use crate::channel::HangupCause;
 use crate::commands::variables::{BlockParse, DialStringCarrier, DialStringTarget};
 use crate::tokenizer::{
@@ -456,17 +457,7 @@ fn switch_true(value: &str) -> bool {
     word || (number && nonzero)
 }
 
-/// How `switch_channel_str2cause` reads the text after `error/`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum CauseReading {
-    /// A cause name, in any case.
-    Name(HangupCause),
-    /// A leading digit run, read with `atoi`.
-    Number(u32),
-    /// Neither; the switch ends the leg with its default cause.
-    Unrecognized,
-}
-
+/// `switch_channel_str2cause` on the text after `error/`.
 pub(crate) fn str2cause(text: &str) -> CauseReading {
     if text.starts_with(|c: char| c.is_ascii_digit()) {
         let number = text

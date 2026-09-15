@@ -15,7 +15,6 @@ pub(crate) fn trace(s: &str) -> Vec<Traced> {
         .collect()
 }
 
-#[cfg(any(feature = "sdp", test))]
 pub(crate) fn untrace(text: &[Traced]) -> String {
     text.iter()
         .map(|&(c, _)| c)
@@ -41,7 +40,7 @@ pub(crate) fn byte_range(text: &[Traced], span: Range<usize>) -> Range<usize> {
 pub(crate) struct Cut {
     pub(crate) spans: Vec<Range<usize>>,
     /// A quote kept a delimiter from splitting.
-    #[cfg(all(test, feature = "esl"))]
+    #[cfg(feature = "esl")]
     pub(crate) held_delimiter: bool,
     /// A quote was still open at the end of the text.
     #[cfg(feature = "esl")]
@@ -49,7 +48,6 @@ pub(crate) struct Cut {
 }
 
 /// The text after its leading spaces; only a space counts.
-#[cfg(any(feature = "sdp", test))]
 pub(crate) fn skip_spaces(text: &[Traced]) -> &[Traced] {
     let count = text
         .iter()
@@ -69,7 +67,7 @@ pub(crate) fn char_delim(text: &[Traced], delim: char, limit: usize) -> Cut {
     let mut spans = Vec::new();
     let mut begin = None;
     let mut inside_quotes = false;
-    #[cfg(all(test, feature = "esl"))]
+    #[cfg(feature = "esl")]
     let mut held_delimiter = false;
     let mut i = 0;
     while i < text.len() {
@@ -90,7 +88,7 @@ pub(crate) fn char_delim(text: &[Traced], delim: char, limit: usize) -> Cut {
             spans.push(start..i);
             begin = None;
         } else if c == delim {
-            #[cfg(all(test, feature = "esl"))]
+            #[cfg(feature = "esl")]
             {
                 held_delimiter = true;
             }
@@ -102,7 +100,7 @@ pub(crate) fn char_delim(text: &[Traced], delim: char, limit: usize) -> Cut {
     }
     Cut {
         spans,
-        #[cfg(all(test, feature = "esl"))]
+        #[cfg(feature = "esl")]
         held_delimiter,
         #[cfg(feature = "esl")]
         open_quote: inside_quotes,
@@ -124,7 +122,6 @@ pub(crate) fn blank_delim(text: &[Traced], limit: usize) -> Cut {
     let mut state = State::Start;
     let mut begin = 0;
     let mut inside_quotes = false;
-    #[cfg(test)]
     let mut held_delimiter = false;
     let mut i = 0;
     while i < text.len() {
@@ -151,10 +148,7 @@ pub(crate) fn blank_delim(text: &[Traced], limit: usize) -> Cut {
                     spans.push(begin..i);
                     state = State::SkipEndingSpace;
                 } else if c == ' ' {
-                    #[cfg(test)]
-                    {
-                        held_delimiter = true;
-                    }
+                    held_delimiter = true;
                 }
                 i += 1;
             }
@@ -165,7 +159,6 @@ pub(crate) fn blank_delim(text: &[Traced], limit: usize) -> Cut {
     }
     Cut {
         spans,
-        #[cfg(test)]
         held_delimiter,
         open_quote: inside_quotes,
     }
@@ -173,7 +166,6 @@ pub(crate) fn blank_delim(text: &[Traced], limit: usize) -> Cut {
 
 /// The char `\next` stands for in `cleanup_separated_string`, or `None` when the
 /// backslash is kept.
-#[cfg(any(feature = "sdp", test))]
 fn unescape(next: char, delim: Option<char>) -> Option<char> {
     if Some(next) == delim || matches!(next, '\'' | '"' | '\\') {
         return Some(next);
@@ -189,7 +181,6 @@ fn unescape(next: char, delim: Option<char>) -> Option<char> {
 
 /// `cleanup_separated_string`, `delim` being `None` where the switch passes 0. Each kept char
 /// keeps its trace.
-#[cfg(any(feature = "sdp", test))]
 pub(crate) fn cleanup(raw: &[Traced], delim: Option<char>) -> Vec<Traced> {
     let s = skip_spaces(raw);
     let mut out = Vec::with_capacity(s.len());
@@ -226,13 +217,13 @@ pub(crate) fn cleanup(raw: &[Traced], delim: Option<char>) -> Vec<Traced> {
 }
 
 /// One token of [`separate`]: its raw span in the text given, and its cleaned text.
-#[cfg(all(test, feature = "esl"))]
+#[cfg(feature = "esl")]
 pub(crate) struct Token {
     pub(crate) raw: Range<usize>,
     pub(crate) text: Vec<Traced>,
 }
 
-#[cfg(all(test, feature = "esl"))]
+#[cfg(feature = "esl")]
 pub(crate) struct Separated {
     pub(crate) tokens: Vec<Token>,
     pub(crate) held_delimiter: bool,
@@ -241,7 +232,7 @@ pub(crate) struct Separated {
 
 /// `switch_separate_string`: a `^^X` prefix with at least one char after `X` picks
 /// `X` as the delimiter, a space splits blank and anything else by char.
-#[cfg(all(test, feature = "esl"))]
+#[cfg(feature = "esl")]
 pub(crate) fn separate(text: &[Traced], delim: char, limit: usize) -> Separated {
     let (skipped, delim) = match text {
         [('^', _), ('^', _), (picked, _), _, ..] => (3, *picked),
@@ -276,7 +267,7 @@ pub(crate) fn separate(text: &[Traced], delim: char, limit: usize) -> Separated 
 
 /// `switch_find_end_paren`: the index of the close matching an opener that follows
 /// any leading spaces. No escape is honoured.
-#[cfg(all(test, feature = "esl"))]
+#[cfg(feature = "esl")]
 pub(crate) fn find_end_paren(text: &[Traced], open: char, close: char) -> Option<usize> {
     let skip = text.len() - skip_spaces(text).len();
     if text
@@ -305,7 +296,7 @@ pub(crate) fn find_end_paren(text: &[Traced], open: char, close: char) -> Option
 }
 
 /// Where `needle` first occurs in `text`, as `strstr` finds it.
-#[cfg(all(test, feature = "esl"))]
+#[cfg(feature = "esl")]
 pub(crate) fn find(text: &[Traced], needle: &str) -> Option<usize> {
     let needle: Vec<char> = needle
         .chars()
@@ -325,7 +316,7 @@ pub(crate) fn find(text: &[Traced], needle: &str) -> Option<usize> {
 
 /// `switch_separate_string_string`: a plain substring split with no quote or escape
 /// handling, keeping at most `limit` tokens.
-#[cfg(all(test, feature = "esl"))]
+#[cfg(feature = "esl")]
 pub(crate) fn separate_string_string(
     text: &[Traced],
     delim: &str,

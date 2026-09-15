@@ -13,8 +13,7 @@ pub mod channel;
 pub mod conference;
 pub mod endpoint;
 pub mod execute_on;
-#[cfg(test)]
-pub(crate) mod flattened;
+pub mod flattened;
 pub mod originate;
 pub mod variables;
 
@@ -33,6 +32,11 @@ pub use endpoint::{
     UserEndpoint,
 };
 pub use execute_on::ExecuteOn;
+pub use flattened::{
+    CauseReading, ErrorLeg, FlattenedDialString, FlattenedDialStringDisplay,
+    FlattenedDialStringError, FlattenedGroup, FlattenedLeg, FlattenedThread, LegTarget, LegWarning,
+    ListWarning, UnparsedLeg,
+};
 pub use originate::{
     Application, DialplanType, Endpoint, Originate, OriginateDisplay, OriginateError,
     OriginateTarget, ParseDialplanTypeError, Variables, VariablesType,

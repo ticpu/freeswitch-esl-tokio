@@ -376,7 +376,7 @@ impl Endpoint {
 
     /// Dispatch on the module prefix of a dial string whose variable block has
     /// already been taken off.
-    fn parse_bare(uri: &str) -> Result<Self, OriginateError> {
+    pub(crate) fn parse_bare(uri: &str) -> Result<Self, OriginateError> {
         let (_, parse) = Self::PREFIX_PARSERS
             .iter()
             .find(|(prefix, _)| uri.starts_with(prefix))
