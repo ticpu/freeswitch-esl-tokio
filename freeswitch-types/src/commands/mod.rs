@@ -205,16 +205,29 @@ fn split_inline_actions(s: &str, delimiter: char) -> Vec<String> {
 
 /// Parse the target argument of an originate command.
 ///
-/// Determines whether the target is a dialplan extension or application(s):
+/// Determines whether the target is a dialplan extension or application(s), in the order
+/// `originate_function` decides it:
 ///
+/// - If string is `&` and more: parse as XML app → `Application`, whatever the dialplan
 /// - If dialplan is `Inline`: parse as inline apps → `InlineApplications`
-/// - If string starts with `&`: parse as XML app → `Application`
 /// - Otherwise: bare string → `Extension`
 pub fn parse_originate_target(
     s: &str,
     dialplan: Option<&DialplanType>,
 ) -> Result<OriginateTarget, OriginateError> {
-    if matches!(dialplan, Some(DialplanType::Inline)) {
+    if let Some(rest) = s
+        .strip_prefix('&')
+        .filter(|rest| !rest.is_empty())
+    {
+        let rest = rest
+            .strip_suffix(')')
+            .ok_or_else(|| OriginateError::ParseError("missing closing paren".into()))?;
+        let (name, args) = rest
+            .split_once('(')
+            .ok_or_else(|| OriginateError::ParseError("missing opening paren".into()))?;
+        let args = if args.is_empty() { None } else { Some(args) };
+        Ok(OriginateTarget::Application(Application::new(name, args)))
+    } else if matches!(dialplan, Some(DialplanType::Inline)) {
         let (delimiter, s) = split_inline_prefix(s);
         let delimiter = delimiter.unwrap_or(DEFAULT_INLINE_DELIMITER);
         let mut apps = Vec::new();
@@ -227,15 +240,6 @@ pub fn parse_originate_target(
             apps.push(Application::new(name, args));
         }
         Ok(OriginateTarget::InlineApplications(apps))
-    } else if let Some(rest) = s.strip_prefix('&') {
-        let rest = rest
-            .strip_suffix(')')
-            .ok_or_else(|| OriginateError::ParseError("missing closing paren".into()))?;
-        let (name, args) = rest
-            .split_once('(')
-            .ok_or_else(|| OriginateError::ParseError("missing opening paren".into()))?;
-        let args = if args.is_empty() { None } else { Some(args) };
-        Ok(OriginateTarget::Application(Application::new(name, args)))
     } else {
         Ok(OriginateTarget::Extension(s.to_string()))
     }
@@ -494,6 +498,24 @@ mod tests {
     fn split_takes_no_override_on_a_non_ascii_separator() {
         assert_eq!(originate_split("^^éaéb c", ' ').unwrap(), ["^^éaéb", "c"]);
         assert_eq!(originate_split("^^éaé,b", ',').unwrap(), ["^^éaé", "b"]);
+    }
+
+    /// `originate_function` runs `&name(args)` before it reads the dialplan, and takes a lone
+    /// `&` as an extension.
+    #[test]
+    fn parse_target_reads_an_application_before_the_dialplan() {
+        for dialplan in [None, Some(&DialplanType::Inline), Some(&DialplanType::Xml)] {
+            let target = parse_originate_target("&park(:,)", dialplan).unwrap();
+            assert_eq!(
+                target,
+                OriginateTarget::Application(Application::new("park", Some(":,"))),
+                "{dialplan:?}"
+            );
+        }
+        assert_eq!(
+            parse_originate_target("&", None).unwrap(),
+            OriginateTarget::Extension("&".into())
+        );
     }
 
     #[test]

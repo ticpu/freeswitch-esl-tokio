@@ -2642,6 +2642,29 @@ mod tests {
         assert_eq!(parsed.caller_id_name(), Some("it's"));
     }
 
+    #[test]
+    fn an_application_under_the_inline_dialplan_and_a_lone_ampersand_round_trip() {
+        let cases = [
+            (
+                Originate::application(test_endpoint(), Application::new("park", Some(":,")))
+                    .dialplan(DialplanType::Inline)
+                    .unwrap(),
+                "originate loopback/9199/test &park(:,) inline",
+            ),
+            (
+                Originate::extension(test_endpoint(), "&"),
+                "originate loopback/9199/test &",
+            ),
+        ];
+        for (cmd, wire) in cases {
+            assert_eq!(cmd.to_string(), wire);
+            let parsed: Originate = wire
+                .parse()
+                .unwrap_or_else(|e| panic!("{wire:?} failed to parse: {e}"));
+            assert_eq!(parsed, cmd, "{wire:?}");
+        }
+    }
+
     /// `switch_api_execute` strips tab, vertical tab, CR, newline and space from the edges of
     /// the argument line, so a last positional ending in one is kept inside quotes.
     #[test]
