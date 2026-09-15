@@ -328,6 +328,12 @@ mod serde_support {
                 inline_delimiter: None,
                 argv_separator: None,
             };
+            if originate
+                .target_text()
+                .eq_ignore_ascii_case(UNDEF)
+            {
+                return Err(OriginateError::UndefPositional("target"));
+            }
             match raw.argv_separator {
                 Some(sep) => originate.with_argv_separator(sep),
                 None => Ok(originate),
@@ -368,6 +374,9 @@ mod serde_support {
 
 impl Originate {
     /// Route through the dialplan engine to an extension.
+    ///
+    /// `undef` in any case aborts the switch, which asserts the target it reads as absent is
+    /// set; parse and config load refuse it, this does not.
     pub fn extension(endpoint: Endpoint, extension: impl Into<String>) -> Self {
         Self {
             endpoint,
@@ -693,55 +702,32 @@ impl Originate {
             .collect()
     }
 
-    /// The tail on the blank split: an absent dialplan or context is written as the value the
-    /// switch falls back to, and a caller id is quoted.
-    fn write_blank_tail(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        const FILLERS: [&str; 5] = ["XML", DEFAULT_CONTEXT, UNDEF, UNDEF, UNDEF];
-        for (slot, (value, filler)) in self
-            .positional_tail()
-            .iter()
-            .zip(FILLERS)
-            .enumerate()
-        {
-            let value = value
-                .as_deref()
-                .unwrap_or(filler);
-            match slot {
-                2 | 3 => write!(f, " {}", originate_quote(value))?,
-                _ => write!(f, " {value}")?,
-            }
-        }
-        Ok(())
-    }
-
-    /// The line on `sep`: every argument after the endpoint escaped once, an absent slot
-    /// written `undef`.
-    fn write_separated(
-        &self,
-        f: &mut fmt::Formatter<'_>,
-        block_parse: BlockParse,
-        sep: char,
-        target: &str,
-    ) -> fmt::Result {
-        // The field holds only separators `with_argv_separator` accepted.
-        let dial_target = Self::argv_target(block_parse, sep).map_err(|_| fmt::Error)?;
-        write!(
-            f,
-            "originate ^^{sep}{}",
-            self.endpoint
-                .display_for(dial_target)
-        )?;
+    /// The target and positionals after the endpoint. On a separator each is escaped once and
+    /// an absent slot is `undef`; on blanks each is quoted and an absent dialplan or context is
+    /// the value the switch falls back to.
+    fn write_arguments(&self, f: &mut fmt::Formatter<'_>, target: &str) -> fmt::Result {
+        let fillers = match self.argv_separator {
+            None => ["XML", DEFAULT_CONTEXT, UNDEF, UNDEF, UNDEF],
+            Some(_) => [UNDEF; 5],
+        };
         let tail = self.positional_tail();
-        let arguments = std::iter::once(Some(target)).chain(
-            tail.iter()
-                .map(Option::as_deref),
-        );
-        for (at, argument) in arguments.enumerate() {
-            f.write_char(sep)?;
-            match argument.unwrap_or(UNDEF) {
+        let arguments = std::iter::once(Some(target))
+            .chain(
+                tail.iter()
+                    .map(Option::as_deref),
+            )
+            .zip(std::iter::once(UNDEF).chain(fillers));
+        for (at, (argument, filler)) in arguments.enumerate() {
+            match (self.argv_separator, argument.unwrap_or(filler)) {
+                // A run of blanks is one split, so only quotes keep an empty argument.
+                (None, "") => f.write_str(" ''")?,
+                (None, text) => write!(f, " {}", originate_quote(text))?,
                 // A trailing separator adds no argument; quotes keep a final empty one.
-                "" if at == tail.len() => f.write_str("''")?,
-                text => write_escaped(&mut *f, sep, text)?,
+                (Some(sep), "") if at == tail.len() => write!(f, "{sep}''")?,
+                (Some(sep), text) => {
+                    f.write_char(sep)?;
+                    write_escaped(&mut *f, sep, text)?;
+                }
             }
         }
         Ok(())
@@ -787,33 +773,38 @@ impl Originate {
         }
     }
 
-    fn write_with(&self, f: &mut fmt::Formatter<'_>, block_parse: BlockParse) -> fmt::Result {
-        let target_str = match &self.target {
+    /// The target argument before the split's quoting or escaping.
+    fn target_text(&self) -> String {
+        match &self.target {
             OriginateTarget::Extension(ext) => ext.clone(),
             OriginateTarget::Application(app) => app.to_string_with_dialplan(&DialplanType::Xml),
-            OriginateTarget::InlineApplications(apps) => {
-                // Constructor guarantees non-empty
-                match self.inline_delimiter {
-                    Some(delimiter) => {
-                        format!("m:{delimiter}:{}", render_inline(apps, delimiter))
-                    }
-                    None => render_inline(apps, DEFAULT_INLINE_DELIMITER),
-                }
+            OriginateTarget::InlineApplications(apps) => match self.inline_delimiter {
+                Some(delimiter) => format!("m:{delimiter}:{}", render_inline(apps, delimiter)),
+                None => render_inline(apps, DEFAULT_INLINE_DELIMITER),
+            },
+        }
+    }
+
+    fn write_with(&self, f: &mut fmt::Formatter<'_>, block_parse: BlockParse) -> fmt::Result {
+        let dial_target = match self.argv_separator {
+            // The field holds only separators `with_argv_separator` accepted.
+            Some(sep) => {
+                f.write_str("originate ^^")?;
+                f.write_char(sep)?;
+                Self::argv_target(block_parse, sep).map_err(|_| fmt::Error)?
+            }
+            None => {
+                f.write_str("originate ")?;
+                Self::dial_target(block_parse)
             }
         };
-
-        if let Some(sep) = self.argv_separator {
-            return self.write_separated(f, block_parse, sep, &target_str);
-        }
         write!(
             f,
-            "originate {} {}",
+            "{}",
             self.endpoint
-                .display_for(Self::dial_target(block_parse)),
-            originate_quote(&target_str)
+                .display_for(dial_target)
         )?;
-
-        self.write_blank_tail(f)
+        self.write_arguments(f, &self.target_text())
     }
 
     fn dial_target(block_parse: BlockParse) -> DialStringTarget {
@@ -833,7 +824,10 @@ impl Originate {
             .strip_prefix("originate")
             .unwrap_or(s)
             .trim_matches(['\t', '\n', '\u{b}', '\r', ' ']);
-        let sep = delimiter_override(&trace(s)).0;
+        // `^^ ` names the blank split itself.
+        let sep = delimiter_override(&trace(s))
+            .0
+            .filter(|&sep| sep != ' ');
         let dial_target = match sep {
             Some(sep) => Self::argv_target(block_parse, sep)?,
             None => Self::dial_target(block_parse),
@@ -845,9 +839,6 @@ impl Originate {
             .ok_or_else(|| OriginateError::ParseError("empty originate".into()))?;
         let endpoint = Endpoint::parse_for(&endpoint_str, dial_target)?;
 
-        let target_str = args
-            .next()
-            .ok_or_else(|| OriginateError::ParseError("missing target in originate".into()))?;
         let Slots {
             target: target_str,
             dialplan,
@@ -855,10 +846,10 @@ impl Originate {
             cid_name,
             cid_num,
             timeout,
-        } = match sep {
-            Some(sep) => Slots::separated(&target_str, args, sep)?,
-            None => Slots::blank(&target_str, args.collect()),
-        };
+        } = Slots::read(args.map(|token| match sep {
+            Some(sep) => clean_argument(&token, sep),
+            None => originate_unquote(&token),
+        }))?;
 
         let target = super::parse_originate_target(&target_str, dialplan.as_ref())?;
 
@@ -902,46 +893,19 @@ struct Slots {
 }
 
 impl Slots {
-    /// Tokens of the blank split, undoing [`originate_quote`]. The dialplan slot is optional
-    /// here, so a token naming neither dialplan type is the context.
-    fn blank(target: &str, mut args: Vec<String>) -> Self {
-        let dialplan = match args
-            .first()
-            .map(String::as_str)
-        {
-            Some(token) if token.eq_ignore_ascii_case("inline") => Some(DialplanType::Inline),
-            Some(token) if token.eq_ignore_ascii_case("xml") => Some(DialplanType::Xml),
-            _ => None,
+    /// The tokens after the endpoint, each already through its split's cleanup, read strictly
+    /// by position as `originate_function` does.
+    fn read(args: impl Iterator<Item = String>) -> Result<Self, OriginateError> {
+        let mut args = args.map(undef_to_none);
+        let target = match args.next() {
+            None => {
+                return Err(OriginateError::ParseError(
+                    "missing target in originate".into(),
+                ))
+            }
+            Some(None) => return Err(OriginateError::UndefPositional("target")),
+            Some(Some(target)) => target,
         };
-        if dialplan.is_some() {
-            args.remove(0);
-        }
-        let mut args = args.into_iter();
-        let context = args.next();
-        let mut caller_id = || {
-            args.next()
-                .and_then(|token| undef_to_none(originate_unquote(&token)))
-        };
-        let cid_name = caller_id();
-        let cid_num = caller_id();
-        Self {
-            target: originate_unquote(target),
-            dialplan,
-            context,
-            cid_name,
-            cid_num,
-            timeout: args.next(),
-        }
-    }
-
-    /// Tokens of the split on `sep`, each through that split's cleanup, read strictly by
-    /// position as `originate_function` does.
-    fn separated(
-        target: &str,
-        args: impl Iterator<Item = String>,
-        sep: char,
-    ) -> Result<Self, OriginateError> {
-        let mut args = args.map(|token| undef_to_none(clean_argument(&token, sep)));
         let dialplan = match args
             .next()
             .flatten()
@@ -971,7 +935,7 @@ impl Slots {
             ));
         }
         Ok(Self {
-            target: clean_argument(target, sep),
+            target,
             dialplan,
             context,
             cid_name,
@@ -2552,9 +2516,10 @@ mod tests {
             ),
             (
                 Originate::extension(test_endpoint(), "1000")
+                    .context("test")
                     .cid_name("Alice")
                     .cid_num(""),
-                "originate loopback/9199/test 1000 XML default Alice ''",
+                "originate loopback/9199/test 1000 XML test Alice ''",
             ),
         ];
         for (cmd, wire) in cases {
