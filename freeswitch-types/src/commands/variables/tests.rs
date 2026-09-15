@@ -935,6 +935,9 @@ fn for_version_maps_a_vouched_release() {
         FreeswitchVersion::new(1, 10, 0),
         FreeswitchVersion::new(1, 10, 7),
         FreeswitchVersion::new(1, 10, 12),
+        FreeswitchVersion::new(1, 11, 0),
+        FreeswitchVersion::new(1, 11, 1),
+        FreeswitchVersion::new(1, 11, 3),
     ] {
         assert_eq!(
             BlockParse::for_version(&version).ok(),
@@ -960,8 +963,8 @@ fn for_version_refuses_what_it_cannot_vouch_for() {
         assert_eq!(err.version(), version);
     }
     for version in [
-        FreeswitchVersion::new(1, 10, 13),
-        FreeswitchVersion::new(1, 11, 1),
+        FreeswitchVersion::new(1, 11, 4),
+        FreeswitchVersion::new(1, 12, 0),
     ] {
         let err = BlockParse::for_version(&version).expect_err(&version.to_string());
         assert!(
@@ -1385,11 +1388,11 @@ fn parse_agrees_with_the_switch_port() {
 /// would have been accepted.
 #[test]
 fn an_unvouched_version_names_the_vouched_range() {
-    let msg = BlockParse::for_version(&FreeswitchVersion::new(1, 11, 1))
+    let msg = BlockParse::for_version(&FreeswitchVersion::new(1, 11, 4))
         .unwrap_err()
         .to_string();
     assert!(
-        msg.contains("1.10.0") && msg.contains("1.10.12"),
+        msg.contains("1.10.0") && msg.contains("1.11.3"),
         "does not name the vouched range: {msg}"
     );
 }
