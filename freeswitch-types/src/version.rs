@@ -259,6 +259,7 @@ mod tests {
             .is_err());
     }
 
+    #[cfg(feature = "serde")]
     #[test]
     fn serde_uses_the_short_form() {
         let version = FreeswitchVersion::new(1, 10, 13).dev();

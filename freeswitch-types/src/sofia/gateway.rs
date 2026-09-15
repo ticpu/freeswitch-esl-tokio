@@ -53,11 +53,10 @@ wire_enum! {
     tests: gateway_ping_status_wire_tests;
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "serde"))]
 mod tests {
     use super::*;
 
-    #[cfg(feature = "serde")]
     mod serde_tests {
         use super::*;
 

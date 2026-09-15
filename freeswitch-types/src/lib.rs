@@ -42,7 +42,7 @@ pub mod sdp;
 pub mod sofia;
 #[cfg(any(feature = "esl", feature = "sdp"))]
 pub(crate) mod switch_passes;
-#[cfg(test)]
+#[cfg(all(test, feature = "esl"))]
 mod test_text;
 pub mod variables;
 pub mod version;
