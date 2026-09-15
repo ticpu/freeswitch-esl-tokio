@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use super::{extract_variables, strip_endpoint_prefix};
+use super::{after_prefix, check_field, parse_leg, undeliverable, EndpointFieldFault};
 use crate::commands::originate::OriginateError;
 use crate::commands::variables::DialStringCarrier;
 use crate::commands::variables::Variables;
@@ -8,6 +8,7 @@ use crate::commands::variables::Variables;
 /// SIP endpoint via a named profile: `sofia/{profile}/{destination}`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(try_from = "config::SofiaEndpoint"))]
 #[non_exhaustive]
 pub struct SofiaEndpoint {
     /// SIP profile name (e.g. `internal`, `external`).
@@ -26,6 +27,7 @@ pub struct SofiaEndpoint {
 /// `sofia/gateway/[{profile}::]{gateway}/{destination}`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(try_from = "config::SofiaGateway"))]
 #[non_exhaustive]
 pub struct SofiaGateway {
     /// Gateway name as configured in the SIP profile.
@@ -129,80 +131,97 @@ impl SofiaContact {
     }
 }
 
-impl_dial_string_with_variables!(SofiaEndpoint, |this, f| write!(
-    f,
+impl_dial_string_with_variables!(SofiaEndpoint, write_module_text, |this| format!(
     "sofia/{}/{}",
     this.profile, this.destination
 ));
 
-impl_dial_string_with_variables!(SofiaGateway, |this, f| match &this.profile {
-    Some(p) => write!(
-        f,
-        "sofia/gateway/{}::{}/{}",
-        p, this.gateway, this.destination
-    ),
-    None => write!(f, "sofia/gateway/{}/{}", this.gateway, this.destination),
+impl_dial_string_with_variables!(
+    SofiaGateway,
+    write_module_text,
+    |this| match &this.profile {
+        Some(p) => format!("sofia/gateway/{p}::{}/{}", this.gateway, this.destination),
+        None => format!("sofia/gateway/{}/{}", this.gateway, this.destination),
+    }
+);
+
+impl_dial_string_with_variables!(SofiaContact, write_expression, |this| match &this.profile {
+    Some(p) => format!("${{sofia_contact({p}/{}@{})}}", this.user, this.domain),
+    None => format!("${{sofia_contact({}@{})}}", this.user, this.domain),
 });
 
-impl_dial_string_with_variables!(SofiaContact, |this, f| match &this.profile {
-    Some(p) => write!(f, "${{sofia_contact({}/{}@{})}}", p, this.user, this.domain),
-    None => write!(f, "${{sofia_contact({}@{})}}", this.user, this.domain),
-});
+impl SofiaEndpoint {
+    /// Refuse a profile `sofia_outgoing_channel` cuts at `/` or `^`, or reads as the gateway path.
+    pub(crate) fn check_deliverable(&self) -> Result<(), OriginateError> {
+        check_field("sofia", "profile", &self.profile, &["/", "^"])?;
+        if self
+            .profile
+            .eq_ignore_ascii_case("gateway")
+        {
+            return Err(undeliverable(
+                "sofia",
+                "profile",
+                EndpointFieldFault::ReadsAsGateway,
+            ));
+        }
+        check_field("sofia", "destination", &self.destination, &[])
+    }
 
-impl FromStr for SofiaEndpoint {
-    type Err = OriginateError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (variables, rest) =
-            strip_endpoint_prefix(s, "sofia/", "sofia", DialStringCarrier::EslApi)?;
+    pub(crate) fn parse_bare(text: &str) -> Result<Self, OriginateError> {
+        let rest = after_prefix(text, "sofia/", "sofia")?;
         let (profile, destination) = rest
             .split_once('/')
             .ok_or_else(|| {
                 OriginateError::ParseError("sofia endpoint needs profile/destination".into())
             })?;
-        Ok(Self {
-            profile: profile.into(),
-            destination: destination.into(),
-            variables,
-        })
+        let ep = Self::new(profile, destination);
+        ep.check_deliverable()?;
+        Ok(ep)
     }
 }
 
-impl FromStr for SofiaGateway {
-    type Err = OriginateError;
+impl SofiaGateway {
+    /// Refuse a gateway or profile `sofia_outgoing_channel` cuts at `/` or `^`, and a `::` the
+    /// `profile::gateway` lookup key would read at another place.
+    pub(crate) fn check_deliverable(&self) -> Result<(), OriginateError> {
+        const KIND: &str = "sofia gateway";
+        let gateway_splits: &[&str] = match self.profile {
+            Some(_) => &["/", "^"],
+            None => &["/", "^", "::"],
+        };
+        check_field(KIND, "gateway", &self.gateway, gateway_splits)?;
+        if let Some(profile) = &self.profile {
+            check_field(KIND, "profile", profile, &["/", "^", "::"])?;
+            if profile.ends_with(':') {
+                return Err(undeliverable(
+                    KIND,
+                    "profile",
+                    EndpointFieldFault::ModuleSeparator("::"),
+                ));
+            }
+        }
+        check_field(KIND, "destination", &self.destination, &[])
+    }
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (variables, rest) = strip_endpoint_prefix(
-            s,
-            "sofia/gateway/",
-            "sofia gateway",
-            DialStringCarrier::EslApi,
-        )?;
+    pub(crate) fn parse_bare(text: &str) -> Result<Self, OriginateError> {
+        let rest = after_prefix(text, "sofia/gateway/", "sofia gateway")?;
         let (gateway_part, destination) = rest
             .split_once('/')
             .ok_or_else(|| {
                 OriginateError::ParseError("sofia gateway needs gateway/destination".into())
             })?;
-        let (profile, gateway) = if let Some((p, g)) = gateway_part.split_once("::") {
-            (Some(p.to_string()), g.to_string())
-        } else {
-            (None, gateway_part.to_string())
+        let ep = match gateway_part.split_once("::") {
+            Some((profile, gateway)) => Self::new(gateway, destination).with_profile(profile),
+            None => Self::new(gateway_part, destination),
         };
-        Ok(Self {
-            gateway,
-            destination: destination.into(),
-            profile,
-            variables,
-        })
+        ep.check_deliverable()?;
+        Ok(ep)
     }
 }
 
-impl FromStr for SofiaContact {
-    type Err = OriginateError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (variables, uri) = extract_variables(s, DialStringCarrier::EslApi.into())?;
-        let inner = uri
+impl SofiaContact {
+    pub(crate) fn parse_bare(text: &str) -> Result<Self, OriginateError> {
+        let inner = text
             .strip_prefix("${sofia_contact(")
             .and_then(|r| r.strip_suffix(")}"))
             .ok_or_else(|| OriginateError::ParseError("not a sofia_contact expression".into()))?;
@@ -218,8 +237,89 @@ impl FromStr for SofiaContact {
             user: user.into(),
             domain: domain.into(),
             profile,
-            variables,
+            variables: None,
         })
+    }
+}
+
+impl FromStr for SofiaEndpoint {
+    type Err = OriginateError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (variables, ep) = parse_leg(s, DialStringCarrier::EslApi.into(), Self::parse_bare)?;
+        Ok(Self { variables, ..ep })
+    }
+}
+
+impl FromStr for SofiaGateway {
+    type Err = OriginateError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (variables, ep) = parse_leg(s, DialStringCarrier::EslApi.into(), Self::parse_bare)?;
+        Ok(Self { variables, ..ep })
+    }
+}
+
+impl FromStr for SofiaContact {
+    type Err = OriginateError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (variables, ep) = parse_leg(s, DialStringCarrier::EslApi.into(), Self::parse_bare)?;
+        Ok(Self { variables, ..ep })
+    }
+}
+
+#[cfg(feature = "serde")]
+mod config {
+    use crate::commands::variables::Variables;
+
+    #[derive(serde::Deserialize)]
+    pub(super) struct SofiaEndpoint {
+        pub(super) profile: String,
+        pub(super) destination: String,
+        #[serde(default)]
+        pub(super) variables: Option<Variables>,
+    }
+
+    #[derive(serde::Deserialize)]
+    pub(super) struct SofiaGateway {
+        pub(super) gateway: String,
+        pub(super) destination: String,
+        #[serde(default)]
+        pub(super) profile: Option<String>,
+        #[serde(default)]
+        pub(super) variables: Option<Variables>,
+    }
+}
+
+#[cfg(feature = "serde")]
+impl TryFrom<config::SofiaEndpoint> for SofiaEndpoint {
+    type Error = OriginateError;
+
+    fn try_from(config: config::SofiaEndpoint) -> Result<Self, Self::Error> {
+        let ep = Self {
+            profile: config.profile,
+            destination: config.destination,
+            variables: config.variables,
+        };
+        ep.check_deliverable()?;
+        Ok(ep)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl TryFrom<config::SofiaGateway> for SofiaGateway {
+    type Error = OriginateError;
+
+    fn try_from(config: config::SofiaGateway) -> Result<Self, Self::Error> {
+        let ep = Self {
+            gateway: config.gateway,
+            destination: config.destination,
+            profile: config.profile,
+            variables: config.variables,
+        };
+        ep.check_deliverable()?;
+        Ok(ep)
     }
 }
 

@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use super::strip_endpoint_prefix;
+use super::{after_prefix, check_field, parse_leg};
 use crate::commands::originate::OriginateError;
 use crate::commands::variables::DialStringCarrier;
 use crate::commands::variables::Variables;
@@ -8,6 +8,7 @@ use crate::commands::variables::Variables;
 /// Directory-based endpoint: `user/{name}[@{domain}]`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(try_from = "config::UserEndpoint"))]
 #[non_exhaustive]
 pub struct UserEndpoint {
     /// User name from the directory.
@@ -43,27 +44,67 @@ impl UserEndpoint {
     }
 }
 
-impl_dial_string_with_variables!(UserEndpoint, |this, f| match &this.domain {
-    Some(d) => write!(f, "user/{}@{}", this.name, d),
-    None => write!(f, "user/{}", this.name),
+impl_dial_string_with_variables!(UserEndpoint, write_module_text, |this| match &this.domain {
+    Some(d) => format!("user/{}@{d}", this.name),
+    None => format!("user/{}", this.name),
 });
+
+impl UserEndpoint {
+    /// Refuse an `@` in the name, where `user_outgoing_channel` starts the domain.
+    pub(crate) fn check_deliverable(&self) -> Result<(), OriginateError> {
+        check_field("user", "name", &self.name, &["@"])?;
+        match &self.domain {
+            Some(domain) => check_field("user", "domain", domain, &[]),
+            None => Ok(()),
+        }
+    }
+
+    pub(crate) fn parse_bare(text: &str) -> Result<Self, OriginateError> {
+        let rest = after_prefix(text, "user/", "user")?;
+        let ep = match rest.split_once('@') {
+            Some((name, domain)) => Self::new(name).with_domain(domain),
+            None => Self::new(rest),
+        };
+        ep.check_deliverable()?;
+        Ok(ep)
+    }
+}
 
 impl FromStr for UserEndpoint {
     type Err = OriginateError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (variables, rest) =
-            strip_endpoint_prefix(s, "user/", "user", DialStringCarrier::EslApi)?;
-        let (name, domain) = if let Some((n, d)) = rest.split_once('@') {
-            (n.to_string(), Some(d.to_string()))
-        } else {
-            (rest.to_string(), None)
+        let (variables, ep) = parse_leg(s, DialStringCarrier::EslApi.into(), Self::parse_bare)?;
+        Ok(Self { variables, ..ep })
+    }
+}
+
+#[cfg(feature = "serde")]
+mod config {
+    use crate::commands::variables::Variables;
+
+    #[derive(serde::Deserialize)]
+    pub(super) struct UserEndpoint {
+        pub(super) name: String,
+        #[serde(default)]
+        pub(super) domain: Option<String>,
+        #[serde(default)]
+        pub(super) variables: Option<Variables>,
+    }
+}
+
+#[cfg(feature = "serde")]
+impl TryFrom<config::UserEndpoint> for UserEndpoint {
+    type Error = OriginateError;
+
+    fn try_from(config: config::UserEndpoint) -> Result<Self, Self::Error> {
+        let ep = Self {
+            name: config.name,
+            domain: config.domain,
+            variables: config.variables,
         };
-        Ok(Self {
-            name,
-            domain,
-            variables,
-        })
+        ep.check_deliverable()?;
+        Ok(ep)
     }
 }
 

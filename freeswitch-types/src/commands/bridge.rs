@@ -6,9 +6,11 @@
 use std::fmt;
 use std::str::FromStr;
 
-use super::endpoint::{extract_scoped_variables, Endpoint};
+use super::endpoint::{extract_scoped_variables, read_error, DialString, Endpoint};
+use super::flattened::pipeline;
 use super::originate::OriginateError;
 use super::variables::{BlockParse, DialStringCarrier, DialStringTarget, Variables, VariablesType};
+use crate::tokenizer::{separate, trace};
 
 /// A bridge dial string is the argument of a dialplan application, which
 /// receives it whole, so it renders and parses one escaping level shallower
@@ -30,6 +32,7 @@ const GLOBAL_SCOPES: &[VariablesType] = &[VariablesType::Default, VariablesType:
 /// - Global `{variables}` apply to all endpoints
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(try_from = "config::BridgeDialString"))]
 pub struct BridgeDialString {
     #[cfg_attr(
         feature = "serde",
@@ -155,65 +158,154 @@ impl BridgeDialString {
             ));
         }
 
-        let (variables, rest) = extract_scoped_variables(s, target, GLOBAL_SCOPES)?;
+        let (variables, _) = extract_scoped_variables(s, target, GLOBAL_SCOPES)?;
+        let list = pipeline::read(s, target).map_err(read_error)?;
+        let [thread] = &list.threads[..] else {
+            return Err(OriginateError::ParseError(
+                "a bridge dial string has no enterprise threads".into(),
+            ));
+        };
+        if !list
+            .blocks
+            .is_empty()
+            || thread
+                .blocks
+                .len()
+                > 1
+        {
+            return Err(OriginateError::ParseError(
+                "a bridge dial string carries one leading variable block".into(),
+            ));
+        }
 
-        // Split on | for sequential groups, respecting brackets
-        let group_strs = split_respecting_brackets(rest, '|');
         let mut groups = Vec::new();
-        for group_str in &group_strs {
-            let group_str = group_str.trim_matches(' ');
-            if group_str.is_empty() {
-                continue;
-            }
-            // Split on , for simultaneous endpoints, respecting brackets
-            let ep_strs = split_respecting_brackets(group_str, ',');
+        for group in &thread.groups {
             let mut endpoints = Vec::new();
-            for ep_str in &ep_strs {
-                let ep_str = ep_str.trim_matches(' ');
-                if ep_str.is_empty() {
+            for leg in group {
+                if leg
+                    .blocks
+                    .is_empty()
+                    && leg
+                        .endpoint
+                        .is_empty()
+                {
                     continue;
                 }
-                let ep = Endpoint::parse_for(ep_str, CARRIER)?;
-                endpoints.push(ep);
+                if leg
+                    .blocks
+                    .len()
+                    > 1
+                {
+                    return Err(OriginateError::ParseError(
+                        "an endpoint carries one variable block".into(),
+                    ));
+                }
+                let raw = s
+                    .get(
+                        leg.raw
+                            .clone(),
+                    )
+                    .ok_or_else(|| {
+                        OriginateError::ParseError("a leg lies outside the dial string".into())
+                    })?;
+                let (vars, _) = extract_scoped_variables(
+                    raw.trim_matches(' '),
+                    target,
+                    &[VariablesType::Channel],
+                )?;
+                let mut endpoint = Endpoint::parse_bare(&leg.endpoint)?;
+                if vars.is_some() {
+                    endpoint.set_variables(vars);
+                    if endpoint
+                        .variables()
+                        .is_none()
+                    {
+                        return Err(OriginateError::VariablesNotSupported(endpoint.kind()));
+                    }
+                }
+                endpoints.push(endpoint);
             }
             if !endpoints.is_empty() {
                 groups.push(endpoints);
             }
         }
 
-        Ok(Self { variables, groups })
+        let bridge = Self { variables, groups };
+        bridge.check_legs(block_parse)?;
+        Ok(bridge)
+    }
+
+    /// Refuse a group whose separator the switch's comma scan rewrites.
+    fn check_legs(&self, block_parse: BlockParse) -> Result<(), OriginateError> {
+        let target = DialStringTarget::new(CARRIER).with_block_parse(block_parse);
+        match self
+            .groups
+            .iter()
+            .position(|group| separator_merged(group, target))
+        {
+            Some(group) => Err(OriginateError::BracketSpansLegs { group }),
+            None => Ok(()),
+        }
     }
 }
 
-/// Split a string on `sep` while skipping separators inside `{...}`, `[...]`,
-/// `<...>`, and `${...}` blocks.
-fn split_respecting_brackets(s: &str, sep: char) -> Vec<&str> {
-    let mut parts = Vec::new();
-    let mut depth = 0i32;
-    let mut start = 0;
-    let bytes = s.as_bytes();
-
-    for (i, &b) in bytes
+/// Whether `switch_ivr_originate`'s comma scan, run over the group its `|` split leaves, rewrites a
+/// separator between two legs, as a bracket range spanning them does.
+fn separator_merged(group: &[Endpoint], target: DialStringTarget) -> bool {
+    let mut text = String::new();
+    let mut separators = Vec::new();
+    for (i, endpoint) in group
         .iter()
         .enumerate()
     {
-        match b {
-            b'{' | b'[' | b'<' | b'(' => depth += 1,
-            b'}' | b']' | b'>' | b')' => {
-                depth -= 1;
-                if depth < 0 {
-                    depth = 0;
-                }
-            }
-            _ if b == sep as u8 && depth == 0 => {
-                parts.push(&s[start..i]);
-                start = i + 1;
-            }
-            _ => {}
+        if i > 0 {
+            separators.push(text.len());
+            text.push(',');
         }
+        text.push_str(
+            &endpoint
+                .display_for(target)
+                .to_string(),
+        );
     }
-    parts.push(&s[start..]);
-    parts
+    let split = separate(&trace(&text), '|', usize::MAX);
+    let [token] = &split.tokens[..] else {
+        return false;
+    };
+    let mut cleaned = token
+        .text
+        .clone();
+    pipeline::escape_block_commas(&mut cleaned);
+    cleaned
+        .iter()
+        .any(|&(c, start, _)| c != ',' && separators.contains(&start))
+}
+
+#[cfg(feature = "serde")]
+mod config {
+    use crate::commands::endpoint::Endpoint;
+    use crate::commands::variables::Variables;
+
+    #[derive(serde::Deserialize)]
+    pub(super) struct BridgeDialString {
+        #[serde(default)]
+        pub(super) variables: Option<Variables>,
+        pub(super) groups: Vec<Vec<Endpoint>>,
+    }
+}
+
+#[cfg(feature = "serde")]
+impl TryFrom<config::BridgeDialString> for BridgeDialString {
+    type Error = OriginateError;
+
+    fn try_from(config: config::BridgeDialString) -> Result<Self, Self::Error> {
+        let bridge = Self {
+            variables: config.variables,
+            groups: config.groups,
+        };
+        bridge.check_legs(BlockParse::default())?;
+        Ok(bridge)
+    }
 }
 
 #[cfg(test)]

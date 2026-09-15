@@ -70,12 +70,12 @@ pub use channel::{
 #[cfg(feature = "esl")]
 pub use commands::{
     Application, BlockParse, BridgeDialString, BridgeDialStringDisplay, DialString,
-    DialStringCarrier, DialStringTarget, DialplanType, Endpoint, EndpointDisplay, ExecuteOn,
-    GroupCallOrder, InvalidArgvSeparator, Originate, OriginateDisplay, OriginateError,
-    OriginateTarget, ParseBlockParseError, ParseDialplanTypeError, ParseGroupCallOrderError,
-    ParseHoldActionError, ParseMuteActionError, UnvouchedVersion, UuidAnswer, UuidBridge,
-    UuidDeflect, UuidGetVar, UuidHold, UuidKill, UuidSendDtmf, UuidSetVar, UuidTransfer, Variables,
-    VariablesDisplay, VariablesType,
+    DialStringCarrier, DialStringTarget, DialplanType, Endpoint, EndpointDisplay,
+    EndpointFieldFault, ExecuteOn, GroupCallOrder, InvalidArgvSeparator, Originate,
+    OriginateDisplay, OriginateError, OriginateTarget, ParseBlockParseError,
+    ParseDialplanTypeError, ParseGroupCallOrderError, ParseHoldActionError, ParseMuteActionError,
+    UnvouchedVersion, UuidAnswer, UuidBridge, UuidDeflect, UuidGetVar, UuidHold, UuidKill,
+    UuidSendDtmf, UuidSetVar, UuidTransfer, Variables, VariablesDisplay, VariablesType,
 };
 #[cfg(feature = "esl")]
 pub use event::{

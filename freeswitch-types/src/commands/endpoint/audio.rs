@@ -1,6 +1,6 @@
 use std::fmt;
 
-use super::{strip_endpoint_prefix, write_variables};
+use super::{after_prefix, check_field, parse_leg, write_module_text, write_variables};
 use crate::commands::originate::OriginateError;
 use crate::commands::variables::{DialStringCarrier, DialStringTarget, Variables};
 
@@ -10,6 +10,7 @@ use crate::commands::variables::{DialStringCarrier, DialStringTarget, Variables}
 /// empty or `auto_answer` (recognized by portaudio and pulseaudio).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(try_from = "config::AudioEndpoint"))]
 #[non_exhaustive]
 pub struct AudioEndpoint {
     /// Destination string (e.g. `auto_answer`). `None` for bare module name.
@@ -55,28 +56,74 @@ impl AudioEndpoint {
         target: DialStringTarget,
     ) -> fmt::Result {
         write_variables(f, &self.variables, target)?;
+        write_module_text(f, &self.module_text(prefix), target)
+    }
+
+    /// The text after the variable block, as the `prefix` module receives it.
+    pub(crate) fn module_text(&self, prefix: &str) -> String {
         match &self.destination {
-            Some(dest) => write!(f, "{}/{}", prefix, dest),
-            None => f.write_str(prefix),
+            Some(dest) => format!("{prefix}/{dest}"),
+            None => prefix.to_owned(),
+        }
+    }
+
+    pub(crate) fn check_deliverable(&self) -> Result<(), OriginateError> {
+        match &self.destination {
+            Some(destination) => check_field("audio", "destination", destination, &[]),
+            None => Ok(()),
         }
     }
 
     /// Parse from a dial string with the given module prefix.
     pub fn parse_with_prefix(s: &str, prefix: &str) -> Result<Self, OriginateError> {
-        let (variables, rest) =
-            strip_endpoint_prefix(s, prefix, prefix, DialStringCarrier::EslApi)?;
-        let destination = rest
-            .strip_prefix('/')
-            .filter(|d| !d.is_empty())
-            .map(str::to_string);
-        Ok(Self {
-            destination,
-            variables,
-        })
+        let (variables, ep) = parse_leg(s, DialStringCarrier::EslApi.into(), |text| {
+            Self::parse_bare(text, prefix)
+        })?;
+        Ok(Self { variables, ..ep })
+    }
+
+    pub(crate) fn parse_bare(text: &str, prefix: &str) -> Result<Self, OriginateError> {
+        let rest = after_prefix(text, prefix, prefix)?;
+        let ep = Self {
+            destination: rest
+                .strip_prefix('/')
+                .filter(|d| !d.is_empty())
+                .map(str::to_string),
+            variables: None,
+        };
+        ep.check_deliverable()?;
+        Ok(ep)
     }
 }
 
 impl_dial_string_with_variables!(AudioEndpoint);
+
+#[cfg(feature = "serde")]
+mod config {
+    use crate::commands::variables::Variables;
+
+    #[derive(serde::Deserialize)]
+    pub(super) struct AudioEndpoint {
+        #[serde(default)]
+        pub(super) destination: Option<String>,
+        #[serde(default)]
+        pub(super) variables: Option<Variables>,
+    }
+}
+
+#[cfg(feature = "serde")]
+impl TryFrom<config::AudioEndpoint> for AudioEndpoint {
+    type Error = OriginateError;
+
+    fn try_from(config: config::AudioEndpoint) -> Result<Self, Self::Error> {
+        let ep = Self {
+            destination: config.destination,
+            variables: config.variables,
+        };
+        ep.check_deliverable()?;
+        Ok(ep)
+    }
+}
 
 /// **Warning:** This `Display` impl exists only to satisfy the `DialString: Display`
 /// trait bound. The `"audio"` prefix is not a valid FreeSWITCH endpoint.

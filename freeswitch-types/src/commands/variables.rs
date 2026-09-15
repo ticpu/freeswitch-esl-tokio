@@ -46,7 +46,41 @@ impl VariablesType {
     fn leg_split_passes(self) -> u32 {
         match self {
             Self::Enterprise | Self::Default => 0,
-            Self::Channel => 2,
+            Self::Channel => LEG_SPLIT_PASSES,
+        }
+    }
+}
+
+/// `switch_ivr_originate` cuts a thread into groups on `|` and a group into legs on `,`, each
+/// through `cleanup_separated_string`.
+const LEG_SPLIT_PASSES: u32 = 2;
+
+/// Text escaped for the passes that read it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum EscapedField {
+    /// A pair's value in a block of `scope`, whose pairs split on commas when `commas_separate`.
+    Value {
+        scope: VariablesType,
+        commas_separate: bool,
+    },
+    /// A leg's text after its blocks, which the leg splits read and the endpoint module parses.
+    Endpoint,
+}
+
+impl EscapedField {
+    fn escapes_comma(self) -> bool {
+        match self {
+            Self::Value {
+                commas_separate, ..
+            } => commas_separate,
+            Self::Endpoint => true,
+        }
+    }
+
+    fn escapes_pipe(self) -> bool {
+        match self {
+            Self::Value { scope, .. } => scope == VariablesType::Channel,
+            Self::Endpoint => true,
         }
     }
 }
@@ -561,29 +595,32 @@ impl DialStringTarget {
         }
     }
 
-    fn passes(self, scope: VariablesType) -> u32 {
+    fn passes(self, field: EscapedField) -> u32 {
         self.argument_passes()
-            + self
-                .block_parse
-                .cleanup_passes()
-            + scope.leg_split_passes()
+            + match field {
+                EscapedField::Value { scope, .. } => {
+                    self.block_parse
+                        .cleanup_passes()
+                        + scope.leg_split_passes()
+                }
+                EscapedField::Endpoint => LEG_SPLIT_PASSES,
+            }
     }
 
     /// Every pass halves a run of backslashes, so a literal one needs 2^passes.
-    fn backslash_escape(self, scope: VariablesType) -> String {
-        "\\".repeat(1 << self.passes(scope))
+    fn backslash_escape(self, field: EscapedField) -> String {
+        "\\".repeat(1 << self.passes(field))
     }
 
-    /// The last pass, the `=` split, trims a value's edges, so an edge space must read `\s`
-    /// entering it.
-    fn space_escape(self, scope: VariablesType) -> String {
-        format!("{}s", "\\".repeat(1 << (self.passes(scope) - 1)))
+    /// The last pass trims the text's edges, so an edge space must read `\s` entering it.
+    fn space_escape(self, field: EscapedField) -> String {
+        format!("{}s", "\\".repeat(1 << (self.passes(field) - 1)))
     }
 
     /// A quote must still read `\'` entering the last pass, or bare after a
     /// carrier pass that deletes `\'`.
-    fn quote_escape(self, scope: VariablesType) -> String {
-        self.quote_bare_after(self.passes(scope))
+    fn quote_escape(self, field: EscapedField) -> String {
+        self.quote_bare_after(self.passes(field))
     }
 
     /// A quote reading bare once `passes` passes have run.
@@ -715,13 +752,25 @@ fn escape_value(
     commas_separate: bool,
     vars_type: VariablesType,
 ) -> String {
-    let target = target.into();
+    escape_text(
+        value,
+        target.into(),
+        EscapedField::Value {
+            scope: vars_type,
+            commas_separate,
+        },
+    )
+}
+
+/// Escape `text` for every pass `field` meets at `target`.
+pub(crate) fn escape_text(text: &str, target: DialStringTarget, field: EscapedField) -> String {
+    let value = text;
     // The backslash goes first, or the ones the other rules introduce get
     // escaped in turn.
     let escaped = value
-        .replace('\\', &target.backslash_escape(vars_type))
-        .replace('\'', &target.quote_escape(vars_type));
-    let dollars = protects_dollars(value, target);
+        .replace('\\', &target.backslash_escape(field))
+        .replace('\'', &target.quote_escape(field));
+    let dollars = protects_dollars(value, target, field);
     let escaped = if dollars {
         escaped.replace('$', "\\$")
     } else {
@@ -729,22 +778,24 @@ fn escape_value(
     };
     // `\,` and `\|` keep one backslash: a pass consumes `\x` only before a
     // quote, a backslash, a named escape or that pass's own delimiter.
-    let escaped = if commas_separate {
+    let escaped = if field.escapes_comma() {
         escaped.replace(',', "\\,")
     } else {
         escaped
     };
-    let escaped = if vars_type == VariablesType::Channel {
+    let escaped = if field.escapes_pipe() {
         escaped.replace('|', "\\|")
     } else {
         escaped
     };
-    let escaped = if vars_type == VariablesType::Channel {
-        guard_channel_commas(escaped, value, target, commas_separate)
-    } else {
-        escaped
+    let escaped = match field {
+        EscapedField::Value {
+            scope: VariablesType::Channel,
+            commas_separate,
+        } => guard_channel_commas(escaped, value, target, commas_separate),
+        EscapedField::Value { .. } | EscapedField::Endpoint => escaped,
     };
-    let space = target.space_escape(vars_type);
+    let space = target.space_escape(field);
     let escaped = match escaped.strip_prefix(' ') {
         Some(rest) => format!("{space}{rest}"),
         None => escaped,
@@ -775,7 +826,10 @@ fn guard_channel_commas(
 ) -> String {
     let guard = target.channel_comma_guard();
     if !commas_separate {
-        let backslash = target.backslash_escape(VariablesType::Channel);
+        let backslash = target.backslash_escape(EscapedField::Value {
+            scope: VariablesType::Channel,
+            commas_separate,
+        });
         escaped.replace(&format!("{backslash},"), &format!("{backslash}{guard},"))
     } else if value.ends_with('\\') {
         escaped + &guard
@@ -784,14 +838,17 @@ fn guard_channel_commas(
     }
 }
 
-/// Expansion drops the first `$` of a `$$` opening no reference. `\$` keeps it only while
-/// expansion runs, which a leading `\'` guarantees and expansion then deletes.
-fn protects_dollars(value: &str, target: DialStringTarget) -> bool {
+/// Expansion drops the first `$` of a `$$` opening no reference and substitutes a reference.
+/// `\$` keeps it only while expansion runs, which a leading `\'` guarantees and expansion then
+/// deletes. A block value naming a variable is left to the switch; endpoint text is not.
+fn protects_dollars(value: &str, target: DialStringTarget, field: EscapedField) -> bool {
     target
         .carrier()
         .expands()
-        && value.contains("$$")
-        && !names_a_variable(value)
+        && match field {
+            EscapedField::Value { .. } => value.contains("$$") && !names_a_variable(value),
+            EscapedField::Endpoint => value.contains("$$") || names_a_variable(value),
+        }
 }
 
 /// Inverts [`escape_value`], undoing each substitution in the reverse order it
@@ -803,6 +860,10 @@ fn unescape_value(
     commas_separate: bool,
     vars_type: VariablesType,
 ) -> String {
+    let field = EscapedField::Value {
+        scope: vars_type,
+        commas_separate,
+    };
     let s = value
         .strip_prefix('\'')
         .and_then(|s| s.strip_suffix('\''))
@@ -818,7 +879,7 @@ fn unescape_value(
         }
         _ => (false, s),
     };
-    let space = target.space_escape(vars_type);
+    let space = target.space_escape(field);
     let (lead, s) = match s.strip_prefix(space.as_str()) {
         Some(rest) => (" ", rest),
         None => ("", s),
@@ -832,7 +893,7 @@ fn unescape_value(
                     .trim_end_matches('\\')
                     .len()
         });
-    let (trail, s) = if run % (1 << target.passes(vars_type)) == space.len() - 1 {
+    let (trail, s) = if run % (1 << target.passes(field)) == space.len() - 1 {
         (" ", &s[..s.len() - space.len()])
     } else {
         ("", s)
@@ -859,8 +920,8 @@ fn unescape_value(
     };
     let s = if dollars { s.replace("\\$", "$") } else { s };
     let s = s
-        .replace(&target.quote_escape(vars_type), "'")
-        .replace(&target.backslash_escape(vars_type), "\\");
+        .replace(&target.quote_escape(field), "'")
+        .replace(&target.backslash_escape(field), "\\");
     format!("{lead}{s}{trail}")
 }
 

@@ -30,9 +30,9 @@ pub use conference::{
     ParseMuteActionError,
 };
 pub use endpoint::{
-    AudioEndpoint, DialString, EndpointDisplay, ErrorEndpoint, GroupCall, GroupCallOrder,
-    LoopbackEndpoint, ParseGroupCallOrderError, SofiaContact, SofiaEndpoint, SofiaGateway,
-    UserEndpoint,
+    AudioEndpoint, DialString, EndpointDisplay, EndpointFieldFault, ErrorEndpoint, GroupCall,
+    GroupCallOrder, LoopbackEndpoint, ParseGroupCallOrderError, SofiaContact, SofiaEndpoint,
+    SofiaGateway, UserEndpoint,
 };
 pub use execute_on::ExecuteOn;
 pub use flattened::{

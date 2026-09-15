@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use super::strip_endpoint_prefix;
+use super::{after_prefix, check_field, parse_leg, undeliverable, EndpointFieldFault};
 use crate::commands::originate::{OriginateError, DEFAULT_CONTEXT};
 use crate::commands::variables::DialStringCarrier;
 use crate::commands::variables::Variables;
@@ -8,9 +8,11 @@ use crate::commands::variables::Variables;
 /// Internal loopback endpoint: `loopback/{extension}[/{context}[/{dialplan}]]`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(try_from = "config::LoopbackEndpoint"))]
 #[non_exhaustive]
 pub struct LoopbackEndpoint {
-    /// Extension number or pattern.
+    /// Extension number or pattern, or `app=<name>[:<args>]`, which mod_loopback runs as an
+    /// application and follows with no context or dialplan.
     pub extension: String,
     /// Dialplan context. `None` omits the context segment, letting
     /// FreeSWITCH use its default.
@@ -59,42 +61,139 @@ impl LoopbackEndpoint {
     }
 }
 
-impl_dial_string_with_variables!(
-    LoopbackEndpoint,
-    |this, f| match (&this.context, &this.dialplan) {
-        (None, None) => write!(f, "loopback/{}", this.extension),
-        (Some(ctx), None) => write!(f, "loopback/{}/{}", this.extension, ctx),
-        (ctx, Some(dialplan)) => write!(
-            f,
-            "loopback/{}/{}/{}",
-            this.extension,
-            ctx.as_deref()
-                .unwrap_or(DEFAULT_CONTEXT),
-            dialplan
-        ),
+impl_dial_string_with_variables!(LoopbackEndpoint, write_module_text, |this| match (
+    &this.context,
+    &this.dialplan
+) {
+    (None, None) => format!("loopback/{}", this.extension),
+    (Some(ctx), None) => format!("loopback/{}/{}", this.extension, ctx),
+    (ctx, Some(dialplan)) => format!(
+        "loopback/{}/{}/{}",
+        this.extension,
+        ctx.as_deref()
+            .unwrap_or(DEFAULT_CONTEXT),
+        dialplan
+    ),
+});
+
+const KIND: &str = "loopback";
+
+/// `channel_outgoing_channel` runs an extension opening `app=` in any case as an application.
+fn is_application(extension: &str) -> bool {
+    extension
+        .get(..4)
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("app="))
+}
+
+impl LoopbackEndpoint {
+    /// Refuse what `channel_outgoing_channel` reads as something else: a `/` in the extension,
+    /// the context or an application's name, an empty context or dialplan, and either after an
+    /// application.
+    pub(crate) fn check_deliverable(&self) -> Result<(), OriginateError> {
+        if is_application(&self.extension) {
+            let name = self
+                .extension
+                .split_once(':')
+                .map_or(
+                    self.extension
+                        .as_str(),
+                    |(name, _)| name,
+                );
+            check_field(KIND, "extension", name, &["/"])?;
+            check_field(KIND, "extension", &self.extension, &[])?;
+            for (field, value) in [("context", &self.context), ("dialplan", &self.dialplan)] {
+                if value.is_some() {
+                    return Err(undeliverable(
+                        KIND,
+                        field,
+                        EndpointFieldFault::FollowsAnApplication,
+                    ));
+                }
+            }
+            return Ok(());
+        }
+        check_field(KIND, "extension", &self.extension, &["/"])?;
+        for (field, value, separators) in [
+            ("context", &self.context, &["/"][..]),
+            ("dialplan", &self.dialplan, &[][..]),
+        ] {
+            let Some(value) = value else {
+                continue;
+            };
+            check_field(KIND, field, value, separators)?;
+            if value.is_empty() {
+                return Err(undeliverable(
+                    KIND,
+                    field,
+                    EndpointFieldFault::EmptyReadsAsDefault,
+                ));
+            }
+        }
+        Ok(())
     }
-);
+
+    pub(crate) fn parse_bare(text: &str) -> Result<Self, OriginateError> {
+        let rest = after_prefix(text, "loopback/", KIND)?;
+        let ep = if is_application(rest) {
+            Self::new(rest)
+        } else {
+            let mut segments = rest.splitn(3, '/');
+            let mut ep = Self::new(
+                segments
+                    .next()
+                    .unwrap_or(rest),
+            );
+            ep.context = segments
+                .next()
+                .map(str::to_string);
+            ep.dialplan = segments
+                .next()
+                .map(str::to_string);
+            ep
+        };
+        ep.check_deliverable()?;
+        Ok(ep)
+    }
+}
 
 impl FromStr for LoopbackEndpoint {
     type Err = OriginateError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (variables, rest) =
-            strip_endpoint_prefix(s, "loopback/", "loopback", DialStringCarrier::EslApi)?;
-        let mut segments = rest.splitn(3, '/');
-        let extension = segments
-            .next()
-            .unwrap_or(rest);
-        Ok(Self {
-            extension: extension.into(),
-            context: segments
-                .next()
-                .map(str::to_string),
-            dialplan: segments
-                .next()
-                .map(str::to_string),
-            variables,
-        })
+        let (variables, ep) = parse_leg(s, DialStringCarrier::EslApi.into(), Self::parse_bare)?;
+        Ok(Self { variables, ..ep })
+    }
+}
+
+#[cfg(feature = "serde")]
+mod config {
+    use crate::commands::variables::Variables;
+
+    #[derive(serde::Deserialize)]
+    pub(super) struct LoopbackEndpoint {
+        pub(super) extension: String,
+        #[serde(default)]
+        pub(super) context: Option<String>,
+        #[serde(default)]
+        pub(super) dialplan: Option<String>,
+        #[serde(default)]
+        pub(super) variables: Option<Variables>,
+    }
+}
+
+#[cfg(feature = "serde")]
+impl TryFrom<config::LoopbackEndpoint> for LoopbackEndpoint {
+    type Error = OriginateError;
+
+    fn try_from(config: config::LoopbackEndpoint) -> Result<Self, Self::Error> {
+        let ep = Self {
+            extension: config.extension,
+            context: config.context,
+            dialplan: config.dialplan,
+            variables: config.variables,
+        };
+        ep.check_deliverable()?;
+        Ok(ep)
     }
 }
 

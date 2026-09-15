@@ -6,7 +6,7 @@ use std::num::ParseIntError;
 use std::str::FromStr;
 use std::time::Duration;
 
-use super::endpoint::ParseGroupCallOrderError;
+use super::endpoint::{EndpointFieldFault, ParseGroupCallOrderError};
 use super::variables::{
     write_escaped, BlockParse, DialStringCarrier, DialStringTarget, InvalidArgvSeparator,
 };
@@ -1086,6 +1086,21 @@ pub enum OriginateError {
     /// Inline applications under a dialplan other than `inline`, which transfers them as an
     /// extension.
     InlineApplicationsWithDialplan,
+    /// An endpoint field the switch reads as something else, whatever the escaping.
+    UndeliverableEndpointField {
+        /// The endpoint type.
+        endpoint: &'static str,
+        /// The field.
+        field: &'static str,
+        /// What the switch does with it.
+        fault: EndpointFieldFault,
+    },
+    /// A `[` in one leg's endpoint text closes in a later leg of the same group, so the switch
+    /// reads every leg between as one. Names the group.
+    BracketSpansLegs {
+        /// Index of the group.
+        group: usize,
+    },
 }
 
 impl std::fmt::Display for OriginateError {
@@ -1143,6 +1158,15 @@ impl std::fmt::Display for OriginateError {
                 "inline applications run only under the inline dialplan; \
                  any other transfers them as an extension",
             ),
+            Self::UndeliverableEndpointField {
+                endpoint,
+                field,
+                fault,
+            } => write!(f, "the {field} of a {endpoint} endpoint {fault}"),
+            Self::BracketSpansLegs { group } => write!(
+                f,
+                "a bracket in group {group} closes in a later leg, which the switch reads as one leg"
+            ),
         }
     }
 }
@@ -1165,7 +1189,9 @@ impl std::error::Error for OriginateError {
             | Self::UndefPositional(_)
             | Self::ExtensionReadsAsApplication
             | Self::ParenthesisInApplication { .. }
-            | Self::InlineApplicationsWithDialplan => None,
+            | Self::InlineApplicationsWithDialplan
+            | Self::UndeliverableEndpointField { .. }
+            | Self::BracketSpansLegs { .. } => None,
         }
     }
 }

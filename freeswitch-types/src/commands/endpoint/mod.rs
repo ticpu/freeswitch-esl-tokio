@@ -6,9 +6,10 @@
 //! serialization and polymorphic storage.
 
 /// Emit the [`DialString`] impl and the `with_variables` builder for an endpoint
-/// struct holding `variables: Option<Variables>`. Given a body, also emit the
-/// target-aware `write_for` — variable-block prologue included — and the
-/// [`Display`](std::fmt::Display) that renders it for the default target.
+/// struct holding `variables: Option<Variables>`. Given the module text and the
+/// function writing it, also emit the target-aware `write_for` — variable-block
+/// prologue included — and the [`Display`](std::fmt::Display) that renders it for
+/// the default target.
 macro_rules! impl_dial_string_with_variables {
     ($ty:ty) => {
         impl $crate::commands::endpoint::DialString for $ty {
@@ -36,18 +37,23 @@ macro_rules! impl_dial_string_with_variables {
             }
         }
     };
-    ($ty:ty, |$this:ident, $f:ident| $body:expr) => {
+    ($ty:ty, $write:ident, |$this:ident| $text:expr) => {
         impl_dial_string_with_variables!($ty);
 
         impl $ty {
+            /// The text after the variable block, as the endpoint module receives it.
+            pub(crate) fn module_text(&self) -> String {
+                let $this = self;
+                $text
+            }
+
             pub(super) fn write_for(
                 &self,
-                $f: &mut ::std::fmt::Formatter<'_>,
+                f: &mut ::std::fmt::Formatter<'_>,
                 target: $crate::commands::variables::DialStringTarget,
             ) -> ::std::fmt::Result {
-                $crate::commands::endpoint::write_variables($f, &self.variables, target)?;
-                let $this = self;
-                $body
+                $crate::commands::endpoint::write_variables(f, &self.variables, target)?;
+                $crate::commands::endpoint::$write(f, &self.module_text(), target)
             }
         }
 
@@ -97,10 +103,82 @@ use std::fmt;
 use std::str::FromStr;
 
 use super::find_matching_bracket;
+use super::flattened::pipeline::{self, PipelineError, ENTERPRISE_DELIM};
 use super::originate::OriginateError;
-use super::variables::{DialStringCarrier, DialStringTarget, Variables, VariablesType};
+use super::variables::{
+    escape_text, DialStringCarrier, DialStringTarget, EscapedField, Variables, VariablesType,
+};
 
 type PrefixParser = fn(&str) -> Result<Endpoint, OriginateError>;
+
+/// Why an endpoint field cannot reach the switch as written, whatever the escaping.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum EndpointFieldFault {
+    /// Carries `:_:`, on which `switch_ivr_originate` splits the dial string into threads.
+    EnterpriseSeparator,
+    /// Carries a separator the endpoint module splits its text on.
+    ModuleSeparator(&'static str),
+    /// A sofia profile reading `gateway` in any case, which mod_sofia takes for the gateway path.
+    ReadsAsGateway,
+    /// Set after an `app=` loopback extension, which mod_loopback reads as that application's.
+    FollowsAnApplication,
+    /// Empty, which mod_loopback replaces with its default.
+    EmptyReadsAsDefault,
+}
+
+impl fmt::Display for EndpointFieldFault {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::EnterpriseSeparator => {
+                f.write_str("carries :_:, on which the switch splits the dial string into threads")
+            }
+            Self::ModuleSeparator(sep) => {
+                write!(
+                    f,
+                    "carries {sep}, on which the endpoint module splits its text"
+                )
+            }
+            Self::ReadsAsGateway => f.write_str("reads as gateway, which mod_sofia dials as one"),
+            Self::FollowsAnApplication => f.write_str(
+                "follows an app= extension, which mod_loopback reads as the application's argument",
+            ),
+            Self::EmptyReadsAsDefault => {
+                f.write_str("is empty, which mod_loopback replaces with its default")
+            }
+        }
+    }
+}
+
+pub(super) fn undeliverable(
+    endpoint: &'static str,
+    field: &'static str,
+    fault: EndpointFieldFault,
+) -> OriginateError {
+    OriginateError::UndeliverableEndpointField {
+        endpoint,
+        field,
+        fault,
+    }
+}
+
+/// Refuse `text` as `field` of `endpoint` when it carries `:_:` or one of `separators`.
+pub(super) fn check_field(
+    endpoint: &'static str,
+    field: &'static str,
+    text: &str,
+    separators: &[&'static str],
+) -> Result<(), OriginateError> {
+    let fault = if text.contains(ENTERPRISE_DELIM) {
+        Some(EndpointFieldFault::EnterpriseSeparator)
+    } else {
+        separators
+            .iter()
+            .find(|sep| text.contains(**sep))
+            .map(|sep| EndpointFieldFault::ModuleSeparator(sep))
+    };
+    fault.map_or(Ok(()), |fault| Err(undeliverable(endpoint, field, fault)))
+}
 
 /// Common interface for anything that formats as a FreeSWITCH dial string.
 ///
@@ -132,21 +210,88 @@ fn write_variables(
     Ok(())
 }
 
-/// Strip the leading variable block then a fixed endpoint prefix. A prefix that
-/// does not itself end a path segment (`alsa`, not `sofia/`) must be followed by
-/// `/` or by nothing, or `alsafoo/bar` strips to a bare `alsa`.
-pub(super) fn strip_endpoint_prefix<'a>(
-    s: &'a str,
+/// Module text, escaped for the carrier's pass and the leg splits ahead of the module.
+fn write_module_text(
+    f: &mut fmt::Formatter<'_>,
+    text: &str,
+    target: DialStringTarget,
+) -> fmt::Result {
+    f.write_str(&escape_text(text, target, EscapedField::Endpoint))
+}
+
+/// A runtime expression, written for the switch to expand.
+fn write_expression(f: &mut fmt::Formatter<'_>, text: &str, _: DialStringTarget) -> fmt::Result {
+    f.write_str(text)
+}
+
+/// The module text after a fixed endpoint prefix. A prefix that does not itself end a path
+/// segment (`alsa`, not `sofia/`) must be followed by `/` or by nothing, or `alsafoo/bar` strips
+/// to a bare `alsa`.
+pub(super) fn after_prefix<'a>(
+    text: &'a str,
     prefix: &str,
     kind: &str,
-    carrier: DialStringCarrier,
-) -> Result<(Option<Variables>, &'a str), OriginateError> {
-    let (variables, uri) = extract_variables(s, carrier.into())?;
-    let rest = uri
-        .strip_prefix(prefix)
+) -> Result<&'a str, OriginateError> {
+    text.strip_prefix(prefix)
         .filter(|rest| prefix.ends_with('/') || rest.is_empty() || rest.starts_with('/'))
-        .ok_or_else(|| OriginateError::ParseError(format!("not a {} endpoint", kind)))?;
-    Ok((variables, rest))
+        .ok_or_else(|| OriginateError::ParseError(format!("not a {kind} endpoint")))
+}
+
+/// Parse a dial string written for `target`: its leading block, then the module text the
+/// switch's leg splits leave, through `bare`.
+pub(super) fn parse_leg<T>(
+    s: &str,
+    target: DialStringTarget,
+    bare: impl FnOnce(&str) -> Result<T, OriginateError>,
+) -> Result<(Option<Variables>, T), OriginateError> {
+    let (argument, target) = target.read_argument(s)?;
+    let (variables, rest) = extract_variables(&argument, target)?;
+    let text = module_text_of(rest, target)?;
+    Ok((variables, bare(&text)?))
+}
+
+/// Why the switch reads no dial string from the text.
+pub(crate) fn read_error(error: PipelineError) -> OriginateError {
+    OriginateError::ParseError(
+        match error {
+            PipelineError::Empty => "no endpoint to dial",
+            PipelineError::ArgvSplit => "originate's argument split cuts the dial string",
+            PipelineError::UnclosedBlock { .. } => "a variable block never closes",
+        }
+        .into(),
+    )
+}
+
+/// What the switch's thread and leg splits leave of `rest` as one endpoint's module text.
+fn module_text_of(rest: &str, target: DialStringTarget) -> Result<String, OriginateError> {
+    let list = pipeline::read(rest, target).map_err(read_error)?;
+    let one_leg = || OriginateError::ParseError("the switch reads more than one leg".into());
+    let [thread] = &list.threads[..] else {
+        return Err(one_leg());
+    };
+    let [group] = &thread.groups[..] else {
+        return Err(one_leg());
+    };
+    let [leg] = &group[..] else {
+        return Err(one_leg());
+    };
+    if !list
+        .blocks
+        .is_empty()
+        || !thread
+            .blocks
+            .is_empty()
+        || !leg
+            .blocks
+            .is_empty()
+    {
+        return Err(OriginateError::ParseError(
+            "an endpoint carries one variable block".into(),
+        ));
+    }
+    Ok(leg
+        .endpoint
+        .clone())
 }
 
 /// Every scope an endpoint may carry directly ahead of its module name.
@@ -314,14 +459,7 @@ impl Endpoint {
     /// mirroring [`display_for`](Self::display_for). [`FromStr`] uses the
     /// [`DialStringCarrier::EslApi`] default.
     pub fn parse_for(s: &str, target: impl Into<DialStringTarget>) -> Result<Self, OriginateError> {
-        let (argument, target) = target
-            .into()
-            .read_argument(s)?;
-        // Take the leading block at the caller's target, then let the endpoint
-        // parse what is left; re-attaching avoids every endpoint's FromStr
-        // having to thread a target it would only forward.
-        let (variables, rest) = extract_variables(&argument, target)?;
-        let mut endpoint = Self::parse_bare(rest)?;
+        let (variables, mut endpoint) = parse_leg(s, target.into(), Self::parse_bare)?;
         if variables.is_some() {
             endpoint.set_variables(variables);
             if endpoint
@@ -335,7 +473,7 @@ impl Endpoint {
     }
 
     /// The module name this variant renders, for diagnostics.
-    fn kind(&self) -> &'static str {
+    pub(crate) fn kind(&self) -> &'static str {
         match self {
             Self::Sofia(_) => "sofia",
             Self::SofiaGateway(_) => "sofia gateway",
@@ -352,33 +490,55 @@ impl Endpoint {
 
     /// Module prefix to parser, first match wins.
     const PREFIX_PARSERS: &[(&str, PrefixParser)] = &[
-        ("${sofia_contact(", |u| Ok(Self::SofiaContact(u.parse()?))),
-        ("${group_call(", |u| Ok(Self::GroupCall(u.parse()?))),
+        ("${sofia_contact(", |u| {
+            Ok(Self::SofiaContact(SofiaContact::parse_bare(u)?))
+        }),
+        ("${group_call(", |u| {
+            Ok(Self::GroupCall(GroupCall::parse_bare(u)?))
+        }),
         ("error/", |u| Ok(Self::Error(u.parse()?))),
-        ("loopback/", |u| Ok(Self::Loopback(u.parse()?))),
+        ("loopback/", |u| {
+            Ok(Self::Loopback(LoopbackEndpoint::parse_bare(u)?))
+        }),
         // Must precede "sofia/", which also matches a gateway string.
-        ("sofia/gateway/", |u| Ok(Self::SofiaGateway(u.parse()?))),
-        ("sofia/", |u| Ok(Self::Sofia(u.parse()?))),
-        ("user/", |u| Ok(Self::User(u.parse()?))),
+        ("sofia/gateway/", |u| {
+            Ok(Self::SofiaGateway(SofiaGateway::parse_bare(u)?))
+        }),
+        ("sofia/", |u| Ok(Self::Sofia(SofiaEndpoint::parse_bare(u)?))),
+        ("user/", |u| Ok(Self::User(UserEndpoint::parse_bare(u)?))),
         ("portaudio", |u| {
-            Ok(Self::PortAudio(AudioEndpoint::parse_with_prefix(
-                u,
-                "portaudio",
-            )?))
+            Ok(Self::PortAudio(AudioEndpoint::parse_bare(u, "portaudio")?))
         }),
         ("pulseaudio", |u| {
-            Ok(Self::PulseAudio(AudioEndpoint::parse_with_prefix(
+            Ok(Self::PulseAudio(AudioEndpoint::parse_bare(
                 u,
                 "pulseaudio",
             )?))
         }),
         ("alsa", |u| {
-            Ok(Self::Alsa(AudioEndpoint::parse_with_prefix(u, "alsa")?))
+            Ok(Self::Alsa(AudioEndpoint::parse_bare(u, "alsa")?))
         }),
     ];
 
-    /// Dispatch on the module prefix of a dial string whose variable block has
-    /// already been taken off.
+    /// The text after the variable block, as the endpoint module receives it.
+    #[cfg(test)]
+    pub(crate) fn module_text(&self) -> String {
+        match self {
+            Self::Sofia(ep) => ep.module_text(),
+            Self::SofiaGateway(ep) => ep.module_text(),
+            Self::Loopback(ep) => ep.module_text(),
+            Self::User(ep) => ep.module_text(),
+            Self::SofiaContact(ep) => ep.module_text(),
+            Self::GroupCall(ep) => ep.module_text(),
+            Self::Error(ep) => ep.to_string(),
+            Self::PortAudio(ep) => ep.module_text("portaudio"),
+            Self::PulseAudio(ep) => ep.module_text("pulseaudio"),
+            Self::Alsa(ep) => ep.module_text("alsa"),
+        }
+    }
+
+    /// Dispatch on the module prefix of module text as the switch's leg splits leave it,
+    /// refusing a field the module reads as something else.
     pub(crate) fn parse_bare(uri: &str) -> Result<Self, OriginateError> {
         let (_, parse) = Self::PREFIX_PARSERS
             .iter()

@@ -12,7 +12,9 @@ use std::sync::Arc;
 use crate::channel::HangupCause;
 use crate::commands::endpoint::Endpoint;
 use crate::commands::originate::OriginateError;
-use crate::commands::variables::{DialStringTarget, Variables, VariablesType};
+use crate::commands::variables::{
+    escape_text, DialStringTarget, EscapedField, Variables, VariablesType,
+};
 use crate::variables::VariableName;
 use pipeline::{
     names_a_variable, str2cause, Block, DialList, Leg, Pair, PairEffect, PipelineError, Thread,
@@ -371,10 +373,12 @@ impl FlattenedDialString {
                             .blocks,
                         target,
                     )?;
-                    f.write_str(
+                    f.write_str(&escape_text(
                         &leg.leg
                             .endpoint,
-                    )?;
+                        target,
+                        EscapedField::Endpoint,
+                    ))?;
                 }
             }
         }

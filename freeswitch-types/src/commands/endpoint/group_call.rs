@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use super::extract_variables;
+use super::parse_leg;
 use crate::commands::originate::OriginateError;
 use crate::commands::variables::DialStringCarrier;
 use crate::commands::variables::Variables;
@@ -62,17 +62,23 @@ impl GroupCall {
     }
 }
 
-impl_dial_string_with_variables!(GroupCall, |this, f| match &this.order {
-    Some(o) => write!(f, "${{group_call({}@{}+{})}}", this.group, this.domain, o),
-    None => write!(f, "${{group_call({}@{})}}", this.group, this.domain),
+impl_dial_string_with_variables!(GroupCall, write_expression, |this| match &this.order {
+    Some(o) => format!("${{group_call({}@{}+{o})}}", this.group, this.domain),
+    None => format!("${{group_call({}@{})}}", this.group, this.domain),
 });
 
 impl FromStr for GroupCall {
     type Err = OriginateError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (variables, uri) = extract_variables(s, DialStringCarrier::EslApi.into())?;
-        let inner = uri
+        let (variables, ep) = parse_leg(s, DialStringCarrier::EslApi.into(), Self::parse_bare)?;
+        Ok(Self { variables, ..ep })
+    }
+}
+
+impl GroupCall {
+    pub(crate) fn parse_bare(text: &str) -> Result<Self, OriginateError> {
+        let inner = text
             .strip_prefix("${group_call(")
             .and_then(|r| r.strip_suffix(")}"))
             .ok_or_else(|| OriginateError::ParseError("not a group_call expression".into()))?;
@@ -94,7 +100,7 @@ impl FromStr for GroupCall {
             group: group.into(),
             domain: domain.into(),
             order,
-            variables,
+            variables: None,
         })
     }
 }

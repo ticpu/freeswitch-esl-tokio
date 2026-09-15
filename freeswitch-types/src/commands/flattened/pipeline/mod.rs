@@ -360,7 +360,7 @@ fn head_blocks(text: &[Traced], kinds: &[(char, char)], leg: usize) -> Result<He
 }
 
 /// The pre-scan `switch_ivr_originate` runs over a group before its leg split.
-fn escape_block_commas(group: &mut [Traced]) {
+pub(crate) fn escape_block_commas(group: &mut [Traced]) {
     let mut end = None;
     let mut quoted = false;
     let mut alt = false;
