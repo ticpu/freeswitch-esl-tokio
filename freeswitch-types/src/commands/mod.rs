@@ -13,6 +13,7 @@ pub mod channel;
 pub mod conference;
 pub mod endpoint;
 pub mod execute_on;
+#[cfg(test)]
 pub(crate) mod flattened;
 pub mod originate;
 pub mod variables;

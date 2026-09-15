@@ -39,10 +39,11 @@ fn value<'a>(list: &'a DialList, leg: usize, key: &str) -> Option<&'a str> {
 }
 
 fn effect(list: &DialList, leg: usize, key: &str) -> Vec<PairEffect> {
-    legs(list)[leg]
-        .1
-        .blocks
+    let (thread, leg) = legs(list)[leg];
+    list.blocks
         .iter()
+        .chain(&thread.blocks)
+        .chain(&leg.blocks)
         .flat_map(|b| &b.pairs)
         .filter(|p| p.key == key)
         .map(|p| {
