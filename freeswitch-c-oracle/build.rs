@@ -147,6 +147,22 @@ const PRELUDE: &str = r#"#include <setjmp.h>
 #define _In_opt_
 #define _In_
 #define _Check_return_
+
+/* A backslash ending a string steps over its terminator; a second NUL stops that read inside the
+   copy, as every oracle buffer does, where the switch would read past its allocation. */
+static char *oracle_strdup(const char *s)
+{
+	size_t len = strlen(s);
+	char *copy = calloc(len + 2, 1);
+
+	if (copy) {
+		memcpy(copy, s, len);
+	}
+	return copy;
+}
+#undef strdup
+#define strdup(s) oracle_strdup(s)
+
 #define zstr(x) _zstr(x)
 static void oracle_assert_failed(const char *expr);
 #define switch_assert(expr) do { if (!(expr)) { oracle_assert_failed(#expr); } } while (0)
