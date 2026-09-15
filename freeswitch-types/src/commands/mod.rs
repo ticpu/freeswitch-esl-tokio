@@ -17,6 +17,9 @@ pub mod flattened;
 pub mod originate;
 pub mod variables;
 
+#[cfg(all(test, feature = "serde"))]
+mod proptests;
+
 pub use bridge::{BridgeDialString, BridgeDialStringDisplay};
 pub use channel::{
     UuidAnswer, UuidBridge, UuidDeflect, UuidGetVar, UuidHold, UuidKill, UuidSendDtmf, UuidSetVar,

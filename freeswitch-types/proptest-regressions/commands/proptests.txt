@@ -1,0 +1,16 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 2c858964186cc18feb63704bad23e3cc6363bd5745863bd8ba6c8d0c6efeacb3 # shrinks to text = ""
+cc 12ce0dc05197941e5fa7aca09293c66d1edaa7c8c6814e79a0f948415fc605c0 # shrinks to spec = OriginateSpec { target: Inline([("park", Some(" "))], None), dialplan: Unset, context: None, cid_name: None, cid_num: None, timeout: None, argv_separator: None }
+cc 15c861a42824b5be27224c0ff48c4b319fc8aff93dbc62521f61806f806d8325 # shrinks to bare = Loopback(LoopbackEndpoint { extension: "\u{b}", context: None, dialplan: None, variables: None }), vars = Some((Enterprise, None, ["="]))
+cc 4f5e6e0047022a4be3e8ec793c268611ba3396b6f930f9247b1d8ec390a8e055 # shrinks to spec = ListSpec { enterprise: None, default: None, legs: [LegSpec { values: ["$$", " "], endpoint: "loopback/9199/test" }], separators: [",", ",", ",", ","], keep: [false, false, false, false, false] }
+cc 0942cf1e0afd05bf1b3a2e57923f2a66702594ddf3854e0419255d9ec09fb0af # shrinks to scope = Default, sep = None, values = ["$$ "]
+cc a43d3a81c751e37f1d3f4d7a6b8705e575437a8618098de1ec14c8c020d41452 # shrinks to text = "\u{b}"
+cc 7e1893e2ab9648375d09607110dce5f16c3d5f6279a0d651d65d5934394cdcf5 # shrinks to scope = Channel, sep = None, values = ["\\", "\""]
+cc d6976c3581addb7b17be52ed763fe0a52bc85caa14fd441385ea82f7f77efa81 # shrinks to spec = ListSpec { enterprise: None, default: None, legs: [LegSpec { values: ["\\", " "], endpoint: "loopback/9199/test" }], separators: [",", ",", ",", ","], keep: [false, false, false, false, false] }
+cc 28c23f6fe81fc0ec8b8043ec3dcbee5b5a2437ae18d0d532aef7e3f6b63ead38 # shrinks to bare = SofiaGateway(SofiaGateway { gateway: "", destination: "", profile: Some(":"), variables: None }), vars = None
+cc 0075b520f7d191bfad8dc60bb8d9125ec2fd85a3db14cb03544cbb4b79b43119 # shrinks to scope = Channel, sep = Some(';'), values = ["\\,"]
