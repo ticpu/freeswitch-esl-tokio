@@ -93,6 +93,31 @@ fn compare_registrations(
     same
 }
 
+/// `read` left `destination`, the text the fields render, as `protect_dest_uri` leaves it unless
+/// `headers` suppress the encoding.
+fn holds_destination(
+    c: Oracle,
+    text: &str,
+    destination: &str,
+    headers: &[(&[u8], &[u8])],
+    read: &SofiaOutgoing,
+) -> Result<(), TestCaseError> {
+    let want = if headers.is_empty() {
+        c.protect_dest_uri(destination.as_bytes())
+            .destination
+    } else {
+        bytes(destination)
+    };
+    prop_assert_eq!(
+        &read.destination_number,
+        &want,
+        "{:?} with {:?}",
+        text,
+        headers
+    );
+    Ok(())
+}
+
 /// The argument the expansion hands `function` for the expression `text`.
 fn expression_argument(c: Oracle, text: &str, function: &str) -> Result<Vec<u8>, TestCaseError> {
     let expansion = c.expand(text.as_bytes());
@@ -172,6 +197,8 @@ fn reads_the_fields(c: Oracle, text: &str, endpoint: &Endpoint) -> Result<(), Te
                         headers,
                     },
                 );
+                let destination = format!("{}/{}", ep.profile, ep.destination);
+                holds_destination(c, text, &destination, headers, &read)?;
                 let mut read = read;
                 prop_assert!(
                     compare_registrations(&mut read, &ep.profile, &mut reference, "internal"),
@@ -205,6 +232,8 @@ fn reads_the_fields(c: Oracle, text: &str, endpoint: &Endpoint) -> Result<(), Te
                         headers,
                     },
                 );
+                let destination = format!("gateway/{key}/{}", ep.destination);
+                holds_destination(c, text, &destination, headers, &read)?;
                 let reference = c.sofia_outgoing_channel(
                     format!("gateway/gw1/{}", ep.destination).as_bytes(),
                     &Sofia {

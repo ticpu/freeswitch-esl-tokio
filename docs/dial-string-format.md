@@ -187,7 +187,10 @@ A sofia destination is mod_sofia's own grammar and arrives whole. Unless
 `sofia_suppress_url_encoding` is true, `protect_dest_uri` URL-encodes the user
 part of a text holding `@`, and truncates the text at its last `/` when what
 follows carries a `SWITCH_URL_UNSAFE` character and no `@`, as a profile
-holding `@` or a destination with a `/` after its `@` do.
+holding `@` or a destination with a `/` after its `@` do: `sofia/internal/x@y/z w`
+leaves `internal/x@y`. The crate holds such a destination whole and does
+not refuse it, since whether it is cut rests on a channel variable the dial
+string need not carry.
 
 On every tree `switch_needs_url_encode` reads only `SWITCH_URL_UNSAFE`, so a
 user part holding no byte of that set outside a valid uppercase `%XX` is sent
