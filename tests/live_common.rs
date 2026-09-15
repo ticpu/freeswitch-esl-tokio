@@ -366,6 +366,14 @@ pub const ESCAPING_CASES: &[(&str, &[(&str, &str)])] = &[
         "a dollar pair where expansion runs",
         &[("p1", "pa$$word"), ("p2", r"C:\path"), ("p3", "SENTINEL")],
     ),
+    (
+        "a backslash ending a value",
+        &[("p1", r"ends\"), ("p2", "SENTINEL")],
+    ),
+    (
+        "a comma after a backslash",
+        &[("p1", r"back\,comma"), ("p2", "SENTINEL")],
+    ),
 ];
 
 /// `lead` goes in first, so a value that eats its separator damages a variable

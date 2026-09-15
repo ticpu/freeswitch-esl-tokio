@@ -551,12 +551,15 @@ impl DialStringTarget {
         self.block_parse
     }
 
-    fn passes(self, scope: VariablesType) -> u32 {
-        let argument = match self.argument {
+    fn argument_passes(self) -> u32 {
+        match self.argument {
             ArgumentPass::Blank | ArgumentPass::Char(_) => 1,
             ArgumentPass::Consumed => 0,
-        };
-        argument
+        }
+    }
+
+    fn passes(self, scope: VariablesType) -> u32 {
+        self.argument_passes()
             + self
                 .block_parse
                 .cleanup_passes()
@@ -577,6 +580,11 @@ impl DialStringTarget {
     /// A quote must still read `\'` entering the last pass, or bare after a
     /// carrier pass that deletes `\'`.
     fn quote_escape(self, scope: VariablesType) -> String {
+        self.quote_bare_after(self.passes(scope))
+    }
+
+    /// A quote reading bare once `passes` passes have run.
+    fn quote_bare_after(self, passes: u32) -> String {
         let consumed_by_carrier = if self
             .carrier
             .expands()
@@ -585,8 +593,15 @@ impl DialStringTarget {
         } else {
             1
         };
-        let run = (1usize << self.passes(scope)) - consumed_by_carrier;
+        let run = (1usize << passes) - consumed_by_carrier;
         format!("{}'", "\\".repeat(run))
+    }
+
+    /// An empty `''` reaching bare the scan `switch_ivr_originate` runs over a `[]` block after
+    /// the `|` leg split, which protects a comma only when the byte before it is no backslash.
+    fn channel_comma_guard(self) -> String {
+        self.quote_bare_after(self.argument_passes() + 1)
+            .repeat(2)
     }
 }
 
@@ -721,6 +736,11 @@ fn escape_value(
     } else {
         escaped
     };
+    let escaped = if vars_type == VariablesType::Channel {
+        guard_channel_commas(escaped, value, target, commas_separate)
+    } else {
+        escaped
+    };
     let space = target.space_escape(vars_type);
     let escaped = match escaped.strip_prefix(' ') {
         Some(rest) => format!("{space}{rest}"),
@@ -737,6 +757,25 @@ fn escape_value(
     };
     if escaped.contains(' ') {
         format!("'{}'", escaped)
+    } else {
+        escaped
+    }
+}
+
+/// Put the guard between a backslash and the comma after it in a `[]` value: the separator after
+/// a value ending in one, or a literal comma in a `^^` block. Channel scope refuses a quote.
+fn guard_channel_commas(
+    escaped: String,
+    value: &str,
+    target: DialStringTarget,
+    commas_separate: bool,
+) -> String {
+    let guard = target.channel_comma_guard();
+    if !commas_separate {
+        let backslash = target.backslash_escape(VariablesType::Channel);
+        escaped.replace(&format!("{backslash},"), &format!("{backslash}{guard},"))
+    } else if value.ends_with('\\') {
+        escaped + &guard
     } else {
         escaped
     }
@@ -794,6 +833,15 @@ fn unescape_value(
         (" ", &s[..s.len() - space.len()])
     } else {
         ("", s)
+    };
+    let guard = target.channel_comma_guard();
+    let s: Cow<'_, str> = match (vars_type, commas_separate) {
+        (VariablesType::Channel, true) => Cow::Borrowed(
+            s.strip_suffix(guard.as_str())
+                .unwrap_or(s),
+        ),
+        (VariablesType::Channel, false) => Cow::Owned(s.replace(&format!("{guard},"), ",")),
+        _ => Cow::Borrowed(s),
     };
 
     let s = if vars_type == VariablesType::Channel {
@@ -1934,6 +1982,48 @@ mod tests {
             vars.display_for(tilde())
                 .to_string(),
             r"{k=\'\\\\sa b\\\\s\'}"
+        );
+    }
+
+    /// The scan ahead of the leg split protects a `[]` comma only when the byte before it is no
+    /// backslash, so a value ending in one is followed by an empty `''` reaching that scan bare.
+    #[test]
+    fn a_channel_value_ending_in_a_backslash_guards_the_next_comma() {
+        let run = "\\".repeat(32);
+        for (target, guard) in [
+            (
+                DialStringTarget::new(DialStringCarrier::EslApi),
+                r"\\\'\\\'",
+            ),
+            (
+                DialStringTarget::new(DialStringCarrier::Dialplan),
+                r"\\'\\'",
+            ),
+        ] {
+            assert_eq!(
+                escape_value(r"a\", target, true, VariablesType::Channel),
+                format!("a{run}{guard}"),
+                "{target:?}"
+            );
+            assert_eq!(
+                escape_value(r"a\", target, false, VariablesType::Channel),
+                format!("a{run}"),
+                "{target:?}"
+            );
+            assert_eq!(
+                escape_value(r"a\,b", target, false, VariablesType::Channel),
+                format!("a{run}{guard},b"),
+                "{target:?}"
+            );
+        }
+        assert_eq!(
+            escape_value(
+                r"a\",
+                DialStringCarrier::EslApi,
+                true,
+                VariablesType::Default
+            ),
+            r"a\\\\\\\\"
         );
     }
 

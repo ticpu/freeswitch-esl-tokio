@@ -158,6 +158,12 @@ cleanup as the block parse. Three consequences, all measured:
   swallows the second: `[p1=it's,p2=don't,p3=x]` arrives as `p1=its,p2=dont`
   with no `p2` at all, at every escaping depth. `Variables` refuses such a
   value in channel scope.
+- A comma cannot follow a backslash unguarded. The scan that protects commas
+  inside the block tests only the byte before each comma, so the separator
+  after a value ending in a backslash, or a literal comma after one in a `^^`
+  block, is left to the leg split, which cuts the block open. `Variables` puts
+  an empty `''` between them, escaped to reach that scan bare and stripped by
+  the leg split.
 
 ### `{k=v}` -- default (global) scope
 

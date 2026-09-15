@@ -1038,16 +1038,35 @@ fn argv_target(sep: char) -> DialStringTarget {
 }
 
 /// Runs of three or more backslashes: the depths a quote or a literal backslash is written at,
-/// the backslash escaping `sep` itself not counted.
+/// the one escaping `sep`, a comma or a pipe not counted.
 fn deep_escapes(text: &str, sep: Option<char>) -> Vec<usize> {
     let text = match sep {
         Some(sep) => text.replace(&format!("\\{sep}"), &sep.to_string()),
         None => text.to_owned(),
     };
-    text.split(|c| c != '\\')
-        .map(str::len)
-        .filter(|&run| run >= 3)
-        .collect()
+    // A literal run is a power of two; an escaped comma or pipe adds one, doubled at a separator.
+    let escape = if sep.is_some() { 2 } else { 1 };
+    let mut runs = Vec::new();
+    let mut run = 0;
+    for c in text
+        .chars()
+        .chain(['\0'])
+    {
+        if c == '\\' {
+            run += 1;
+            continue;
+        }
+        let deep = if matches!(c, ',' | '|') && run % (2 * escape) == escape {
+            run - escape
+        } else {
+            run
+        };
+        if deep >= 3 {
+            runs.push(deep);
+        }
+        run = 0;
+    }
+    runs
 }
 
 /// `keys` off the dump of the channel `originate ^^<sep><dial><sep>&park()` returns, and that
