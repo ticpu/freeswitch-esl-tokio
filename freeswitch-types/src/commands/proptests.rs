@@ -72,18 +72,38 @@ fn targets() -> Vec<DialStringTarget> {
         .collect()
 }
 
+/// A key the switch reads as text, or `None` for one named by its position.
+type Entry = (Option<String>, String);
+
+fn entries(count: std::ops::Range<usize>) -> impl Strategy<Value = Vec<Entry>> {
+    vec((option::weighted(0.3, text()), text()), count)
+}
+
+fn plain(values: &[String]) -> Vec<Entry> {
+    values
+        .iter()
+        .map(|value| (None, value.clone()))
+        .collect()
+}
+
 fn build_vars(
     scope: VariablesType,
     prefix: &str,
-    values: &[String],
+    entries: &[Entry],
     sep: Option<char>,
 ) -> Option<Variables> {
     let vars = Variables::with_vars(
         scope,
-        values
+        entries
             .iter()
             .enumerate()
-            .map(|(i, value)| (format!("{prefix}{i}"), value.clone())),
+            .map(|(i, (key, value))| {
+                (
+                    key.clone()
+                        .unwrap_or_else(|| format!("{prefix}{i}")),
+                    value.clone(),
+                )
+            }),
     );
     match sep {
         Some(sep) => vars
@@ -108,7 +128,7 @@ fn config_refuses_vars(vars: &Variables) -> bool {
 /// variable* say, so no escaping delivers it verbatim.
 fn left_to_the_switch(vars: &Variables) -> bool {
     vars.iter()
-        .any(|(_, value)| names_a_variable(value))
+        .any(|(key, value)| names_a_variable(key) || names_a_variable(value))
 }
 
 /// The one leg a single-endpoint dial string reads to: every pair installed, and its endpoint.
@@ -548,7 +568,7 @@ fn render_list(spec: &ListSpec, target: DialStringTarget) -> Option<RenderedList
     let mut text = String::new();
     let mut inherited = Vec::new();
     let block = |scope, prefix: &str, values: &[String], text: &mut String| {
-        let vars = build_vars(scope, prefix, values, None)?;
+        let vars = build_vars(scope, prefix, &plain(values), None)?;
         if vars.is_empty() {
             return Some(Vec::new());
         }
@@ -656,7 +676,7 @@ proptest! {
     fn variables_arrive_as_built_or_are_refused(
         scope in scope(),
         sep in block_separator(),
-        values in vec(text(), 1..4),
+        values in entries(1..4),
     ) {
         let Some(vars) = build_vars(scope, "v", &values, sep) else {
             return Ok(());
@@ -687,7 +707,7 @@ proptest! {
     #[test]
     fn endpoints_arrive_as_built_or_are_refused(
         bare in bare_endpoint(),
-        vars in option::of((scope(), block_separator(), vec(text(), 1..3))),
+        vars in option::of((scope(), block_separator(), entries(1..3))),
     ) {
         let mut endpoint = bare.clone();
         if let Some((scope, sep, values)) = &vars {
@@ -916,7 +936,7 @@ fn variables_arrive_through_the_c_passes() {
     against_the_c(
         file!(),
         "variables_arrive_through_the_c_passes",
-        (scope, block_separator(), vec(text(), 1..4)),
+        (scope, block_separator(), entries(1..4)),
         |(scope, sep, values)| {
             let Some(vars) = build_vars(scope, "v", &values, sep) else {
                 return Ok(());
@@ -960,7 +980,7 @@ fn endpoints_arrive_through_the_c_passes() {
         "endpoints_arrive_through_the_c_passes",
         (
             bare_endpoint(),
-            option::of((scope, block_separator(), vec(text(), 1..3))),
+            option::of((scope, block_separator(), entries(1..3))),
         ),
         |(bare, vars)| {
             let mut endpoint = bare.clone();

@@ -2643,6 +2643,98 @@ mod tests {
         assert!(serde_json::from_str::<Variables>(r#"{"k":"x:_:y"}"#).is_err());
     }
 
+    /// The `=` split skips a byte after a backslash and its cleanup reads `\=`, and a pair
+    /// opening `^^` names that split's separator unless a quote pair the cleanup strips leads it.
+    #[test]
+    fn a_key_the_switch_splits_arrives_escaped_and_round_trips() {
+        use crate::commands::flattened::pipeline::{self, PairEffect};
+
+        let keys = [
+            "a=b", "a,b", "a b", "^^ab", "^^", "x^^", " edge ", r"C:\p", "it's", "pa$$", "a|b",
+            r"a\=b", r"end\",
+        ];
+        for target in [
+            DialStringTarget::new(DialStringCarrier::EslApi),
+            DialStringTarget::new(DialStringCarrier::Dialplan),
+            tilde(),
+        ] {
+            for scope in [
+                VariablesType::Default,
+                VariablesType::Enterprise,
+                VariablesType::Channel,
+            ] {
+                for key in keys {
+                    if scope == VariablesType::Channel && key.contains('\'') {
+                        continue;
+                    }
+                    let mut vars = Variables::new(scope);
+                    vars.insert(key, "v");
+                    vars.insert("after", "sentinel");
+                    let rendered = vars
+                        .display_for(target)
+                        .to_string();
+                    let list = pipeline::read(&format!("{rendered}null/x"), target)
+                        .unwrap_or_else(|e| panic!("{rendered:?} at {target:?}: {e:?}"));
+                    let installed: Vec<(String, PairEffect)> = list
+                        .blocks
+                        .iter()
+                        .chain(&list.threads[0].blocks)
+                        .chain(&list.threads[0].groups[0][0].blocks)
+                        .flat_map(|block| &block.pairs)
+                        .map(|pair| {
+                            (
+                                pair.key
+                                    .clone(),
+                                pair.effect
+                                    .clone(),
+                            )
+                        })
+                        .collect();
+                    assert_eq!(
+                        installed,
+                        [
+                            (key.to_owned(), PairEffect::Set("v".to_owned())),
+                            ("after".to_owned(), PairEffect::Set("sentinel".to_owned()))
+                        ],
+                        "{key:?} in {scope:?} at {target:?}: {rendered:?}"
+                    );
+                    let back = Variables::parse_for(&rendered, target)
+                        .unwrap_or_else(|e| panic!("{rendered:?} at {target:?}: {e}"));
+                    assert_eq!(back, vars, "{rendered:?} at {target:?}");
+                }
+            }
+        }
+    }
+
+    /// Each key carries `SECRET`, which no refusal may quote.
+    #[test]
+    fn a_key_no_escaping_delivers_is_refused_at_parse_and_config_load() {
+        for block in [
+            "{SECRET:_:x=v}",
+            "{SECRET}=v}",
+            "{=v,after=sentinel}",
+            r"[SECRET\\\\\\\'s=v]",
+        ] {
+            let msg = Variables::parse_for(block, DialStringCarrier::Dialplan)
+                .expect_err(block)
+                .to_string();
+            assert!(!msg.contains("SECRET"), "{block}: {msg}");
+        }
+        for json in [
+            r#"{"SECRET:_:x":"v"}"#,
+            r#"{"SECRET}":"v"}"#,
+            r#"{"":"v"}"#,
+            r#"{"scope":"channel","vars":{"SECRET's":"v"}}"#,
+            r#"{"scope":"channel","vars":{"SECRET]":"v"}}"#,
+        ] {
+            let msg = serde_json::from_str::<Variables>(json)
+                .expect_err(json)
+                .to_string();
+            assert!(!msg.contains("SECRET"), "{json}: {msg}");
+        }
+        assert!(serde_json::from_str::<Variables>(r#"{"a=b, c":"v"}"#).is_ok());
+    }
+
     /// The caller has to decide what to name instead, so the refusal says what
     /// would have been accepted.
     #[test]
