@@ -79,6 +79,8 @@ spans legs, which parse and config load refuse as
 `SofiaContact::from_str` and `GroupCall::from_str` parse at `EslApi`, where
 that refusal makes them always return `Err`, and neither type has a public
 `parse_for`: drop those `FromStr` impls, or give both types `parse_for(target)`.
+`expand originate …` is an API carrier on which an expression endpoint does
+expand; `DialStringCarrier` does not model it.
 
 ### `Originate` setters need to refuse `undef`
 

@@ -12,8 +12,8 @@ Each endpoint type is a concrete struct implementing the `DialString` trait. The
 - **SofiaGateway** -- `sofia/gateway/{gateway}/{destination}`, SIP gateway routing
 - **LoopbackEndpoint** -- `loopback/{extension}/{context}`, internal loopback
 - **UserEndpoint** -- `user/{name}@{domain}`, directory-based dial-string lookup
-- **SofiaContact** -- `${sofia_contact(user@domain)}`, registered contacts resolved by the switch at runtime
-- **GroupCall** -- `${group_call(group@domain+A)}`, group members resolved by the switch at runtime
+- **SofiaContact** -- `${sofia_contact(user@domain)}`, registered contacts resolved by the switch at runtime; dialplan carrier or `expand` only, refused for `originate` over the API
+- **GroupCall** -- `${group_call(group@domain+A)}`, group members resolved by the switch at runtime; dialplan carrier or `expand` only, refused for `originate` over the API
 - **ErrorEndpoint** -- `error/{cause}`, bridge to a hangup cause
 
 ```rust
