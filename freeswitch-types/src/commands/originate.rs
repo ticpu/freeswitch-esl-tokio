@@ -11,7 +11,7 @@ use super::variables::{
     breaks_a_split, write_escaped, BlockParse, DialStringCarrier, DialStringTarget,
     InvalidArgvSeparator,
 };
-use super::{clean_argument, originate_quote, originate_split};
+use super::{clean_argument, originate_quote, originate_split, STRIPPED_WHITESPACE};
 use crate::channel::ParseHangupCauseError;
 use crate::tokenizer::{delimiter_override, trace};
 
@@ -912,7 +912,7 @@ impl Originate {
         let s = s
             .strip_prefix("originate")
             .unwrap_or(s)
-            .trim_matches(['\t', '\n', '\u{b}', '\r', ' ']);
+            .trim_matches(STRIPPED_WHITESPACE);
         // `^^ ` names the blank split itself.
         let sep = delimiter_override(&trace(s))
             .0

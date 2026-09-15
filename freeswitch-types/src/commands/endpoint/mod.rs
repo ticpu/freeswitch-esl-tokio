@@ -102,13 +102,13 @@ pub use user::UserEndpoint;
 use std::fmt;
 use std::str::FromStr;
 
-use super::find_matching_bracket;
-use super::flattened::pipeline::{self, PipelineError, ENTERPRISE_DELIM};
+use super::flattened::pipeline::{self, splits_into_threads, PipelineError};
 use super::originate::OriginateError;
 use super::variables::{
     escape_text, unbalanced, DialStringCarrier, DialStringTarget, EscapedField, Variables,
     VariablesType,
 };
+use crate::tokenizer::{find_end_paren, trace};
 
 type PrefixParser = fn(&str) -> Result<Endpoint, OriginateError>;
 
@@ -172,7 +172,7 @@ pub(super) fn check_expression_field(
     text: &str,
     separators: &[&'static str],
 ) -> Result<(), OriginateError> {
-    let fault = if text.contains(ENTERPRISE_DELIM) {
+    let fault = if splits_into_threads(text) {
         Some(EndpointFieldFault::EnterpriseSeparator)
     } else if let Some(sep) = separators
         .iter()
@@ -209,7 +209,7 @@ pub(super) fn check_field(
     text: &str,
     separators: &[&'static str],
 ) -> Result<(), OriginateError> {
-    let fault = if text.contains(ENTERPRISE_DELIM) {
+    let fault = if splits_into_threads(text) {
         Some(EndpointFieldFault::EnterpriseSeparator)
     } else {
         separators
@@ -374,7 +374,9 @@ pub(super) fn extract_scoped_variables<'a>(
     else {
         return Ok((None, s));
     };
-    let close = find_matching_bracket(s, open, close_ch)
+    let text = trace(s);
+    let close = find_end_paren(&text, open, close_ch)
+        .map(|at| text[at].1)
         .ok_or_else(|| OriginateError::ParseError(format!("unclosed {} in dial string", open)))?;
     let var_str = &s[..=close];
     let vars = Variables::parse_for(var_str, target)?;

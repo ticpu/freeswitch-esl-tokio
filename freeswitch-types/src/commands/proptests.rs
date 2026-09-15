@@ -17,6 +17,7 @@ use super::{
     DialStringCarrier, DialStringTarget, DialplanType, Endpoint, ErrorEndpoint,
     FlattenedDialString, FlattenedLeg, GroupCall, GroupCallOrder, LegTarget, LoopbackEndpoint,
     Originate, SofiaContact, SofiaEndpoint, SofiaGateway, UserEndpoint, Variables, VariablesType,
+    STRIPPED_WHITESPACE,
 };
 use crate::channel::HangupCause;
 use crate::test_text::{against_the_c, config, opens_with_a_non_ascii_head, text};
@@ -456,7 +457,7 @@ fn switch_inline(exten: &str) -> SwitchTarget {
 
 /// `switch_strip_whitespace`, which `switch_api_execute` runs over an API command's argument line.
 fn strip_whitespace(line: &str) -> &str {
-    line.trim_matches(['\r', '\n', '\t', ' ', '\u{b}'])
+    line.trim_matches(STRIPPED_WHITESPACE)
 }
 
 /// The arguments `originate_function` reads from a rendered command, `undef` in any case absent.

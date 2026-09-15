@@ -9,8 +9,9 @@ use std::fmt;
 use std::fmt::Write as _;
 use std::str::FromStr;
 
-use super::flattened::pipeline::{names_a_variable, ENTERPRISE_DELIM};
+use super::flattened::pipeline::{names_a_variable, splits_into_threads, ENTERPRISE_DELIM};
 use super::originate::OriginateError;
+use super::STRIPPED_WHITESPACE;
 use crate::tokenizer::{sole_argument, trace, untrace, ArgvCut, Token, Traced};
 use crate::version::FreeswitchVersion;
 
@@ -506,8 +507,8 @@ impl DialStringTarget {
         }
         let guarded = sep == ' ' && text.starts_with("^^");
         let plain = !guarded
-            && !text.starts_with([' ', '\u{b}'])
-            && !text.ends_with([' ', '\u{b}'])
+            && !text.starts_with(STRIPPED_WHITESPACE)
+            && !text.ends_with(STRIPPED_WHITESPACE)
             && !text.contains(['\\', '\'', '\n', '\r', '\t', sep]);
         if plain {
             return Some(Cow::Borrowed(text));
@@ -717,7 +718,7 @@ fn check_key(key: &str, vars_type: VariablesType) -> Result<(), OriginateError> 
              under the text before it"
                 .to_owned(),
         )
-    } else if key.contains(ENTERPRISE_DELIM) {
+    } else if splits_into_threads(key) {
         Some(format!(
             "carries the enterprise separator {ENTERPRISE_DELIM}, on which the switch splits \
              the dial string into threads whatever quoting or escaping surrounds it"
@@ -746,7 +747,7 @@ fn check_representable(
     vars_type: VariablesType,
 ) -> Result<(), OriginateError> {
     check_key(key, vars_type)?;
-    if value.contains(ENTERPRISE_DELIM) {
+    if splits_into_threads(value) {
         return Err(OriginateError::ParseError(format!(
             "variable {key} carries the enterprise separator {ENTERPRISE_DELIM}, on which \
              the switch splits the dial string into threads whatever quoting or escaping \
@@ -2614,7 +2615,7 @@ mod tests {
                     (format!("{prefix}{escaped}{sep}y"), vec![text, "y"]),
                     (format!("{prefix}x{sep}{escaped}"), vec!["x", text]),
                 ] {
-                    let stripped = line.trim_matches(['\r', '\n', '\t', ' ', '\u{b}']);
+                    let stripped = line.trim_matches(crate::commands::STRIPPED_WHITESPACE);
                     let tokens: Vec<String> = separate(&trace(stripped), ' ', usize::MAX)
                         .tokens
                         .iter()

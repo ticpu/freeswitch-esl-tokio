@@ -3,6 +3,7 @@ use std::str::FromStr;
 use super::{
     after_prefix, check_expression_field, check_field, parse_leg, undeliverable, EndpointFieldFault,
 };
+use crate::commands::flattened::pipeline::splits_into_threads;
 use crate::commands::originate::OriginateError;
 use crate::commands::variables::DialStringCarrier;
 use crate::commands::variables::Variables;
@@ -202,7 +203,7 @@ impl SofiaGateway {
                     EndpointFieldFault::ModuleSeparator("::"),
                 ));
             }
-            if format!("{profile}::{}", self.gateway).contains(super::ENTERPRISE_DELIM) {
+            if splits_into_threads(&format!("{profile}::{}", self.gateway)) {
                 let field = if profile.ends_with(":_") {
                     "profile"
                 } else {

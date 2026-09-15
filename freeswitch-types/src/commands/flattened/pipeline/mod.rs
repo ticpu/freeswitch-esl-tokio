@@ -167,6 +167,12 @@ fn dial_list(
     })
 }
 
+/// Whether `switch_ivr_originate` takes `text` down the enterprise path, whatever quoting surrounds
+/// the delimiter.
+pub(crate) fn splits_into_threads(text: &str) -> bool {
+    text.contains(ENTERPRISE_DELIM)
+}
+
 /// `switch_stristr` for the opt-in `switch_ivr_originate` looks for in the text it dials.
 fn opts_into_nested_vars(text: &[Traced]) -> bool {
     untrace(text)

@@ -54,24 +54,8 @@ use crate::tokenizer::{
 };
 use originate::{check_inline_delimiter, check_target_readable, DEFAULT_INLINE_DELIMITER};
 
-/// Find the index of the closing bracket matching the opener at position 0.
-///
-/// Tracks nesting depth so that inner pairs of the same bracket type are
-/// skipped. Returns `None` if the string never reaches depth 0.
-pub(crate) fn find_matching_bracket(s: &str, open: char, close: char) -> Option<usize> {
-    let mut depth = 0;
-    for (i, ch) in s.char_indices() {
-        if ch == open {
-            depth += 1;
-        } else if ch == close {
-            depth -= 1;
-            if depth == 0 {
-                return Some(i);
-            }
-        }
-    }
-    None
-}
+/// What `switch_strip_whitespace` strips from both edges of an API command's argument line.
+pub(crate) const STRIPPED_WHITESPACE: [char; 5] = ['\t', '\n', '\u{b}', '\r', ' '];
 
 /// Wrap a token in single quotes for originate command strings.
 ///
@@ -80,7 +64,7 @@ pub(crate) fn find_matching_bracket(s: &str, open: char, close: char) -> Option<
 /// as [`quote_for_uuid_setvar`] does, since that command splits on the same blank tokenizer;
 /// any other token is returned as-is.
 pub fn originate_quote(token: &str) -> String {
-    if token.is_empty() || token.contains([' ', '\'', '\\', '\t', '\u{b}', '\r', '\n']) {
+    if token.is_empty() || token.contains(STRIPPED_WHITESPACE) || token.contains(['\'', '\\']) {
         quote_for_uuid_setvar(token)
     } else {
         token.to_string()
@@ -234,26 +218,6 @@ pub fn parse_originate_target(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn find_matching_bracket_simple() {
-        assert_eq!(find_matching_bracket("{abc}", '{', '}'), Some(4));
-    }
-
-    #[test]
-    fn find_matching_bracket_nested() {
-        assert_eq!(find_matching_bracket("{a={b}}", '{', '}'), Some(6));
-    }
-
-    #[test]
-    fn find_matching_bracket_unclosed() {
-        assert_eq!(find_matching_bracket("{a={b}", '{', '}'), None);
-    }
-
-    #[test]
-    fn find_matching_bracket_angle() {
-        assert_eq!(find_matching_bracket("<a=<b>>rest", '<', '>'), Some(6));
-    }
 
     #[test]
     fn split_with_quotes_ignores_spaces_inside() {
