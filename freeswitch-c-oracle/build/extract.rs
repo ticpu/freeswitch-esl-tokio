@@ -5,23 +5,13 @@
 
 use tree_sitter::{Node, Parser, Tree};
 
-/// What a `//@` line in an oracle unit takes out of a tree, in the unit's place of that line.
+/// A `//@ <kind> <path> <argument>` line of an oracle unit, replaced by what [`define`],
+/// [`function`], [`declaration`] or [`block`] of that kind takes out of the tree's file at `path`.
 #[derive(Debug, PartialEq, Eq)]
-pub enum Directive<'a> {
-    /// `//@ define <path> <name>`: the first `#define` of `name`.
-    Define { path: &'a str, name: &'a str },
-    /// `//@ function <path> <name>`: the definition of `name`.
-    Function { path: &'a str, name: &'a str },
-    /// `//@ block <path> <function> [<anchor> => ]<marker>`: the statement opening on `marker` in
-    /// `function`, or on the first `marker` after `anchor`.
-    Block {
-        path: &'a str,
-        function: &'a str,
-        anchor: Option<&'a str>,
-        marker: &'a str,
-    },
-    /// `//@ declaration <path> <name>`: the declaration, `typedef` or struct definition of `name`.
-    Declaration { path: &'a str, name: &'a str },
+pub struct Directive<'a> {
+    pub kind: &'a str,
+    pub path: &'a str,
+    pub argument: &'a str,
 }
 
 /// One file's text and its C syntax tree.
@@ -184,28 +174,23 @@ impl Parsed {
 }
 
 impl Directive<'_> {
-    /// The file the piece is read from.
-    pub fn path(&self) -> &str {
-        match self {
-            Directive::Define { path, .. }
-            | Directive::Function { path, .. }
-            | Directive::Block { path, .. }
-            | Directive::Declaration { path, .. } => path,
-        }
-    }
-
-    /// The piece cut out of `file`, the file at [`Directive::path`].
+    /// The piece cut out of `file`; a block's argument is `<function> [<anchor> => ]<marker>`.
     pub fn extract(&self, file: &Parsed) -> Result<String, String> {
-        match *self {
-            Directive::Define { name, .. } => define(file, name),
-            Directive::Function { name, .. } => function(file, name),
-            Directive::Block {
-                function,
-                anchor,
-                marker,
-                ..
-            } => block(file, function, anchor, marker).map_err(|e| format!("{function}: {e}")),
-            Directive::Declaration { name, .. } => declaration(file, name),
+        match self.kind {
+            "define" => define(file, self.argument),
+            "function" => function(file, self.argument),
+            "declaration" => declaration(file, self.argument),
+            _ => {
+                let (function, marker) = self
+                    .argument
+                    .split_once(' ')
+                    .ok_or("block names no marker")?;
+                let (anchor, marker) = match marker.split_once(" => ") {
+                    Some((anchor, marker)) => (Some(anchor), marker),
+                    None => (None, marker),
+                };
+                block(file, function, anchor, marker).map_err(|e| format!("{function}: {e}"))
+            }
         }
     }
 }
@@ -219,46 +204,22 @@ pub fn directive(line: &str) -> Result<Option<Directive<'_>>, String> {
         return Ok(None);
     };
     let mut words = rest
-        .trim_start()
+        .trim()
         .splitn(3, ' ');
-    let (Some(kind), Some(path), Some(argument)) = (words.next(), words.next(), words.next())
-    else {
-        return Err(format!(
-            "directive {line:?} names no kind, path and argument"
-        ));
-    };
-    let argument = argument.trim_end();
-    let directive = match kind {
-        "define" => Directive::Define {
-            path,
-            name: argument,
-        },
-        "function" => Directive::Function {
-            path,
-            name: argument,
-        },
-        "block" => {
-            let Some((function, marker)) = argument.split_once(' ') else {
-                return Err(format!("block directive {line:?} names no marker"));
-            };
-            let (anchor, marker) = match marker.split_once(" => ") {
-                Some((anchor, marker)) => (Some(anchor), marker),
-                None => (None, marker),
-            };
-            Directive::Block {
+    match (words.next(), words.next(), words.next()) {
+        (Some(kind @ ("define" | "function" | "declaration" | "block")), Some(path), Some(argument))
+            if kind != "block" || argument.contains(' ') =>
+        {
+            Ok(Some(Directive {
+                kind,
                 path,
-                function,
-                anchor,
-                marker,
-            }
+                argument,
+            }))
         }
-        "declaration" => Directive::Declaration {
-            path,
-            name: argument,
-        },
-        other => return Err(format!("directive {line:?} has unknown kind {other}")),
-    };
-    Ok(Some(directive))
+        _ => Err(format!(
+            "directive {line:?} is no define, function, declaration or block naming a path and its argument"
+        )),
+    }
 }
 
 /// The first `#define` naming `name`, continuation lines included.
@@ -519,15 +480,10 @@ typedef enum {
             Err("reads \"x = 1;\" on 3 lines, not one".to_owned())
         );
         assert!(block(&file, "f", Some("z();"), "anchor();").is_err());
-        assert_eq!(
-            directive("//@ block src/a.c f anchor(); => x = 1;"),
-            Ok(Some(Directive::Block {
-                path: "src/a.c",
-                function: "f",
-                anchor: Some("anchor();"),
-                marker: "x = 1;"
-            }))
-        );
+        let anchored = directive("//@ block src/a.c f anchor(); => x = 1;")
+            .expect("a block directive")
+            .expect("a directive");
+        assert_eq!(anchored.extract(&file), Ok("\tx = 1;\n".to_owned()));
     }
 
     #[test]
@@ -554,33 +510,19 @@ typedef enum {
         assert_eq!(directive("\tint x;"), Ok(None));
         assert_eq!(
             directive("//@ function src/a.c helper"),
-            Ok(Some(Directive::Function {
+            Ok(Some(Directive {
+                kind: "function",
                 path: "src/a.c",
-                name: "helper"
-            }))
-        );
-        assert_eq!(
-            directive("\t//@ block src/a.c helper if (s[0] == '{') {"),
-            Ok(Some(Directive::Block {
-                path: "src/a.c",
-                function: "helper",
-                anchor: None,
-                marker: "if (s[0] == '{') {"
-            }))
-        );
-        assert_eq!(
-            directive("//@ declaration src/a.c TABLE"),
-            Ok(Some(Directive::Declaration {
-                path: "src/a.c",
-                name: "TABLE"
+                argument: "helper"
             }))
         );
         assert!(directive("//@ function src/a.c").is_err());
         assert!(directive("//@ fn src/a.c helper").is_err());
-        let block = directive("//@ block src/a.c helper_function if (p) {")
+        assert!(directive("//@ block src/a.c helper").is_err());
+        let block = directive("\t//@ block src/a.c helper_function if (p) {")
             .expect("a block directive")
             .expect("a directive");
-        assert_eq!(block.path(), "src/a.c");
+        assert_eq!(block.path, "src/a.c");
         assert_eq!(
             block.extract(&file),
             Ok("\tif (p) {\n\t\t*p++ = '\\0';\n\t}\n".to_owned())

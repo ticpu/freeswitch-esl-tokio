@@ -8,9 +8,8 @@
 #[path = "build/extract.rs"]
 mod extract;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::env;
-use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -148,7 +147,7 @@ fn main() {
         .collect();
 
     let mut generated = abi(&exports);
-    generated.push_str("static TREES: &[Tree] = &[\n");
+    generated += "static TREES: &[Tree] = &[\n";
     let mut modules = String::new();
     for tree in trees(&index) {
         let abi = match root
@@ -156,9 +155,9 @@ fn main() {
             .and_then(|root| Source::open(root, &tree))
         {
             Ok(mut source) => {
-                compile(&tree, &mut source, &units, &exports, &out);
+                compile(&mut source, &units, &exports, &out);
                 println!("cargo::rustc-cfg=c_oracle");
-                modules.push_str(&tree_module(&tree.name, &exports));
+                modules += &tree_module(&tree.name, &exports);
                 format!("Ok(&{}::ABI)", tree.name)
             }
             Err(missing) => {
@@ -169,15 +168,13 @@ fn main() {
                 format!("Err({missing:?})")
             }
         };
-        writeln!(
-            generated,
-            "    Tree {{ name: {:?}, commit: {:?}, public: {}, abi: {abi} }},",
+        generated += &format!(
+            "    Tree {{ name: {:?}, commit: {:?}, public: {}, abi: {abi} }},\n",
             tree.name, tree.commit, tree.public
-        )
-        .expect("String write");
+        );
     }
-    generated.push_str("];\n");
-    generated.push_str(&modules);
+    generated += "];\n";
+    generated += &modules;
     let file = out.join("trees.rs");
     fs::write(&file, generated).unwrap_or_else(|e| panic!("writing {}: {e}", file.display()));
 }
@@ -198,47 +195,34 @@ fn read_units(manifest: &Path) -> Vec<(&'static str, String)> {
 /// The tag constants and the `Abi` struct every tree module fills.
 fn abi(exports: &[Export<'_>]) -> String {
     let mut generated = String::new();
-    for (number, tag) in TAGS
-        .iter()
-        .enumerate()
-    {
-        writeln!(generated, "const {tag}: c_int = {};", number + 1).expect("String write");
+    for (number, tag) in (1..).zip(TAGS) {
+        generated += &format!("const {tag}: c_int = {number};\n");
     }
-    writeln!(
-        generated,
-        "/// The domain every tree's core answers as its default.\npub const DEFAULT_DOMAIN: &[u8] = b{DEFAULT_DOMAIN:?};"
-    )
-    .expect("String write");
-    generated.push_str("#[derive(Debug)]\nstruct Abi {\n");
+    generated += &format!("/// The domain every tree's core answers as its default.\npub const DEFAULT_DOMAIN: &[u8] = b{DEFAULT_DOMAIN:?};\n");
+    generated += "#[derive(Debug)]\nstruct Abi {\n";
     for export in exports {
-        writeln!(
-            generated,
-            "    {}: unsafe extern \"C\" fn{},",
+        generated += &format!(
+            "    {}: unsafe extern \"C\" fn{},\n",
             export.field, export.signature
-        )
-        .expect("String write");
+        );
     }
-    generated.push_str("}\n");
-    generated
+    generated + "}\n"
 }
 
 /// The module linking one tree's prefixed symbols into its `ABI`.
 fn tree_module(tree: &str, exports: &[Export<'_>]) -> String {
     let mut module = format!("mod {tree} {{\n    use super::*;\n    extern \"C\" {{\n");
     for export in exports {
-        writeln!(
-            module,
-            "        #[link_name = \"{tree}_{}\"]\n        fn {}{};",
+        module += &format!(
+            "        #[link_name = \"{tree}_{}\"]\n        fn {}{};\n",
             export.symbol, export.field, export.signature
-        )
-        .expect("String write");
+        );
     }
-    module.push_str("    }\n    pub(super) static ABI: Abi = Abi {\n");
+    module += "    }\n    pub(super) static ABI: Abi = Abi {\n";
     for export in exports {
-        writeln!(module, "        {},", export.field).expect("String write");
+        module += &format!("        {},\n", export.field);
     }
-    module.push_str("    };\n}\n");
-    module
+    module + "    };\n}\n"
 }
 
 fn trees(index: &Path) -> Vec<Tree> {
@@ -246,53 +230,46 @@ fn trees(index: &Path) -> Vec<Tree> {
         fs::read_to_string(index).unwrap_or_else(|e| panic!("reading {}: {e}", index.display()));
     let index: Index =
         yaml_serde::from_str(&yaml).unwrap_or_else(|e| panic!("parsing {}: {e}", index.display()));
-    let pin = Tree {
+    let mut trees = vec![Tree {
         name: "pin".to_owned(),
         commit: index
             .freeswitch
             .commit,
         public: true,
-    };
-    let named = index
-        .trees
-        .into_iter()
-        .map(|tree| {
-            let identifier = tree
-                .name
-                .starts_with(|c: char| c.is_ascii_lowercase())
-                && tree
-                    .name
-                    .chars()
-                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_');
-            assert!(
-                identifier && tree.name != "pin",
-                "tree name {:?} must be a lowercase identifier other than pin",
-                tree.name
-            );
-            Tree {
-                name: tree.name,
-                commit: tree.commit,
-                public: tree
-                    .fetch
-                    .is_some(),
-            }
+    }];
+    for Named {
+        name,
+        commit,
+        fetch,
+    } in index.trees
+    {
+        let identifier = name.starts_with(|c: char| c.is_ascii_lowercase())
+            && name
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_');
+        assert!(
+            identifier && name != "pin",
+            "tree name {name:?} must be a lowercase identifier other than pin"
+        );
+        trees.push(Tree {
+            name,
+            commit,
+            public: fetch.is_some(),
         });
-    std::iter::once(pin)
-        .chain(named)
-        .collect()
+    }
+    trees
 }
 
 /// The files of one tree, read out of the clone at its commit and parsed as they are needed.
 struct Source<'r> {
     root: &'r Path,
-    name: String,
-    commit: String,
+    tree: &'r Tree,
     files: HashMap<String, Parsed>,
 }
 
 impl<'r> Source<'r> {
     /// The tree, or why its commit cannot be read.
-    fn open(root: &'r Path, tree: &Tree) -> Result<Self, String> {
+    fn open(root: &'r Path, tree: &'r Tree) -> Result<Self, String> {
         let output = git(root)
             .arg("cat-file")
             .arg("-e")
@@ -311,19 +288,19 @@ impl<'r> Source<'r> {
         }
         Ok(Self {
             root,
-            name: tree
-                .name
-                .clone(),
-            commit: tree
-                .commit
-                .clone(),
+            tree,
             files: HashMap::new(),
         })
     }
 
     /// `path` at the tree's commit; a commit that has the tree but lacks the file breaks the build.
     fn file(&mut self, path: &str) -> &Parsed {
-        let (root, commit) = (self.root, &self.commit);
+        let (root, commit) = (
+            self.root,
+            &self
+                .tree
+                .commit,
+        );
         self.files
             .entry(path.to_owned())
             .or_insert_with(|| {
@@ -347,8 +324,14 @@ impl<'r> Source<'r> {
 
     /// What `line`, holding `directive`, names in this tree; a tree that lacks it breaks the build.
     fn extract(&mut self, line: &str, directive: &Directive<'_>) -> String {
-        let label = format!("tree {} ({})", self.name, self.commit);
-        let path = directive.path();
+        let label = format!(
+            "tree {} ({})",
+            self.tree
+                .name,
+            self.tree
+                .commit
+        );
+        let path = directive.path;
         directive
             .extract(self.file(path))
             .unwrap_or_else(|e| panic!("{label}, {path}, {:?}: {e}", line.trim()))
@@ -362,16 +345,10 @@ fn git(root: &Path) -> Command {
     git
 }
 
-fn compile(
-    tree: &Tree,
-    source: &mut Source<'_>,
-    units: &[(&str, String)],
-    exports: &[Export<'_>],
-    out: &Path,
-) {
+fn compile(source: &mut Source<'_>, units: &[(&str, String)], exports: &[Export<'_>], out: &Path) {
+    let tree = source.tree;
     let mut body = String::new();
     let mut symbols: Vec<&str> = Vec::new();
-    let mut taken = HashSet::new();
     for (unit, text) in units {
         for line in text.lines() {
             if export(line).is_some() {
@@ -379,36 +356,34 @@ fn compile(
             }
             let directive = extract::directive(line).unwrap_or_else(|e| panic!("{unit}: {e}"));
             let Some(directive) = directive else {
-                body.push_str(line);
-                body.push('\n');
+                body += &format!("{line}\n");
                 continue;
             };
-            if let Directive::Function { name, .. } = directive {
-                assert!(taken.insert(name), "{unit}: function {name} is taken twice");
+            if directive.kind == "function" {
+                let name = directive.argument;
+                assert!(
+                    !symbols.contains(&name),
+                    "{unit}: function {name} is taken twice"
+                );
                 symbols.push(name);
             }
-            body.push_str(&source.extract(line, &directive));
+            body += &source.extract(line, &directive);
         }
     }
     let mut unit = String::new();
-    for (number, tag) in TAGS
-        .iter()
-        .enumerate()
-    {
-        writeln!(unit, "#define ORACLE_{tag} {}", number + 1).expect("String write");
+    for (number, tag) in (1..).zip(TAGS) {
+        unit += &format!("#define ORACLE_{tag} {number}\n");
     }
-    writeln!(unit, "#define ORACLE_DEFAULT_DOMAIN {DEFAULT_DOMAIN:?}").expect("String write");
-    let exported = exports
-        .iter()
-        .map(|export| export.symbol)
-        .filter(|symbol| !taken.contains(symbol));
-    for symbol in symbols
-        .into_iter()
-        .chain(exported)
-    {
-        writeln!(unit, "#define {symbol} {}_{symbol}", tree.name).expect("String write");
+    unit += &format!("#define ORACLE_DEFAULT_DOMAIN {DEFAULT_DOMAIN:?}\n");
+    for symbol in &symbols {
+        unit += &format!("#define {symbol} {}_{symbol}\n", tree.name);
     }
-    unit.push_str(&body);
+    for export in exports {
+        if !symbols.contains(&export.symbol) {
+            unit += &format!("#define {0} {1}_{0}\n", export.symbol, tree.name);
+        }
+    }
+    unit += &body;
     let file = out.join(format!("{}.c", tree.name));
     fs::write(&file, unit).unwrap_or_else(|e| panic!("writing {}: {e}", file.display()));
     // The unit is the switch's code as each tree ships it, so its warnings are not ours to fix.
