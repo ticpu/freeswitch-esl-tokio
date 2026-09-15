@@ -65,6 +65,25 @@ assert_eq!(parsed.to_string(), cmd.to_string());
 # }
 ```
 
+With an argument separator, spaces and quotes in any argument need no quoting: each is escaped once for the split on that separator, and an absent slot before a set one is written `undef`.
+
+```rust
+use freeswitch_esl_tokio::commands::*;
+
+let cmd = Originate::application(
+    Endpoint::Loopback(LoopbackEndpoint::new("9199").with_context("default")),
+    Application::new("socket", Some("127.0.0.1:8040 async full")),
+)
+.cid_name("Front Desk")
+.with_argv_separator('~')
+.unwrap(); // '~' is a usable separator
+
+assert_eq!(
+    cmd.to_string(),
+    "originate ^^~loopback/9199/default~&socket(127.0.0.1:8040 async full)~undef~undef~Front Desk"
+);
+```
+
 ## Bridge dial strings
 
 `BridgeDialString` builds multi-endpoint bridge arguments with simultaneous ring (`,`) and sequential failover (`|`):

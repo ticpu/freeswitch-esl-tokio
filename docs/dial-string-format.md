@@ -256,6 +256,11 @@ carriers:
   depth and honours no escape while doing so, so a lone `}`, `]` or `>` ends the
   block early and the remainder becomes dial-string text. A balanced pair such
   as `${var}` is fine and ordinary.
+- **A value containing `:_:`.** Any `:_:` in the dial string sends
+  `switch_ivr_originate` down the enterprise path, whose split honours no quote
+  or escape, so no quoting delivers it. Inside `<>` the value itself arrives,
+  but the originate is still split into threads. `Variables` refuses such a
+  value wherever it is parsed or loaded.
 
 ### The inline action list is a third carrier
 

@@ -135,6 +135,15 @@ variable scoping documentation.
 
 **Originate** — full command: `originate {endpoint} {target} [dialplan] [context] [cid_name] [cid_num] [timeout]`
 
+With `with_argv_separator(sep)` the line is
+`originate ^^<sep><endpoint><sep><target>[<sep>positional…]`, every argument
+escaped once for that split and none passed through `originate_quote()`. A
+positional left `None` but forced present by a later one is written `undef`, and
+the switch falls back to `XML`/`default`. `Some("")` is an empty token, which
+`switch_ivr_session_transfer` reads as the leg's own context (measured). An empty value in the last slot is written `''`, because a trailing
+separator adds no argument. An `Originate` dials one `Endpoint`; a multi-leg list
+goes on the caller's own line through `FlattenedDialString::display_raw()`.
+
 **originate_split()** — splits a command line the way the `originate` API splits its
 arguments: `separate_string_blank_delim` on a space, `separate_string_char_delim` on
 any other delimiter. A leading `^^X` overrides the delimiter it is given, as the
