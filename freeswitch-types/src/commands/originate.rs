@@ -2746,6 +2746,26 @@ mod tests {
         assert!(serde_json::from_str::<Originate>(json).is_ok());
     }
 
+    /// An inline action list reads an argument up to its separator, not its first `)`, so the
+    /// refusal names the form that delivers a tone stream's parenthesised spec.
+    #[test]
+    fn a_parenthesis_refusal_points_at_the_inline_action_list() {
+        let json = r#"{"endpoint": {"loopback": {"extension": "9199"}},
+            "application": {"name": "playback", "args": "tone_stream://%(500,0,800)"}}"#;
+        let msg = serde_json::from_str::<Originate>(json)
+            .expect_err(json)
+            .to_string();
+        assert!(msg.contains("Originate::inline"), "{msg}");
+
+        let inline = r#"{"endpoint": {"loopback": {"extension": "9199"}},
+            "inline_applications": [{"name": "playback", "args": "tone_stream://%(500,0,800)"}]}"#;
+        let originate = serde_json::from_str::<Originate>(inline).expect(inline);
+        assert_eq!(
+            originate.to_string(),
+            r"originate loopback/9199 'playback:tone_stream://%(500\\,0\\,800)' inline"
+        );
+    }
+
     #[test]
     fn an_application_under_the_inline_dialplan_and_a_lone_ampersand_round_trip() {
         let cases = [
