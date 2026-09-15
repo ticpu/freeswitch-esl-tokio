@@ -8,6 +8,7 @@ use proptest::prelude::*;
 use proptest::sample::select;
 
 use super::{dial_list, switch_true, DialList};
+use crate::commands::variables::BlockParse;
 use crate::switch_passes::brackets::c_oracle::{block_text, installed, unmodelled};
 use crate::switch_passes::brackets::{self, Block, PairEffect};
 use crate::switch_passes::expansion::enterprise_nests;
@@ -216,7 +217,7 @@ fn dial_lists_match_the_switch() {
         dial_text(),
         |c, input| {
             let text = trace(&input);
-            let port = dial_list(&text, 0..input.len(), false);
+            let port = dial_list(&text, 0..input.len(), false, BlockParse::default());
             let refused = matches!(port, Err(PipelineError::SplitSeparatorUnreadable));
             if refused
                 || port
@@ -264,7 +265,7 @@ fn dial_lists_match_the_switch() {
 fn a_chained_block_split_by_a_non_ascii_byte_is_refused() {
     let input = "<^^é><<>:_:[>],é|[[]";
     assert!(matches!(
-        dial_list(&trace(input), 0..input.len(), false),
+        dial_list(&trace(input), 0..input.len(), false, BlockParse::default()),
         Err(PipelineError::SplitSeparatorUnreadable)
     ));
     for (tree, c) in freeswitch_c_oracle::oracles() {

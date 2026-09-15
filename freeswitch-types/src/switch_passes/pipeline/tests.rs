@@ -2,7 +2,9 @@
 //! and escape depth; `tests/fixtures/flattened/README.md` names the captures.
 
 use super::read;
-use crate::commands::variables::{DialStringCarrier, DialStringTarget, Variables, VariablesType};
+use crate::commands::variables::{
+    BlockParse, DialStringCarrier, DialStringTarget, Variables, VariablesType,
+};
 use crate::switch_passes::brackets::{parse_block, Pair, PairEffect, Parsed};
 use crate::switch_passes::expansion::names_a_variable;
 use crate::switch_passes::originate_legs::{
@@ -545,7 +547,8 @@ fn nested_vars_are_opted_into_per_thread() {
 #[test]
 fn a_block_parse_reads_the_buffer_as_the_switch_leaves_it() {
     let mut buffer = CBuffer::new(&trace(r"{\}k=v}"));
-    let Parsed { block, next, .. } = parse_block(&mut buffer, 0, '{', '}', ',').unwrap();
+    let Parsed { block, next, .. } =
+        parse_block(&mut buffer, 0, '{', '}', ',', BlockParse::default()).unwrap();
     assert_eq!(next, 3);
     assert_eq!(untrace(buffer.c_str(next)), "k");
     assert_eq!(
@@ -558,7 +561,8 @@ fn a_block_parse_reads_the_buffer_as_the_switch_leaves_it() {
     assert!(block.rewrites_following_text);
 
     let mut buffer = CBuffer::new(&trace(r"{x\\,k=v}"));
-    let Parsed { block, .. } = parse_block(&mut buffer, 0, '{', '}', ',').unwrap();
+    let Parsed { block, .. } =
+        parse_block(&mut buffer, 0, '{', '}', ',', BlockParse::default()).unwrap();
     assert_eq!(
         block
             .pairs
@@ -570,12 +574,13 @@ fn a_block_parse_reads_the_buffer_as_the_switch_leaves_it() {
     assert!(!block.rewrites_following_text);
 
     let mut buffer = CBuffer::new(&trace("<^^>=>"));
-    let Parsed { block, next, .. } = parse_block(&mut buffer, 0, '<', '>', ',').unwrap();
+    let Parsed { block, next, .. } =
+        parse_block(&mut buffer, 0, '<', '>', ',', BlockParse::default()).unwrap();
     assert_eq!(untrace(buffer.c_str(next)), "");
     assert!(block.rewrites_following_text);
 
     let bare = |input: &str| {
-        dial_list(&trace(input), 0..input.len(), false)
+        dial_list(&trace(input), 0..input.len(), false, BlockParse::default())
             .unwrap_or_else(|e| panic!("{input:?}: {e:?}"))
     };
     let list = bare("<\\>\t>,[[]");
@@ -585,7 +590,12 @@ fn a_block_parse_reads_the_buffer_as_the_switch_leaves_it() {
 
     for refused in ["^^é]", "<^^éa\\>x:_:é"] {
         assert_eq!(
-            dial_list(&trace(refused), 0..refused.len(), false),
+            dial_list(
+                &trace(refused),
+                0..refused.len(),
+                false,
+                BlockParse::default()
+            ),
             Err(PipelineError::SplitSeparatorUnreadable),
             "{refused:?}"
         );

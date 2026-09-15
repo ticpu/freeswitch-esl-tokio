@@ -7,7 +7,7 @@ use super::api_argument::ArgvCut;
 use super::expansion::expand_escapes;
 use super::originate_legs::{dial_list, DialList};
 use super::{byte_range, extent, trace, PipelineError, Traced};
-use crate::commands::variables::{BlockParse, DialStringCarrier, DialStringTarget};
+use crate::commands::variables::{DialStringCarrier, DialStringTarget};
 
 #[cfg(test)]
 mod tests;
@@ -15,9 +15,6 @@ mod tests;
 /// Run every pass `target` applies, from the text as given to what each leg's
 /// channel receives.
 pub(crate) fn read(input: &str, target: DialStringTarget) -> Result<DialList, PipelineError> {
-    match target.block_parse() {
-        BlockParse::PairSplitCleans => {}
-    }
     let input = trace(input);
     let (text, raw, carrier_expands) = match target.carrier() {
         DialStringCarrier::EslApi => {
@@ -29,7 +26,7 @@ pub(crate) fn read(input: &str, target: DialStringTarget) -> Result<DialList, Pi
             (text, extent(&input), !references.is_empty())
         }
     };
-    dial_list(&text, raw, carrier_expands)
+    dial_list(&text, raw, carrier_expands, target.block_parse())
 }
 
 /// `originate`'s own `switch_separate_string`, which the dial string must survive as one

@@ -8,6 +8,7 @@ use super::brackets::{install, parse_block, same_header, Block};
 use super::expansion::{enterprise_nests, names_a_variable};
 use super::separate::{find, find_end_paren, separate_string_string, skip_spaces, CBuffer, Split};
 use super::{byte_range, untrace, PipelineError, Traced};
+use crate::commands::variables::BlockParse;
 
 #[cfg(test)]
 mod c_oracle;
@@ -61,10 +62,15 @@ pub(crate) fn dial_list(
     text: &[Traced],
     raw: Range<usize>,
     carrier_expands: bool,
+    block_parse: BlockParse,
 ) -> Result<DialList, PipelineError> {
-    let mut reader = Reader::default();
+    let mut reader = Reader {
+        block_parse,
+        legs: 0,
+        quote_spans_legs: false,
+    };
     let (blocks, threads) = if find(text, ENTERPRISE_DELIM).is_some() {
-        let head = head_blocks(text, &[('<', '>')], 0)?;
+        let head = head_blocks(text, &[('<', '>')], 0, block_parse)?;
         let scanned = &head.text[..head.data_end];
         let mut threads: Vec<Thread> =
             separate_string_string(&scanned[head.data..], ENTERPRISE_DELIM, MAX_PEERS)
@@ -107,8 +113,8 @@ fn opts_into_nested_vars(text: &[Traced]) -> bool {
         .contains("origination_nested_vars=true")
 }
 
-#[derive(Default)]
 struct Reader {
+    block_parse: BlockParse,
     legs: usize,
     quote_spans_legs: bool,
 }
@@ -117,7 +123,7 @@ impl Reader {
     /// The thread `text`, which covers the input bytes `raw`. Its groups and legs are split in one
     /// copy of the data, as `switch_ivr_originate` splits them in its own.
     fn thread(&mut self, text: &[Traced], raw: Range<usize>) -> Result<Thread, PipelineError> {
-        let head = head_blocks(text, &[('<', '>'), ('{', '}')], self.legs)?;
+        let head = head_blocks(text, &[('<', '>'), ('{', '}')], self.legs, self.block_parse)?;
         let scanned = &head.text[..head.data_end];
         let data = &scanned[head.data..];
         if data.is_empty() {
@@ -203,9 +209,10 @@ impl Reader {
                     }
                 }
             }
-            let (block, next) = parse_block(buffer, pos, '[', ']', UNQUOTED_ESC_COMMA)
-                .ok_or(unclosed)?
-                .read()?;
+            let (block, next) =
+                parse_block(buffer, pos, '[', ']', UNQUOTED_ESC_COMMA, self.block_parse)
+                    .ok_or(unclosed)?
+                    .read()?;
             blocks.push(block);
             pos = next;
         }
@@ -252,6 +259,7 @@ fn head_blocks(
     text: &[Traced],
     kinds: &[(char, char)],
     leg: usize,
+    block_parse: BlockParse,
 ) -> Result<HeadBlocks, PipelineError> {
     let mut buffer = CBuffer::new(text);
     let mut pos = leading_spaces(text);
@@ -259,7 +267,7 @@ fn head_blocks(
     let mut blocks = Vec::new();
     for &(open, close) in kinds {
         while buffer.at(pos) == open {
-            let (block, next) = parse_block(&mut buffer, pos, open, close, ',')
+            let (block, next) = parse_block(&mut buffer, pos, open, close, ',', block_parse)
                 .ok_or(PipelineError::UnclosedBlock { leg })?
                 .read()?;
             blocks.push(block);

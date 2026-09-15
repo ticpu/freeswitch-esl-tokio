@@ -6,6 +6,7 @@ use proptest::prelude::*;
 use proptest::sample::select;
 
 use super::{install, parse_block, Block, PairEffect};
+use crate::commands::variables::BlockParse;
 use crate::switch_passes::originate_legs::UNQUOTED_ESC_COMMA;
 use crate::switch_passes::separate::CBuffer;
 use crate::switch_passes::{trace, untrace};
@@ -88,7 +89,7 @@ fn blocks_match_the_switch() {
             let input = format!("{block}{tail}");
             let text = trace(&input);
             let mut buffer = CBuffer::new(&text);
-            let port = parse_block(&mut buffer, 0, open, close, comma);
+            let port = parse_block(&mut buffer, 0, open, close, comma, BlockParse::default());
             if port
                 .as_ref()
                 .is_some_and(|parsed| unmodelled(&parsed.block))
@@ -119,7 +120,15 @@ fn blocks_match_the_switch() {
 fn a_block_event_folds_names_by_case() {
     let block = "{k=1,K=2,gone=x,GONE=,kept=y}";
     let text = trace(block);
-    let parsed = parse_block(&mut CBuffer::new(&text), 0, '{', '}', ',').expect("the block closes");
+    let parsed = parse_block(
+        &mut CBuffer::new(&text),
+        0,
+        '{',
+        '}',
+        ',',
+        BlockParse::default(),
+    )
+    .expect("the block closes");
     let pair = |key: &[u8], value: &[u8]| -> Pair { (key.to_vec(), value.to_vec()) };
     let want = vec![pair(b"K", b"2"), pair(b"gone", b"x"), pair(b"kept", b"y")];
     assert_eq!(installed([&parsed.block]), want);

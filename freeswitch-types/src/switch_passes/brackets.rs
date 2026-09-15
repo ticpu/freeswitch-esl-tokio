@@ -2,10 +2,10 @@
 //! of the buffer it is handed, and of the originate event those pairs install into.
 
 use super::api_argument::breaks_a_split;
-use super::separate::{find_end_paren, CBuffer};
+use super::separate::{find_end_paren, CBuffer, Split};
 use super::{untrace, PipelineError, Traced};
 use crate::commands::originate::OriginateError;
-use crate::commands::variables::VariablesType;
+use crate::commands::variables::{BlockParse, VariablesType};
 
 #[cfg(test)]
 pub(super) mod c_oracle;
@@ -104,14 +104,15 @@ impl Parsed {
     }
 }
 
-/// `switch_event_create_brackets` on the block opening at `at` of `buffer`, rewriting the buffer
-/// as the switch does.
+/// `switch_event_create_brackets` of `block_parse` on the block opening at `at` of `buffer`,
+/// rewriting the buffer as the switch does.
 pub(crate) fn parse_block(
     buffer: &mut CBuffer,
     at: usize,
     open: char,
     close: char,
     comma: char,
+    block_parse: BlockParse,
 ) -> Option<Parsed> {
     let end = at + find_end_paren(buffer.c_str(at), open, close)?;
     let separator = match buffer
@@ -156,7 +157,7 @@ pub(crate) fn parse_block(
         // A split on a non-ASCII head's first byte steps over an escaped terminator into the text
         // after the close, which the port's split on the given separator would cut instead.
         let escaped = escapes_its_end(buffer.c_str(data));
-        let split = buffer.separate(data, delim, BLOCK_PAIRS);
+        let split = block_split(buffer, data, delim, BLOCK_PAIRS, block_parse);
         if split.unreadable_head {
             reads_past_by_byte |= escaped;
             block
@@ -168,7 +169,7 @@ pub(crate) fn parse_block(
         } else {
             for token in split.tokens {
                 let escaped = escapes_its_end(buffer.c_str(token.start));
-                let pair = pair(buffer, token.start);
+                let pair = pair(buffer, token.start, block_parse);
                 reads_past_by_byte |= escaped && pair.effect == PairEffect::Unreadable;
                 block
                     .pairs
@@ -230,14 +231,27 @@ impl Block {
     }
 }
 
+/// One of the block's own splits, on its separator or on `=`, in place.
+fn block_split(
+    buffer: &mut CBuffer,
+    index: usize,
+    delim: char,
+    limit: usize,
+    block_parse: BlockParse,
+) -> Split {
+    match block_parse {
+        BlockParse::PairSplitCleans => buffer.separate(index, delim, limit),
+    }
+}
+
 /// The pair the `=` split reads of the token at `index`, in place.
-fn pair(buffer: &mut CBuffer, index: usize) -> Pair {
+fn pair(buffer: &mut CBuffer, index: usize, block_parse: BlockParse) -> Pair {
     let token = untrace(buffer.c_str(index));
     let end = index
         + buffer
             .c_str(index)
             .len();
-    let split = buffer.separate(index, '=', 2);
+    let split = block_split(buffer, index, '=', 2, block_parse);
     if split.unreadable_head {
         return Pair {
             key: token,
