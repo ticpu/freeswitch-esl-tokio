@@ -244,6 +244,17 @@ carriers:
 {sip_h_X-Info='value with spaces'}endpoint
 ```
 
+Those quotes do not keep a space at the value's edge. An earlier pass consumes
+them, and the `=` split's `cleanup_separated_string` then skips leading spaces
+and cuts trailing ones outside quotes. An edge space rides as `\s`, which that
+cleanup reads after trimming, with its backslash doubled for every earlier pass
+— four in `{}` and `<>` on either carrier, sixteen in `[]`. Measured in all
+three scopes over `originate`, `bridge` and an `originate ^^~` line:
+
+```
+{greeting='\\\\slead and trail\\\\s'}endpoint
+```
+
 ### Values that cannot be expressed at all
 
 - **An empty value.** `{k=}` never reaches the channel: the switch splits the
