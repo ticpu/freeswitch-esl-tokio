@@ -1,14 +1,15 @@
 # Deferred to the next major
 
 Changes that are right but cannot ship under the current major. Read this when
-bumping `freeswitch-types` to 2.0 or `freeswitch-esl-tokio` to 3.0, and delete
-each entry as it lands.
+bumping both crates to 3.0, and delete each entry as it lands. The crates take
+a major in lockstep: `freeswitch-types` goes from 1.x straight to 3.0 so its
+version names the `freeswitch-esl-tokio` major that re-exports it.
 
 Every entry names a symbol. If the symbol is gone, the entry is stale — remove
 it rather than guess what it meant. Nothing here is a promise; a decision may be
 revisited when it is finally actionable.
 
-## freeswitch-types 2.0
+## freeswitch-types 3.0
 
 ### `DialplanType` should carry any dialplan name
 
@@ -124,11 +125,11 @@ in front of a caller who does not: existing `.await?;` call sites keep
 compiling and start warning. It waits for the major because changing the `Ok`
 type is a break, not because the diagnostic is optional.
 
-### It inherits whatever `freeswitch-types` 2.0 breaks
+### It inherits whatever `freeswitch-types` 3.0 breaks
 
 The types above are re-exported from the crate root, so any change to their
 public surface breaks this crate's too. There is no separate work item — the
-bump is the work. Sequence the release accordingly: `freeswitch-types` 2.0
+bump is the work. Sequence the release accordingly: `freeswitch-types` 3.0
 publishes first, then this crate.
 
 ### `EslHeaders::parse_uri_info` and `parse_history_info` flatten the ARRAY error
