@@ -390,6 +390,17 @@ This is the only mechanism available when values arrive by `${...}` expansion,
 because substitution happens *before* the block is parsed and no escaping can be
 inserted into the result. It works identically on both carriers.
 
+`Variables` refuses a separator that breaks the pair split or its cleanup, the
+same set `with_argv_separator` refuses for the switch's reasons: space and
+controls, non-ASCII, `\` (the split skips the byte after it, so it never
+splits), `'` (it pairs with the next one as quotes) and lowercase `n r t s`
+(the cleanup reads `\s` as the separator, not a space). It also refuses either
+of the block's own brackets, `=`, `^`, `|` in a `[]` block, and a separator
+that a key or value already contains. `$` and `{` are refused in every scope:
+through a dialplan application, expansion reads a value ending in `$` before a
+`{` separator, or a `$` separator before a key opening `{`, as a variable
+reference, and substitutes it before the block is parsed.
+
 Only the comma changes. The block reaches the same tokenizer the same number of
 times either way, so a literal backslash still needs eight and a single quote
 still needs its per-carrier count: written raw in a `^^` block, `a\nb` arrives

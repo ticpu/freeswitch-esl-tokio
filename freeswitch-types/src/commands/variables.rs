@@ -105,7 +105,7 @@ impl EscapedField {
 /// a `"separator"` field only when [`with_separator`](Variables::with_separator)
 /// chose one. Deserialization accepts both formats; a flat map implies
 /// `Default` scope and the comma. A `separator` that cannot delimit the block,
-/// or that a value already contains, is refused at load.
+/// or that a key or value already contains, is refused at load.
 // qual:allow(srp, god_struct) reason: "public builder; accessors read disjoint fields"
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Variables {
@@ -335,14 +335,19 @@ impl fmt::Display for InvalidArgvSeparator {
 
 impl std::error::Error for InvalidArgvSeparator {}
 
-/// Space, controls, non-ASCII, `\`, `'` and lowercase `n r t s` break the switch's split or its
-/// escapes; as policy, what reads as dial-string grammar, quoting, an escape letter or a word.
+/// Space, controls, non-ASCII, `\`, `'` and lowercase `n r t s`, which break a split on `sep` or
+/// the escapes its cleanup reads.
+fn breaks_a_split(sep: char) -> bool {
+    !sep.is_ascii_graphic() || matches!(sep, '\\' | '\'' | 'n' | 'r' | 't' | 's')
+}
+
+/// Not [`breaks_a_split`]; as policy, not what reads as dial-string grammar, quoting or a word.
 fn usable_argv_separator(sep: char) -> bool {
-    sep.is_ascii_graphic()
+    !breaks_a_split(sep)
         && !sep.is_ascii_alphanumeric()
         && !matches!(
             sep,
-            '\\' | '\'' | '^' | '"' | ',' | '|' | '[' | ']' | '{' | '}' | '<' | '>' | '=' | ':'
+            '^' | '"' | ',' | '|' | '[' | ']' | '{' | '}' | '<' | '>' | '=' | ':'
         )
 }
 
@@ -720,19 +725,16 @@ fn check_representable(
 
 /// Reject a separator that cannot delimit the block it was chosen for.
 ///
-/// Either bracket moves the end the switch counts its way to, `=` splits the
-/// pair instead, `^` leaves the `^^` prefix reading as its own separator, and
-/// `|` in a `[]` block is read by the leg split before the block is parsed.
-///
-/// A non-ASCII separator is refused: the switch splits on its first byte, and
-/// every key then starts with the rest of its UTF-8 form.
+/// Beyond what [`breaks_a_split`], either bracket moves the end the switch counts its way to,
+/// `=` splits the pair instead, `^` leaves the `^^` prefix reading as its own separator, and
+/// `|` in a `[]` block is read by the leg split before the block is parsed. Dialplan expansion
+/// reads `$` then `{` across a pair boundary as a reference, so neither separates.
 fn check_separator(sep: char, vars_type: VariablesType) -> Result<(), OriginateError> {
     let (open, close) = vars_type.delimiters();
-    if !sep.is_ascii()
+    if breaks_a_split(sep)
         || sep == open
         || sep == close
-        || sep == '='
-        || sep == '^'
+        || matches!(sep, '=' | '^' | '$' | '{')
         || (sep == '|' && vars_type == VariablesType::Channel)
     {
         return Err(OriginateError::ParseError(format!(
@@ -959,16 +961,20 @@ impl Variables {
     /// carry a comma. The separator is given rather than derived, so a block
     /// renders the same way whatever its values happen to be that call.
     ///
-    /// Fails if `sep` cannot delimit this block, or if a value already present
-    /// contains it. A value inserted afterwards is not checked: one carrying
+    /// Fails if `sep` cannot delimit this block, or if a key or value already
+    /// present contains it. A pair inserted afterwards is not checked: one carrying
     /// `sep` splits into a pair nobody wrote, silently, until
     /// [`insert`](Self::insert) becomes fallible (`docs/next-major.md`).
+    ///
+    /// Refused: space, controls, non-ASCII, `\`, `'` and lowercase `n r t s`, which break the
+    /// switch's split or its escapes; either of the block's brackets, `=` and `^`; `$` and `{`,
+    /// which dialplan expansion reads as a reference across a pair boundary; `|` in a `[]` block.
     pub fn with_separator(mut self, sep: char) -> Result<Self, OriginateError> {
         check_separator(sep, self.vars_type)?;
         if let Some((key, _)) = self
             .inner
             .iter()
-            .find(|(_, v)| v.contains(sep))
+            .find(|(k, v)| k.contains(sep) || v.contains(sep))
         {
             return Err(OriginateError::ParseError(format!(
                 "variable {key} contains the chosen '{sep}' separator"
@@ -1247,6 +1253,11 @@ impl Variables {
                     })?;
                 let value = unescape_value(value, target, commas_separate, vars_type);
                 check_representable(key, &value, vars_type)?;
+                if !commas_separate && (key.contains(sep) || value.contains(sep)) {
+                    return Err(OriginateError::ParseError(format!(
+                        "variable {i} contains the block's ^^ separator"
+                    )));
+                }
                 inner.insert(key.to_string(), value);
             }
         }
@@ -1357,11 +1368,12 @@ mod tests {
     }
 
     /// `separate_string_char_delim` skips the byte after a backslash, a quote pairs with the next
-    /// one, a space or control is trimmed or cuts the argument, and `n r t s` name escapes.
+    /// one, a space or control is trimmed or cuts the argument, `n r t s` name escapes, and dialplan
+    /// expansion reads `$` then `{` across a pair boundary as a reference.
     #[test]
     fn a_separator_breaking_the_switch_split_is_refused_everywhere() {
         for sep in [
-            '\\', '\'', ' ', '\t', '\n', '\u{b}', '\0', '\u{7f}', 'n', 'r', 't', 's',
+            '\\', '\'', ' ', '\t', '\n', '\u{b}', '\0', '\u{7f}', 'n', 'r', 't', 's', '$', '{',
         ] {
             for scope in [
                 VariablesType::Default,
@@ -1377,9 +1389,11 @@ mod tests {
                 );
             }
             assert!(
-                format!("{{^^{sep}a=1{sep}b=2}}")
-                    .parse::<Variables>()
-                    .is_err(),
+                Variables::parse_for(
+                    &format!("{{^^{sep}a=1{sep}b=2}}"),
+                    DialStringCarrier::Dialplan
+                )
+                .is_err(),
                 "parser accepted {sep:?}"
             );
         }
