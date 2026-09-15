@@ -242,6 +242,14 @@ pub(crate) fn argument_head(text: &[Traced]) -> Head {
 #[cfg(feature = "esl")]
 pub(crate) struct CBuffer(Vec<Traced>);
 
+/// Stands for a UTF-8 byte after a char's first in a [`CBuffer`]; its start lies past its end.
+#[cfg(feature = "esl")]
+const CONTINUATION: char = '\u{80}';
+
+pub(crate) fn is_continuation(&(_, start, end): &Traced) -> bool {
+    start > end
+}
+
 /// What [`CBuffer::separate`] cut.
 #[cfg(feature = "esl")]
 pub(crate) struct Split {
@@ -269,10 +277,35 @@ pub(crate) struct SplitToken {
 impl CBuffer {
     /// `text` and its terminator, and a second NUL for a trailing backslash to step onto.
     pub(crate) fn new(text: &[Traced]) -> Self {
+        Self::with_origins(text).0
+    }
+
+    /// [`CBuffer::new`], and for each entry the index in `text` it came from. Every byte of a char
+    /// past its first gets an entry of its own, so an in-place rewrite shifts bytes as the C does.
+    fn with_origins(text: &[Traced]) -> (Self, Vec<usize>) {
         let end = extent(text).end;
-        let mut chars = text.to_vec();
+        let mut chars = Vec::with_capacity(text.len() + 2);
+        let mut origins = Vec::with_capacity(text.len() + 2);
+        for (at, &entry) in text
+            .iter()
+            .enumerate()
+        {
+            chars.push(entry);
+            origins.push(at);
+            let (c, start, end) = entry;
+            let continued = text
+                .get(at + 1)
+                .is_some_and(is_continuation);
+            if start < end && !continued {
+                for _ in 1..c.len_utf8() {
+                    chars.push((CONTINUATION, end + 1, end));
+                    origins.push(at + 1);
+                }
+            }
+        }
         chars.extend([('\0', end, end), ('\0', end, end)]);
-        Self(chars)
+        origins.extend([text.len(), text.len()]);
+        (Self(chars), origins)
     }
 
     pub(crate) fn at(&self, index: usize) -> char {
@@ -414,9 +447,13 @@ pub(crate) fn separate_on(text: &[Traced], delim: char, limit: usize) -> Separat
 /// terminator ending with the text.
 #[cfg(feature = "esl")]
 fn read_back(text: &[Traced], cut: impl FnOnce(&mut CBuffer) -> Split) -> Separated {
-    let mut buffer = CBuffer::new(text);
+    let (mut buffer, origins) = CBuffer::with_origins(text);
     let split = cut(&mut buffer);
-    let within = |at: usize| at.min(text.len());
+    let within = |at: usize| {
+        origins
+            .get(at)
+            .map_or(text.len(), |&origin| origin.min(text.len()))
+    };
     Separated {
         tokens: split
             .tokens
@@ -434,7 +471,10 @@ fn read_back(text: &[Traced], cut: impl FnOnce(&mut CBuffer) -> Split) -> Separa
                     ),
                 text: buffer
                     .c_str(token.start)
-                    .to_vec(),
+                    .iter()
+                    .copied()
+                    .filter(|entry| !is_continuation(entry))
+                    .collect(),
             })
             .collect(),
         delimiter: split.delimiter,

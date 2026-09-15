@@ -8,7 +8,7 @@ use proptest::sample::select;
 use super::{parse_block, Block, PairEffect};
 use crate::switch_passes::originate_legs::UNQUOTED_ESC_COMMA;
 use crate::switch_passes::separate::CBuffer;
-use crate::switch_passes::{trace, untrace, Traced};
+use crate::switch_passes::{trace, untrace};
 use crate::test_text::text;
 
 /// The headers installing `blocks` adds, as the switch hands them to the event.
@@ -43,11 +43,6 @@ pub(crate) fn unmodelled(block: &Block) -> bool {
             .pairs
             .iter()
             .any(|pair| pair.effect == PairEffect::Unreadable)
-}
-
-fn byte_offset(text: &[Traced], input: &str, index: usize) -> usize {
-    text.get(index)
-        .map_or(input.len(), |&(_, start, _)| start)
 }
 
 const HEADS: &[&str] = &[
@@ -112,7 +107,9 @@ fn blocks_match_the_switch() {
             let port = port.map(|parsed| {
                 (
                     installed([&parsed.block]),
-                    byte_offset(&text, &input, parsed.next),
+                    parsed
+                        .next
+                        .min(input.len()),
                     untrace(buffer.c_str(parsed.next)).into_bytes(),
                 )
             });

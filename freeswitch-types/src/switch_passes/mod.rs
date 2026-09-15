@@ -52,6 +52,7 @@ pub(crate) fn trace(s: &str) -> Vec<Traced> {
 
 pub(crate) fn untrace(text: &[Traced]) -> String {
     text.iter()
+        .filter(|entry| !separate::is_continuation(entry))
         .map(|&(c, ..)| c)
         .collect()
 }
