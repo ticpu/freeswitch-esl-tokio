@@ -629,11 +629,29 @@ impl FlattenedLeg {
     /// enterprise split sets it true. On a channel with `CF_NO_PRESENCE`, originate deletes
     /// `presence_id`.
     pub fn variable(&self, name: impl VariableName) -> Option<&str> {
+        self.variable_str(name.as_str())
+    }
+
+    /// Look up a leg variable by its bare wire name, for a key with no
+    /// [`VariableName`] enum of its own (e.g. a `sip_h_` passthrough).
+    ///
+    /// ```
+    /// use freeswitch_types::commands::{DialStringCarrier, FlattenedDialString};
+    ///
+    /// let list = FlattenedDialString::parse_for(
+    ///     "[sip_h_X-Seat=42]loopback/9199/test",
+    ///     DialStringCarrier::EslApi,
+    /// )
+    /// .unwrap();
+    /// let leg = list.legs().next().unwrap();
+    /// assert_eq!(leg.variable_str("sip_h_X-Seat"), Some("42"));
+    /// ```
+    pub fn variable_str(&self, name: &str) -> Option<&str> {
         resolve(
             self.inherited
                 .iter(),
             &self.leg,
-            name.as_str(),
+            name,
             self.nested_vars,
         )
     }
