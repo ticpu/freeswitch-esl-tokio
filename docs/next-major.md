@@ -76,6 +76,9 @@ spans legs, which parse and config load refuse as
 `inline` and `endpoint_mut` accept a `SofiaContact` or `GroupCall`, which
 `originate` over the API never expands; parse at the API carrier and
 `Originate` config load refuse it as `OriginateError::UnexpandedExpression`.
+`SofiaContact::from_str` and `GroupCall::from_str` parse at `EslApi`, where
+that refusal makes them always return `Err`, and neither type has a public
+`parse_for`: drop those `FromStr` impls, or give both types `parse_for(target)`.
 
 ### `Originate` setters need to refuse `undef`
 
