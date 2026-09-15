@@ -58,6 +58,9 @@ fn main() {
 /// The pinned commit and `src/switch_utils.c` at it, or why neither can be read.
 fn pinned_source(index: &Path) -> Result<(String, String), String> {
     let root = env::var_os("FREESWITCH_SOURCE").ok_or("FREESWITCH_SOURCE is not set")?;
+    if root.is_empty() {
+        return Err("FREESWITCH_SOURCE is empty".to_owned());
+    }
     let yaml =
         fs::read_to_string(index).map_err(|e| format!("reading {}: {e}", index.display()))?;
     let pin = yaml
