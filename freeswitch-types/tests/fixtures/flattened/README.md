@@ -14,3 +14,5 @@ The live-switch captures were sanitised by this substitution and nothing else, a
 | `[::1]` | `[2001:db8::1]` |
 | `@default` at a word boundary | `@pbx.example.com` |
 | `sip_invite_domain=default` | `sip_invite_domain=pbx.example.com` |
+
+The captures carry the registering profile's SIP port, `5080`. A switch whose `lab-lo` profile listens on another port has that port read as `5080` before the substitution.

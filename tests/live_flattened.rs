@@ -115,9 +115,32 @@ fn replace_at_word_end(text: &str, from: &str, to: &str) -> String {
     out
 }
 
+/// The SIP port the fixtures' registered contacts were captured on.
+const CAPTURED_SIP_PORT: &str = "5080";
+
+/// The SIP port of the profile the `fp-reg` gateways register to, from its status URL.
+async fn registrar_port(client: &EslClient) -> String {
+    let resp = client
+        .api("sofia xmlstatus profile lab-lo")
+        .await
+        .expect("sofia xmlstatus transport error");
+    let body = resp
+        .api_result()
+        .expect("sofia xmlstatus rejected");
+    body.split_once("<url>")
+        .and_then(|(_, rest)| rest.split_once("</url>"))
+        .and_then(|(url, _)| url.rsplit_once(':'))
+        .map(|(_, port)| port.to_owned())
+        .unwrap_or_else(|| panic!("no lab-lo profile URL in {body:?}"))
+}
+
 /// The fixture README's substitution, in its order.
-fn sanitise(live: &str) -> String {
+fn sanitise(live: &str, registrar_port: &str) -> String {
     let text = live
+        .replace(
+            &format!("127.0.0.1:{registrar_port}"),
+            &format!("127.0.0.1:{CAPTURED_SIP_PORT}"),
+        )
         .replace("127.0.0.1", "192.0.2.1")
         .replace("[::1]", "[2001:db8::1]");
     replace_at_word_end(&text, "@default", "@pbx.example.com").replace(
@@ -198,6 +221,7 @@ async fn live_group_call_output_matches_the_fixtures() {
     names.sort();
     assert!(!names.is_empty(), "no fixture found in {:?}", fixture_dir());
 
+    let registrar_port = registrar_port(&client).await;
     let mut drifted = Vec::new();
     let mut unrendered = Vec::new();
     let mut parsed = 0;
@@ -209,7 +233,9 @@ async fn live_group_call_output_matches_the_fixtures() {
             .unwrap_or_else(|e| panic!("{name}: {e}"));
         let live = live_group_call(&client, group, flag).await;
 
-        if registered_legs_sorted(&sanitise(&live)) != registered_legs_sorted(&fixture) {
+        if registered_legs_sorted(&sanitise(&live, &registrar_port))
+            != registered_legs_sorted(&fixture)
+        {
             drifted.push(format!("{name}: live {live:?}, fixture {fixture:?}"));
         }
         // A list the switch itself cannot read on a carrier has nothing to render there.
