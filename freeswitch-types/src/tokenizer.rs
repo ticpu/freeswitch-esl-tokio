@@ -317,6 +317,28 @@ pub(crate) fn separate_on(body: &[Traced], delim: char, limit: usize) -> Separat
     }
 }
 
+/// A split that must leave its text whole cut it, or a quote held a delimiter.
+#[cfg(feature = "esl")]
+pub(crate) struct ArgvCut;
+
+/// The one token [`separate_on`] leaves of `text` on `delim`, or `None` for an empty text.
+#[cfg(feature = "esl")]
+pub(crate) fn sole_argument(text: &[Traced], delim: char) -> Result<Option<Token>, ArgvCut> {
+    let separated = separate_on(text, delim, usize::MAX);
+    if separated.held_delimiter
+        || separated
+            .tokens
+            .len()
+            > 1
+    {
+        return Err(ArgvCut);
+    }
+    Ok(separated
+        .tokens
+        .into_iter()
+        .next())
+}
+
 /// `switch_find_end_paren`: the index of the close matching an opener that follows
 /// any leading spaces. No escape is honoured.
 #[cfg(feature = "esl")]

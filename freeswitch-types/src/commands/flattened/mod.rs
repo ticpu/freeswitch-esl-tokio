@@ -12,7 +12,7 @@ use std::sync::Arc;
 use crate::channel::HangupCause;
 use crate::commands::endpoint::Endpoint;
 use crate::commands::originate::OriginateError;
-use crate::commands::variables::{DialStringTarget, Variables, VariablesType};
+use crate::commands::variables::{write_escaped, DialStringTarget, Variables, VariablesType};
 use crate::variables::VariableName;
 use pipeline::{
     names_a_variable, str2cause, Block, DialList, Leg, Pair, PairEffect, PipelineError, Thread,
@@ -408,9 +408,17 @@ impl fmt::Display for FlattenedDialStringDisplay<'_> {
             Render::Raw => self
                 .list
                 .write_raw(f),
-            Render::For(target) => self
-                .list
-                .write_for(f, target),
+            Render::For(target) => match target.argv_separator() {
+                Some(sep) => write_escaped(
+                    f,
+                    sep,
+                    self.list
+                        .display_for(target.inner()),
+                ),
+                None => self
+                    .list
+                    .write_for(f, target),
+            },
         }
     }
 }

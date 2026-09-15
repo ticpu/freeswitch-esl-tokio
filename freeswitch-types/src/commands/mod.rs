@@ -42,8 +42,8 @@ pub use originate::{
     OriginateTarget, ParseDialplanTypeError, Variables, VariablesType,
 };
 pub use variables::{
-    BlockParse, DialStringCarrier, DialStringTarget, ParseBlockParseError, UnvouchedVersion,
-    VariablesDisplay,
+    BlockParse, DialStringCarrier, DialStringTarget, InvalidArgvSeparator, ParseBlockParseError,
+    UnvouchedVersion, VariablesDisplay,
 };
 
 use crate::tokenizer::{blank_delim_spans, char_delim_spans, delimiter_override, trace};

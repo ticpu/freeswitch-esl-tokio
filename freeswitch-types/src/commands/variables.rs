@@ -4,10 +4,13 @@
 //! (`c2c59645f6911a76589e5008c4d73349ded44b65`).
 
 use indexmap::IndexMap;
+use std::borrow::Cow;
 use std::fmt;
+use std::fmt::Write as _;
 use std::str::FromStr;
 
 use super::originate::OriginateError;
+use crate::tokenizer::{sole_argument, trace, untrace, ArgvCut};
 use crate::version::FreeswitchVersion;
 
 /// Scope for channel variables in an originate command.
@@ -250,12 +253,136 @@ impl fmt::Display for ParseBlockParseError {
 
 impl std::error::Error for ParseBlockParseError {}
 
-/// Where a dial string is headed: the command carrying it and the block-parser
-/// revision of the switch reading it.
+/// Where a dial string is headed: the command carrying it, the block-parser
+/// revision of the switch reading it, and the split cutting that command's arguments.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DialStringTarget {
     carrier: DialStringCarrier,
     block_parse: BlockParse,
+    argument: ArgumentPass,
+}
+
+/// The pass cutting a dial string out of its command's arguments.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ArgumentPass {
+    /// The carrier's own pass.
+    Blank,
+    /// `originate` after a leading `^^<sep>`.
+    Char(char),
+    /// Escaped for at the rendered argument's edge, so the renders inside it skip the pass.
+    Consumed,
+}
+
+/// Why a [`DialStringTarget`] takes no argument separator.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum InvalidArgvSeparator {
+    /// The carrier hands the dial string over whole, so no argument split reads it.
+    WrongCarrier(DialStringCarrier),
+    /// A separator [`DialStringTarget::with_argv_separator`] refuses.
+    Unusable(char),
+}
+
+impl fmt::Display for InvalidArgvSeparator {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::WrongCarrier(carrier) => {
+                write!(f, "the {carrier:?} carrier takes no argument separator")
+            }
+            Self::Unusable(sep) => write!(f, "{sep:?} cannot separate originate's arguments"),
+        }
+    }
+}
+
+impl std::error::Error for InvalidArgvSeparator {}
+
+/// Space, controls, non-ASCII, `\`, `'` and lowercase `n r t s` break the switch's split or its
+/// escapes; the dial-string grammar's characters and other alphanumerics are refused as policy.
+fn usable_argv_separator(sep: char) -> bool {
+    sep.is_ascii_graphic()
+        && !sep.is_ascii_alphanumeric()
+        && !matches!(
+            sep,
+            '\\' | '\'' | '^' | '"' | ',' | '|' | '[' | ']' | '{' | '}' | '<' | '>' | '=' | ':'
+        )
+}
+
+/// Escapes for one `cleanup_separated_string` on `sep`: `\`, `'` and `sep` take a backslash,
+/// newline, CR and tab their letter, and a space at either edge reads `\s`.
+struct ArgumentEscape<W> {
+    out: W,
+    sep: char,
+    started: bool,
+    spaces: usize,
+}
+
+impl<W: fmt::Write> fmt::Write for ArgumentEscape<W> {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        for c in s.chars() {
+            if c == ' ' && self.started {
+                self.spaces += 1;
+                continue;
+            }
+            for _ in 0..std::mem::take(&mut self.spaces) {
+                self.out
+                    .write_char(' ')?;
+            }
+            self.started = true;
+            match c {
+                ' ' => self
+                    .out
+                    .write_str(r"\s")?,
+                '\n' => self
+                    .out
+                    .write_str(r"\n")?,
+                '\r' => self
+                    .out
+                    .write_str(r"\r")?,
+                '\t' => self
+                    .out
+                    .write_str(r"\t")?,
+                c if c == '\\' || c == '\'' || c == self.sep => {
+                    self.out
+                        .write_char('\\')?;
+                    self.out
+                        .write_char(c)?;
+                }
+                c => self
+                    .out
+                    .write_char(c)?,
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Write `inner` as one argument of the split on `sep`.
+pub(crate) fn write_escaped(
+    out: impl fmt::Write,
+    sep: char,
+    inner: impl fmt::Display,
+) -> fmt::Result {
+    let mut escape = ArgumentEscape {
+        out,
+        sep,
+        started: false,
+        spaces: 0,
+    };
+    write!(escape, "{inner}")?;
+    let Some(kept) = escape
+        .spaces
+        .checked_sub(1)
+    else {
+        return Ok(());
+    };
+    for _ in 0..kept {
+        escape
+            .out
+            .write_char(' ')?;
+    }
+    escape
+        .out
+        .write_str(r"\s")
 }
 
 impl DialStringTarget {
@@ -264,7 +391,76 @@ impl DialStringTarget {
         Self {
             carrier,
             block_parse: BlockParse::default(),
+            argument: ArgumentPass::Blank,
         }
+    }
+
+    /// Split `originate`'s arguments on `sep`, as a line opening with `^^<sep>` asks the switch.
+    ///
+    /// The dial string is one argument of that split: rendered, it is escaped once for the
+    /// split's cleanup; parsed, that cleanup runs first and a second argument is refused.
+    ///
+    /// Refused: separators the switch splits or unescapes wrongly (space, `\`, `'`, lowercase
+    /// `n r t s`, controls, non-ASCII) and, as policy, `^ " , | [ ] { } < > = :` and every other
+    /// letter or digit. A `'` separator pairs with the next one as quotes.
+    pub fn with_argv_separator(mut self, sep: char) -> Result<Self, InvalidArgvSeparator> {
+        match self.carrier {
+            DialStringCarrier::EslApi => {}
+            DialStringCarrier::Dialplan => {
+                return Err(InvalidArgvSeparator::WrongCarrier(self.carrier))
+            }
+        }
+        if !usable_argv_separator(sep) {
+            return Err(InvalidArgvSeparator::Unusable(sep));
+        }
+        self.argument = ArgumentPass::Char(sep);
+        Ok(self)
+    }
+
+    /// The separator cutting `originate`'s arguments in place of the blank split.
+    pub fn argv_separator(&self) -> Option<char> {
+        match self.argument {
+            ArgumentPass::Char(sep) => Some(sep),
+            ArgumentPass::Blank | ArgumentPass::Consumed => None,
+        }
+    }
+
+    /// `text` escaped as one argument of the [`argv_separator`](Self::argv_separator) split, or
+    /// `None` without one: the blank split has no escape that inverts it.
+    pub fn escape_argument<'a>(&self, text: &'a str) -> Option<Cow<'a, str>> {
+        let sep = self.argv_separator()?;
+        let plain = !text.starts_with(' ')
+            && !text.ends_with(' ')
+            && !text.contains(['\\', '\'', '\n', '\r', '\t', sep]);
+        if plain {
+            return Some(Cow::Borrowed(text));
+        }
+        let mut escaped = String::with_capacity(text.len() + 8);
+        // Writing to a String cannot fail.
+        write_escaped(&mut escaped, sep, text).ok()?;
+        Some(Cow::Owned(escaped))
+    }
+
+    /// This target inside an argument already escaped for its split.
+    pub(crate) fn inner(mut self) -> Self {
+        if let ArgumentPass::Char(_) = self.argument {
+            self.argument = ArgumentPass::Consumed;
+        }
+        self
+    }
+
+    /// What this target's argument split leaves of `s`, and the target reading that.
+    pub(crate) fn read_argument(self, s: &str) -> Result<(Cow<'_, str>, Self), OriginateError> {
+        let Some(sep) = self.argv_separator() else {
+            return Ok((Cow::Borrowed(s), self));
+        };
+        let token = sole_argument(&trace(s), sep).map_err(|ArgvCut| {
+            OriginateError::ParseError(format!(
+                "the {sep:?} argument separator cuts the dial string"
+            ))
+        })?;
+        let argument = token.map_or_else(String::new, |token| untrace(&token.text));
+        Ok((Cow::Owned(argument), self.inner()))
     }
 
     /// Target a switch running `block_parse`.
@@ -284,9 +480,14 @@ impl DialStringTarget {
     }
 
     fn passes(self, scope: VariablesType) -> u32 {
-        1 + self
-            .block_parse
-            .cleanup_passes()
+        let argument = match self.argument {
+            ArgumentPass::Blank | ArgumentPass::Char(_) => 1,
+            ArgumentPass::Consumed => 0,
+        };
+        argument
+            + self
+                .block_parse
+                .cleanup_passes()
             + scope.leg_split_passes()
     }
 
@@ -656,8 +857,23 @@ pub struct VariablesDisplay<'a> {
 
 impl fmt::Display for VariablesDisplay<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.vars
-            .write_for(f, self.target)
+        match self
+            .target
+            .argv_separator()
+        {
+            Some(sep) => write_escaped(
+                f,
+                sep,
+                self.vars
+                    .display_for(
+                        self.target
+                            .inner(),
+                    ),
+            ),
+            None => self
+                .vars
+                .write_for(f, self.target),
+        }
     }
 }
 
@@ -726,8 +942,10 @@ impl Variables {
     /// [`DialStringCarrier::EslApi`] default as [`Display`](fmt::Display), so
     /// the two round-trip.
     pub fn parse_for(s: &str, target: impl Into<DialStringTarget>) -> Result<Self, OriginateError> {
-        let target = target.into();
-        let s = s.trim();
+        let (argument, target) = target
+            .into()
+            .read_argument(s)?;
+        let s = argument.trim();
         if s.len() < 2 {
             return Err(OriginateError::ParseError(
                 "variable block too short".into(),

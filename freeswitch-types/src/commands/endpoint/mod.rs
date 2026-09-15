@@ -98,7 +98,9 @@ use std::str::FromStr;
 
 use super::find_matching_bracket;
 use super::originate::OriginateError;
-use super::variables::{DialStringCarrier, DialStringTarget, Variables, VariablesType};
+use super::variables::{
+    write_escaped, DialStringCarrier, DialStringTarget, Variables, VariablesType,
+};
 
 type PrefixParser = fn(&str) -> Result<Endpoint, OriginateError>;
 
@@ -314,10 +316,13 @@ impl Endpoint {
     /// mirroring [`display_for`](Self::display_for). [`FromStr`] uses the
     /// [`DialStringCarrier::EslApi`] default.
     pub fn parse_for(s: &str, target: impl Into<DialStringTarget>) -> Result<Self, OriginateError> {
+        let (argument, target) = target
+            .into()
+            .read_argument(s)?;
         // Take the leading block at the caller's target, then let the endpoint
         // parse what is left; re-attaching avoids every endpoint's FromStr
         // having to thread a target it would only forward.
-        let (variables, rest) = extract_variables(s, target.into())?;
+        let (variables, rest) = extract_variables(&argument, target)?;
         let mut endpoint = Self::parse_bare(rest)?;
         if variables.is_some() {
             endpoint.set_variables(variables);
@@ -395,8 +400,23 @@ pub struct EndpointDisplay<'a> {
 
 impl fmt::Display for EndpointDisplay<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.endpoint
-            .write_for(f, self.target)
+        match self
+            .target
+            .argv_separator()
+        {
+            Some(sep) => write_escaped(
+                f,
+                sep,
+                self.endpoint
+                    .display_for(
+                        self.target
+                            .inner(),
+                    ),
+            ),
+            None => self
+                .endpoint
+                .write_for(f, self.target),
+        }
     }
 }
 
