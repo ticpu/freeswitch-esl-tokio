@@ -31,6 +31,16 @@ fn owned(tokens: impl IntoIterator<Item = String>) -> Vec<Vec<u8>> {
         .collect()
 }
 
+/// CI fetches the pinned source, so an oracle missing there is a broken fetch, never a skip.
+#[test]
+fn the_oracle_is_built_under_ci() {
+    if std::env::var_os("CI").is_some_and(|ci| ci == "true") {
+        if let Some(missing) = freeswitch_c_oracle::missing() {
+            panic!("CI runs the C oracle, which was not built: {missing}");
+        }
+    }
+}
+
 const CLEANUP_DELIMS: &[u8] = &[0, b',', b'~', b' ', b'|', b'=', b'\'', b'\\', b'n', b':'];
 const SPLIT_DELIMS: &[u8] = b" ,|=~:'";
 const LIMITS: &[u32] = &[1, 2, 3, 10, 128, 1024];
