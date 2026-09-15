@@ -24,3 +24,4 @@ cc f8aa4ed29873135b186aba2cc2b8a9c832f4f09eaa839c3935b6c604473d9042 # shrinks to
 cc 4e46e62bbec9d77bc1ab910c4c063bdb88a8ac768a4495d79dc55bb946c58353 # shrinks to bare = SofiaGateway(SofiaGateway { gateway: "_:", destination: "", profile: Some(""), variables: None }), vars = None
 cc 7eeba3976acefc72134ea9b4ea545fe093662e562fbc913d21decf7894aa4ace # shrinks to Some("originate loopback/9199/test park: inline")
 cc 079644f8d5d30368471303a208a8a9fe35022669d964cef413a73482d4e38f30 # shrinks to Some("originate ^^é '")
+cc 29f48b45cbaa60418ed23c5ff3165d5ab7b4ab6afe5fc1842e5aa093ae39df24 # shrinks to ('\0', [("park", None)], false)

@@ -2196,6 +2196,40 @@ mod tests {
         assert!(matches!(err, OriginateError::InvalidInlineDelimiter(':')));
     }
 
+    /// The hunt's split pairs quotes, reads `\n r t s` as escapes and takes a non-ASCII
+    /// separator as one byte, so such a separator never carries every argument.
+    #[test]
+    fn inline_delimiter_refuses_what_breaks_the_hunt_split() {
+        let parsed = [
+            ' ', '\'', '\\', ':', '\t', '\n', '\u{1}', '\u{7f}', 'n', 'r', 't', 's',
+        ];
+        for delimiter in parsed
+            .into_iter()
+            .chain(['é'])
+        {
+            assert_eq!(
+                Originate::inline_with_delimiter(null_endpoint(), [Application::park()], delimiter),
+                Err(OriginateError::InvalidInlineDelimiter(delimiter)),
+                "{delimiter:?}"
+            );
+        }
+        for delimiter in parsed {
+            let list = originate_quote(&format!("m:{delimiter}:park"));
+            let line = format!("originate loopback/9199 {list} inline");
+            assert_eq!(
+                line.parse::<Originate>(),
+                Err(OriginateError::InvalidInlineDelimiter(delimiter)),
+                "{line:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn invalid_inline_delimiter_display_omits_it() {
+        let shown = OriginateError::InvalidInlineDelimiter('~').to_string();
+        assert!(!shown.contains('~'), "{shown}");
+    }
+
     /// An explicit separator that appears in an argument is escaped like any
     /// other, so naming one never has to be conditional on the data.
     #[test]
