@@ -26,10 +26,11 @@ UUID; see [Writing a live test](#writing-a-live-test).
 
 ## Session admission rate
 
-**This is the one that bites.** The suite raises `sessions-per-second` to 1000
-before the first test connects, and leaves it raised. It's issued once per
-live test binary rather than once per run -- `fsctl sps` is idempotent, so a
-switch shared across binaries just gets the same value set more than once.
+**This is the one that bites.** The suite raises `sessions-per-second` and
+`max-sessions` to 1000 before the first test connects, and leaves them raised.
+They are issued once per live test binary rather than once per run -- `fsctl sps`
+and `fsctl max_sessions` are idempotent, so a switch shared across binaries just
+gets the same values set more than once.
 
 A loopback originate costs two sessions and the bowout pair costs four, so five
 tests originating at once burst well past a stock rate limit — peaks of ~90/s
@@ -40,7 +41,9 @@ are normal. Over the limit, `switch_core_session_request_uuid()` returns NULL
 
 The symptom is distinctive and misleading: a different test fails each run,
 every one passes on its own, and nothing correlates with the code under test.
-FreeSWITCH's own default is 30, which is not enough either.
+FreeSWITCH's own default is 30, which is not enough either. A `max-sessions` cap
+fails the same way once concurrent sessions reach it, and the escaping matrices
+hold enough at once to reach a small one.
 
 It is raised at runtime rather than required in config so a fresh switch works
 unconfigured. It is not restored: a parallel suite has no reliable

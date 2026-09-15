@@ -23,14 +23,16 @@ pub const ESL_PORT: u16 = 8022;
 pub const ESL_PASSWORD: &str = DEFAULT_ESL_PASSWORD;
 pub const MAX_CONCURRENT_CONNECTIONS: usize = 5;
 pub const REQUIRED_SPS: u32 = 1000;
+pub const REQUIRED_MAX_SESSIONS: u32 = 1000;
 
 pub static CONN_SEMAPHORE: Semaphore = Semaphore::const_new(MAX_CONCURRENT_CONNECTIONS);
 pub static SPS_RAISED: OnceCell<()> = OnceCell::const_new();
 
-/// Raise the switch's session admission rate for the whole suite.
+/// Raise the switch's session admission rate and session cap for the whole suite.
 ///
 /// Each loopback originate costs two sessions and the bowout pair costs four,
-/// so a parallel run bursts far past a stock `sessions-per-second`. Past it,
+/// so a parallel run bursts far past a stock `sessions-per-second` and holds
+/// more concurrent sessions than a small `max-sessions`. Past either,
 /// `switch_core_session_request_uuid` returns NULL and the originate comes
 /// back `-ERR DESTINATION_OUT_OF_ORDER` -- surfacing as a random unrelated
 /// test failing, a different one each run.
@@ -38,17 +40,24 @@ pub static SPS_RAISED: OnceCell<()> = OnceCell::const_new();
 /// Raised once per binary and deliberately left raised: a parallel suite has
 /// no reliable last-test-finished hook to restore it from, and a
 /// half-restored throttle would reintroduce exactly the flakiness this
-/// removes. `fsctl sps` is idempotent, so each live binary raising it again
-/// on its own first connection is harmless.
+/// removes. Both `fsctl` settings are idempotent, so each live binary raising
+/// them again on its own first connection is harmless.
 pub async fn raise_session_throttle(client: &EslClient) {
     SPS_RAISED
         .get_or_init(|| async {
-            let resp = client
-                .api(&format!("fsctl sps {}", REQUIRED_SPS))
-                .await
-                .expect("fsctl sps: transport error");
-            resp.api_result()
-                .expect("fsctl sps rejected -- the ESL user needs it in esl-allowed-api");
+            for command in [
+                format!("fsctl sps {}", REQUIRED_SPS),
+                format!("fsctl max_sessions {}", REQUIRED_MAX_SESSIONS),
+            ] {
+                let resp = client
+                    .api(&command)
+                    .await
+                    .unwrap_or_else(|e| panic!("{command}: transport error: {e:?}"));
+                resp.api_result()
+                    .unwrap_or_else(|e| {
+                        panic!("{command} rejected -- the ESL user needs fsctl in esl-allowed-api: {e:?}")
+                    });
+            }
         })
         .await;
 }
