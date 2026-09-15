@@ -5,7 +5,7 @@
 use std::str::FromStr;
 use std::time::Duration;
 
-use freeswitch_c_oracle::{Action, Oracle};
+use freeswitch_c_oracle::{against_the_c, config, Action, Oracle};
 use proptest::collection::vec;
 use proptest::option;
 use proptest::prelude::*;
@@ -24,7 +24,7 @@ use crate::switch_passes::expansion::names_a_variable;
 use crate::switch_passes::pipeline;
 use crate::switch_passes::separate::separate;
 use crate::switch_passes::{trace, untrace};
-use crate::test_text::{against_the_c, config, opens_with_a_non_ascii_head, text};
+use crate::test_text::{opens_with_a_non_ascii_head, text};
 use crate::variables::VariableName;
 
 fn scope() -> impl Strategy<Value = VariablesType> {

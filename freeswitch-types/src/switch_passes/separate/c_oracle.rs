@@ -7,7 +7,9 @@ use super::{
     argument_head, cleanup, find_end_paren, separate, separate_on, separate_string_string, Head,
 };
 use crate::switch_passes::{trace, untrace};
-use crate::test_text::{against_the_c, opens_with_a_non_ascii_head, text};
+use freeswitch_c_oracle::against_the_c;
+
+use crate::test_text::{opens_with_a_non_ascii_head, text};
 
 /// Text that may open with a `^^X` head, ASCII or not.
 fn line() -> impl Strategy<Value = String> {

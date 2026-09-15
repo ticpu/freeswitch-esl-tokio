@@ -1,12 +1,13 @@
 //! The dialplan carrier's expansion against the switch's own C on every built tree.
 
+use freeswitch_c_oracle::against_the_c;
 use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest::sample::select;
 
 use super::expand_escapes;
 use crate::switch_passes::{trace, untrace};
-use crate::test_text::{against_the_c, text};
+use crate::test_text::text;
 
 /// Text weighted toward what the dialplan carrier's expansion reads: references, escapes, `$$`.
 fn expansion_text() -> impl Strategy<Value = String> {

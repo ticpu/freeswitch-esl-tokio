@@ -1,7 +1,7 @@
 //! `switch_ivr_originate`'s passes over a dial string, and `switch_true`, against the switch's own
 //! C on every built tree.
 
-use freeswitch_c_oracle::{Dial, Pair};
+use freeswitch_c_oracle::{against_the_c, Dial, Pair};
 use proptest::collection::vec;
 use proptest::option;
 use proptest::prelude::*;
@@ -12,7 +12,7 @@ use crate::switch_passes::brackets::c_oracle::{block_text, installed, unmodelled
 use crate::switch_passes::brackets::{self, Block, PairEffect};
 use crate::switch_passes::expansion::enterprise_nests;
 use crate::switch_passes::{trace, PipelineError};
-use crate::test_text::{against_the_c, text};
+use crate::test_text::text;
 
 fn spaces() -> impl Strategy<Value = &'static str> {
     select(&["", "", " ", "  "][..])

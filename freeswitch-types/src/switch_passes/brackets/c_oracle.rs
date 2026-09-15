@@ -1,6 +1,6 @@
 //! `switch_event_create_brackets` against the switch's own C on every built tree.
 
-use freeswitch_c_oracle::Pair;
+use freeswitch_c_oracle::{against_the_c, Pair};
 use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest::sample::select;
@@ -9,7 +9,7 @@ use super::{parse_block, Block, PairEffect};
 use crate::switch_passes::originate_legs::UNQUOTED_ESC_COMMA;
 use crate::switch_passes::separate::CBuffer;
 use crate::switch_passes::{trace, untrace, Traced};
-use crate::test_text::{against_the_c, text};
+use crate::test_text::text;
 
 /// The headers installing `blocks` adds, as the switch hands them to the event.
 pub(crate) fn installed<'a>(blocks: impl IntoIterator<Item = &'a Block>) -> Vec<Pair> {
