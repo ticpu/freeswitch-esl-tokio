@@ -15,6 +15,10 @@ pub(crate) mod escape;
 #[cfg(feature = "esl")]
 pub(crate) mod expansion;
 #[cfg(feature = "esl")]
+pub(crate) mod inline_hunt;
+#[cfg(feature = "esl")]
+pub(crate) mod originate_function;
+#[cfg(feature = "esl")]
 pub(crate) mod originate_legs;
 #[cfg(feature = "esl")]
 pub(crate) mod pipeline;

@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 7eeba3976acefc72134ea9b4ea545fe093662e562fbc913d21decf7894aa4ace # shrinks to Some("originate loopback/9199/test park: inline")
+cc 079644f8d5d30368471303a208a8a9fe35022669d964cef413a73482d4e38f30 # shrinks to Some("originate ^^é '")

@@ -219,4 +219,4 @@ client.api(&dtmf.to_string()).await?;
 # }
 ```
 
-Output strings are verified by unit tests in [originate.rs](../../freeswitch-types/src/commands/originate.rs), [endpoint/](../../freeswitch-types/src/commands/endpoint/), [bridge.rs](../../freeswitch-types/src/commands/bridge.rs), [channel.rs](../../freeswitch-types/src/commands/channel.rs), and [conference.rs](../../freeswitch-types/src/commands/conference.rs).
+Output strings are verified by unit tests in [originate/](../../freeswitch-types/src/commands/originate/), [endpoint/](../../freeswitch-types/src/commands/endpoint/), [bridge.rs](../../freeswitch-types/src/commands/bridge.rs), [channel.rs](../../freeswitch-types/src/commands/channel.rs), and [conference.rs](../../freeswitch-types/src/commands/conference.rs).
