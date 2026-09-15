@@ -388,6 +388,42 @@ mod tests {
         assert_eq!(result[1], "sofia/test");
     }
 
+    /// Measured on a live switch: `\\'` escapes the backslash, so the quote opens
+    /// a region the rest of the line never closes and `originate` answers usage.
+    #[test]
+    fn split_quote_after_escaped_backslash_opens_a_region() {
+        assert!(matches!(
+            originate_split(r"originate {v=x\\'y z}loopback/9199/test &park()", ' '),
+            Err(OriginateError::UnclosedQuote(_))
+        ));
+    }
+
+    /// Measured on a live switch: the backslash escapes the space, one argument.
+    #[test]
+    fn split_escaped_space_does_not_split() {
+        assert_eq!(
+            originate_split(r"originate {v=a\ b}loopback/9199/test &park()", ' ').unwrap(),
+            ["originate", r"{v=a\ b}loopback/9199/test", "&park()"]
+        );
+    }
+
+    /// Only a space separates, and only a space is trimmed.
+    #[test]
+    fn split_keeps_a_tab() {
+        assert_eq!(
+            originate_split("originate x\t y", ' ').unwrap(),
+            ["originate", "x\t", "y"]
+        );
+    }
+
+    /// A comma split toggles on a quote only when another quote follows it, and
+    /// keeps the empty token between two separators.
+    #[test]
+    fn split_on_comma_follows_the_char_delimiter_rules() {
+        assert_eq!(originate_split("a'b,c", ',').unwrap(), ["a'b", "c"]);
+        assert_eq!(originate_split("a,,b", ',').unwrap(), ["a", "", "b"]);
+    }
+
     #[test]
     fn parse_target_bare_extension() {
         let target = parse_originate_target("123", None).unwrap();
