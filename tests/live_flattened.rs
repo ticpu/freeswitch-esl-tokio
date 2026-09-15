@@ -1037,8 +1037,13 @@ fn argv_target(sep: char) -> DialStringTarget {
         .unwrap_or_else(|e| panic!("{sep:?}: {e}"))
 }
 
-/// Runs of three or more backslashes: the depths a quote or a literal backslash is written at.
-fn deep_escapes(text: &str) -> Vec<usize> {
+/// Runs of three or more backslashes: the depths a quote or a literal backslash is written at,
+/// the backslash escaping `sep` itself not counted.
+fn deep_escapes(text: &str, sep: Option<char>) -> Vec<usize> {
+    let text = match sep {
+        Some(sep) => text.replace(&format!("\\{sep}"), &sep.to_string()),
+        None => text.to_owned(),
+    };
     text.split(|c| c != '\\')
         .map(str::len)
         .filter(|&run| run >= 3)
@@ -1115,8 +1120,8 @@ async fn escaping_at_an_argv_separator(scope: VariablesType) {
                     .display_for(target)
                     .to_string();
                 assert_eq!(
-                    deep_escapes(&at_sep),
-                    deep_escapes(&at_api),
+                    deep_escapes(&at_sep, Some(sep)),
+                    deep_escapes(&at_api, None),
                     "{label}: {at_sep} is not escaped as deep as {at_api}"
                 );
                 let endpoint = Endpoint::Loopback(

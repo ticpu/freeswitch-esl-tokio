@@ -354,6 +354,14 @@ pub const ESCAPING_CASES: &[(&str, &[(&str, &str)])] = &[
         "edge spaces in a value",
         &[("p1", " lead and trail "), ("p2", "SENTINEL")],
     ),
+    (
+        "argv separators in a value",
+        &[("p1", "x~y!z!"), ("p2", "SENTINEL")],
+    ),
+    (
+        "escaped argv separators",
+        &[("p1", r"a\~b\!c"), ("p2", "SENTINEL")],
+    ),
 ];
 
 /// `lead` goes in first, so a value that eats its separator damages a variable
@@ -381,7 +389,7 @@ pub fn escaping_block(
 
 /// Appears in none of [`ESCAPING_CASES`], which is what `with_separator`
 /// demands and what keeps a comma ordinary text inside the block.
-pub const ESCAPING_SEPARATOR: char = '~';
+pub const ESCAPING_SEPARATOR: char = ';';
 
 /// `Variables` refuses a quote in channel scope, so those rows have no wire
 /// form to measure there; `live_channel_scope_pairs_quotes_across_values` in

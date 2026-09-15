@@ -300,15 +300,20 @@ async fn live_originate_argv_separator_timeout_is_read() {
     let (short, short_line, short_elapsed) = unanswered_originate_elapsed(&client, 1).await;
     let (long, long_line, long_elapsed) = unanswered_originate_elapsed(&client, 3).await;
 
-    assert!(short.is_err(), "{short_line} answered {short:?}");
-    assert!(long.is_err(), "{long_line} answered {long:?}");
-    assert!(
-        short_elapsed < Duration::from_millis(2500),
-        "{short_line} took {short_elapsed:?}"
-    );
+    for (reply, line) in [(&short, &short_line), (&long, &long_line)] {
+        assert!(
+            matches!(reply, Err(e) if !matches!(e, freeswitch_esl_tokio::EslError::Timeout { .. })),
+            "{line} answered {reply:?}"
+        );
+    }
+    // Load on a shared switch only lengthens both, so a floor and their gap hold under it.
     assert!(
         long_elapsed >= Duration::from_millis(2800),
         "{long_line} took {long_elapsed:?}"
+    );
+    assert!(
+        long_elapsed >= short_elapsed + Duration::from_millis(1000),
+        "{short_line} took {short_elapsed:?}, {long_line} took {long_elapsed:?}"
     );
 }
 
