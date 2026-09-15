@@ -9,18 +9,20 @@ mod live_common;
 
 use freeswitch_esl_tokio::commands::originate::{Variables, VariablesType};
 use freeswitch_esl_tokio::commands::{
-    DialStringCarrier, ExecuteOn, LoopbackEndpoint, UuidGetVar, UuidKill, UuidSetVar,
+    DialStringCarrier, ExecuteOn, LoopbackEndpoint, SofiaEndpoint, UserEndpoint, UuidGetVar,
+    UuidKill, UuidSetVar,
 };
+use freeswitch_esl_tokio::variables::SofiaVariable;
 use freeswitch_esl_tokio::ExecuteOptions;
 use freeswitch_esl_tokio::{
-    parse_channel_dump, Application, ChannelTimetable, ChannelVariable, CommandFailure,
-    DialplanType, Endpoint, EslEventType, EventFormat, EventHeader, HeaderLookup, Originate,
-    TimetableField, TimetablePrefix,
+    parse_channel_dump, Application, BridgeDialString, ChannelTimetable, ChannelVariable,
+    CommandFailure, DialplanType, Endpoint, EslClient, EslEventStream, EslEventType, EventFormat,
+    EventHeader, HeaderLookup, LogLevel, Originate, TimetableField, TimetablePrefix,
 };
 use live_common::{
-    bgapi_originate_ok, carried_in, channel_exists, connect, escaping_block, getvar, kill_channel,
-    target_under_test, wait_for_own_event, wait_for_var, ChannelReaper, ESCAPING_CASES,
-    ESCAPING_SEPARATOR,
+    bgapi_originate_ok, block_parse_under_test, carried_in, channel_exists, connect,
+    escaping_block, getvar, kill_channel, target_under_test, wait_for_own_event, wait_for_var,
+    ChannelReaper, ESCAPING_CASES, ESCAPING_SEPARATOR,
 };
 use std::collections::HashSet;
 use std::time::Duration;
@@ -567,6 +569,228 @@ async fn live_uuid_kill_with_cause() {
         freeswitch_esl_tokio::HangupCause::UserBusy,
         "hangup cause should be USER_BUSY"
     );
+}
+
+// --- Endpoint text, per carrier ---
+
+const CARRIERS: [DialStringCarrier; 2] = [DialStringCarrier::EslApi, DialStringCarrier::Dialplan];
+
+/// A space, a quote, a backslash and a comma after `lead`, which tells one dial from another.
+fn hostile_field(lead: &str) -> String {
+    format!(r"{lead} it's C:\x,y")
+}
+
+async fn create_uuid(client: &EslClient) -> String {
+    client
+        .api("create_uuid")
+        .await
+        .expect("create_uuid transport error")
+        .api_result()
+        .expect("create_uuid failed")
+        .to_string()
+}
+
+/// Dial `endpoint` without waiting for the outcome: `bgapi originate` over the API carrier, an
+/// async `bridge` from a parked anchor over the dialplan one. Returns the anchor to reap.
+async fn dial_without_waiting(
+    client: &EslClient,
+    endpoint: &Endpoint,
+    carrier: DialStringCarrier,
+) -> Option<String> {
+    let block_parse = block_parse_under_test();
+    if carrier == DialStringCarrier::EslApi {
+        let cmd = Originate::application(endpoint.clone(), Application::park())
+            .display_with(block_parse)
+            .to_string();
+        client
+            .bgapi(&cmd)
+            .await
+            .unwrap_or_else(|e| panic!("{cmd}: transport error: {e}"))
+            .check()
+            .unwrap_or_else(|e| panic!("{cmd} rejected: {e}"));
+        return None;
+    }
+    let anchor = client
+        .api("originate null/anchor &park()")
+        .await
+        .expect("anchor transport error")
+        .api_result()
+        .expect("anchor originate failed")
+        .to_string();
+    let dial = BridgeDialString::new(vec![vec![endpoint.clone()]])
+        .display_with(block_parse)
+        .to_string();
+    client
+        .execute_with_options(
+            "bridge",
+            Some(&dial),
+            Some(&anchor),
+            ExecuteOptions::new().with_async(),
+        )
+        .await
+        .unwrap_or_else(|e| panic!("bridge {dial}: transport error: {e}"))
+        .check()
+        .unwrap_or_else(|e| panic!("bridge {dial} rejected: {e}"));
+    Some(anchor)
+}
+
+/// `{origination_uuid=<uuid>}` plus `extra`, so the dialled channel is found by its own uuid.
+fn uuid_block(uuid: &str, extra: &[(&str, &str)]) -> Variables {
+    let mut vars = Variables::new(VariablesType::Default);
+    vars.insert("origination_uuid", uuid);
+    for (key, value) in extra {
+        vars.insert(*key, *value);
+    }
+    vars
+}
+
+/// mod_loopback's A leg reports the extension and context it split the destination into.
+#[tokio::test]
+#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+async fn live_loopback_fields_arrive_on_either_carrier() {
+    let (client, mut events, _permit) = connect().await;
+    client
+        .subscribe_events(EventFormat::Plain, &[EslEventType::ChannelCreate])
+        .await
+        .unwrap();
+
+    for carrier in CARRIERS {
+        let uuid = create_uuid(&client).await;
+        let extension = hostile_field("ext");
+        let context = hostile_field("ctx");
+        let endpoint = Endpoint::Loopback(
+            LoopbackEndpoint::new(extension.as_str())
+                .with_context(context.as_str())
+                .with_variables(uuid_block(&uuid, &[])),
+        );
+
+        let mut reaper = ChannelReaper::new(&client);
+        reaper.track(&uuid);
+        if let Some(anchor) = dial_without_waiting(&client, &endpoint, carrier).await {
+            reaper.track(anchor);
+        }
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let created =
+            wait_for_own_event(&mut events, &uuid, EslEventType::ChannelCreate, deadline).await;
+        reaper
+            .reap()
+            .await;
+
+        let created =
+            created.unwrap_or_else(|| panic!("{carrier:?}: {endpoint} was never created"));
+        assert_eq!(
+            created.header(EventHeader::CallerDestinationNumber),
+            Some(extension.as_str()),
+            "{carrier:?}: {endpoint}"
+        );
+        assert_eq!(
+            created.header(EventHeader::CallerContext),
+            Some(context.as_str()),
+            "{carrier:?}: {endpoint}"
+        );
+    }
+}
+
+/// mod_sofia records the URL it dials; nothing listens on the discard port, so the leg ends by
+/// itself.
+#[tokio::test]
+#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+async fn live_sofia_destination_arrives_on_either_carrier() {
+    let (client, mut events, _permit) = connect().await;
+    client
+        .subscribe_events(EventFormat::Plain, &[EslEventType::ChannelCreate])
+        .await
+        .unwrap();
+
+    for carrier in CARRIERS {
+        let uuid = create_uuid(&client).await;
+        let destination = format!("sip:{}@127.0.0.1:9", hostile_field("dest"));
+        let vars = uuid_block(&uuid, &[("sofia_suppress_url_encoding", "true")]);
+        let endpoint = Endpoint::Sofia(
+            SofiaEndpoint::new("lab-lo", destination.as_str()).with_variables(vars),
+        );
+
+        let mut reaper = ChannelReaper::new(&client);
+        reaper.track(&uuid);
+        if let Some(anchor) = dial_without_waiting(&client, &endpoint, carrier).await {
+            reaper.track(anchor);
+        }
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let created =
+            wait_for_own_event(&mut events, &uuid, EslEventType::ChannelCreate, deadline).await;
+        reaper
+            .reap()
+            .await;
+
+        let created =
+            created.unwrap_or_else(|| panic!("{carrier:?}: {endpoint} was never created"));
+        assert_eq!(
+            created.variable(SofiaVariable::SipDestinationUrl),
+            Some(destination.as_str()),
+            "{carrier:?}: {endpoint}"
+        );
+    }
+}
+
+/// The log line `user_outgoing_channel` writes when the directory holds no such user, found by
+/// the uuid the name opens with.
+async fn wait_for_user_lookup(
+    events: &mut EslEventStream,
+    marker: &str,
+    deadline: Instant,
+) -> Option<String> {
+    while Instant::now() < deadline {
+        match tokio::time::timeout_at(deadline, events.recv()).await {
+            Ok(Some(Ok(evt))) => {
+                if let Some(body) = evt
+                    .body()
+                    .filter(|body| body.contains("Can't find user") && body.contains(marker))
+                {
+                    return Some(body.to_owned());
+                }
+            }
+            Ok(Some(Err(e))) => panic!("event error waiting for the lookup of {marker}: {e}"),
+            Ok(None) => panic!("event stream closed waiting for the lookup of {marker}"),
+            Err(_) => break,
+        }
+    }
+    None
+}
+
+/// mod_dptools names the user and domain it looked up.
+#[tokio::test]
+#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+async fn live_user_fields_arrive_on_either_carrier() {
+    let (client, mut events, _permit) = connect().await;
+    client
+        .log(LogLevel::Warning)
+        .await
+        .expect("log transport error")
+        .check()
+        .expect("log rejected");
+
+    for carrier in CARRIERS {
+        let marker = create_uuid(&client).await;
+        let name = hostile_field(&marker);
+        let endpoint = Endpoint::User(UserEndpoint::new(name.as_str()).with_domain("example.com"));
+
+        let mut reaper = ChannelReaper::new(&client);
+        if let Some(anchor) = dial_without_waiting(&client, &endpoint, carrier).await {
+            reaper.track(anchor);
+        }
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let logged = wait_for_user_lookup(&mut events, &marker, deadline).await;
+        reaper
+            .reap()
+            .await;
+
+        let logged =
+            logged.unwrap_or_else(|| panic!("{carrier:?}: {endpoint} was never looked up"));
+        assert!(
+            logged.contains(&format!("[{name}@example.com]")),
+            "{carrier:?}: {endpoint} logged {logged:?}"
+        );
+    }
 }
 
 // --- Dial-string escaping, per carrier ---
