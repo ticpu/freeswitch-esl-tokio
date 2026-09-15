@@ -1,6 +1,9 @@
 use std::fmt;
 
-use super::{after_prefix, check_field, parse_leg, write_module_text, write_variables};
+use super::{
+    after_prefix, check_field, parse_leg, undeliverable, write_module_text, write_variables,
+    EndpointFieldFault,
+};
 use crate::commands::originate::OriginateError;
 use crate::commands::variables::{DialStringCarrier, DialStringTarget, Variables};
 
@@ -67,8 +70,17 @@ impl AudioEndpoint {
         }
     }
 
+    /// Refuse `:_:` and an empty destination, which the module reads as none.
     pub(crate) fn check_deliverable(&self) -> Result<(), OriginateError> {
-        match &self.destination {
+        match self
+            .destination
+            .as_deref()
+        {
+            Some("") => Err(undeliverable(
+                "audio",
+                "destination",
+                EndpointFieldFault::EmptyReadsAsDefault,
+            )),
             Some(destination) => check_field("audio", "destination", destination, &[]),
             None => Ok(()),
         }

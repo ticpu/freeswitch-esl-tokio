@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use super::parse_leg;
+use super::{check_expression_field, parse_leg};
 use crate::commands::originate::OriginateError;
 use crate::commands::variables::DialStringCarrier;
 use crate::commands::variables::Variables;
@@ -24,6 +24,7 @@ wire_enum! {
 /// `${group_call(group@domain[+order])}`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(try_from = "config::GroupCall"))]
 #[non_exhaustive]
 pub struct GroupCall {
     /// Group name from the directory.
@@ -77,6 +78,14 @@ impl FromStr for GroupCall {
 }
 
 impl GroupCall {
+    /// Refuse what `group_call_function` splits, the order at its first `+` and then the domain
+    /// at `@`, and what a pass ahead of it reads.
+    pub(crate) fn check_deliverable(&self) -> Result<(), OriginateError> {
+        const KIND: &str = "group_call";
+        check_expression_field(KIND, "group", &self.group, &["+", "@"])?;
+        check_expression_field(KIND, "domain", &self.domain, &["+"])
+    }
+
     pub(crate) fn parse_bare(text: &str) -> Result<Self, OriginateError> {
         let inner = text
             .strip_prefix("${group_call(")
@@ -96,12 +105,46 @@ impl GroupCall {
         let (group, domain) = group_at_domain
             .split_once('@')
             .ok_or_else(|| OriginateError::ParseError("group_call needs group@domain".into()))?;
-        Ok(Self {
+        let ep = Self {
             group: group.into(),
             domain: domain.into(),
             order,
             variables: None,
-        })
+        };
+        ep.check_deliverable()?;
+        Ok(ep)
+    }
+}
+
+#[cfg(feature = "serde")]
+mod config {
+    use super::GroupCallOrder;
+    use crate::commands::variables::Variables;
+
+    #[derive(serde::Deserialize)]
+    pub(super) struct GroupCall {
+        pub(super) group: String,
+        pub(super) domain: String,
+        #[serde(default)]
+        pub(super) order: Option<GroupCallOrder>,
+        #[serde(default)]
+        pub(super) variables: Option<Variables>,
+    }
+}
+
+#[cfg(feature = "serde")]
+impl TryFrom<config::GroupCall> for GroupCall {
+    type Error = OriginateError;
+
+    fn try_from(config: config::GroupCall) -> Result<Self, Self::Error> {
+        let ep = Self {
+            group: config.group,
+            domain: config.domain,
+            order: config.order,
+            variables: config.variables,
+        };
+        ep.check_deliverable()?;
+        Ok(ep)
     }
 }
 

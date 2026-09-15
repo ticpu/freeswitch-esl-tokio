@@ -106,7 +106,8 @@ use super::find_matching_bracket;
 use super::flattened::pipeline::{self, PipelineError, ENTERPRISE_DELIM};
 use super::originate::OriginateError;
 use super::variables::{
-    escape_text, DialStringCarrier, DialStringTarget, EscapedField, Variables, VariablesType,
+    escape_text, unbalanced, DialStringCarrier, DialStringTarget, EscapedField, Variables,
+    VariablesType,
 };
 
 type PrefixParser = fn(&str) -> Result<Endpoint, OriginateError>;
@@ -123,8 +124,13 @@ pub enum EndpointFieldFault {
     ReadsAsGateway,
     /// Set after an `app=` loopback extension, which mod_loopback reads as that application's.
     FollowsAnApplication,
-    /// Empty, which mod_loopback replaces with its default.
+    /// Empty, which the module or function reads as its default.
     EmptyReadsAsDefault,
+    /// Carries a separator a `sofia_contact` or `group_call` function splits its argument on.
+    FunctionSeparator(&'static str),
+    /// Carries what a pass reads ahead of a `sofia_contact` or `group_call` expansion: a space,
+    /// `,`, `|`, a quote, a backslash, or an unbalanced brace or parenthesis.
+    ReadBeforeTheFunction,
 }
 
 impl fmt::Display for EndpointFieldFault {
@@ -144,10 +150,44 @@ impl fmt::Display for EndpointFieldFault {
                 "follows an app= extension, which mod_loopback reads as the application's argument",
             ),
             Self::EmptyReadsAsDefault => {
-                f.write_str("is empty, which mod_loopback replaces with its default")
+                f.write_str("is empty, which the switch reads as its default")
             }
+            Self::FunctionSeparator(sep) => write!(
+                f,
+                "carries {sep}, on which the expression's function splits its argument"
+            ),
+            Self::ReadBeforeTheFunction => f.write_str(
+                "carries a space, comma, pipe, quote, backslash or unbalanced bracket, \
+                 which a pass reads before the expression's function",
+            ),
         }
     }
+}
+
+/// Refuse `text` as `field` of the `endpoint` expression when it carries `:_:`, one of the
+/// function's `separators`, or what [`EndpointFieldFault::ReadBeforeTheFunction`] names.
+pub(super) fn check_expression_field(
+    endpoint: &'static str,
+    field: &'static str,
+    text: &str,
+    separators: &[&'static str],
+) -> Result<(), OriginateError> {
+    let fault = if text.contains(ENTERPRISE_DELIM) {
+        Some(EndpointFieldFault::EnterpriseSeparator)
+    } else if let Some(sep) = separators
+        .iter()
+        .find(|sep| text.contains(**sep))
+    {
+        Some(EndpointFieldFault::FunctionSeparator(sep))
+    } else if text.contains([' ', ',', '|', '\'', '\\'])
+        || unbalanced(text, ('{', '}')).is_some()
+        || unbalanced(text, ('(', ')')).is_some()
+    {
+        Some(EndpointFieldFault::ReadBeforeTheFunction)
+    } else {
+        None
+    };
+    fault.map_or(Ok(()), |fault| Err(undeliverable(endpoint, field, fault)))
 }
 
 pub(super) fn undeliverable(

@@ -688,9 +688,8 @@ impl From<DialStringCarrier> for DialStringTarget {
     }
 }
 
-/// Why the scope's brackets in `text` move the end the switch counts its way to.
-fn unbalanced(text: &str, vars_type: VariablesType) -> Option<String> {
-    let (open, close) = vars_type.delimiters();
+/// Why `open` and `close` in `text` move the end the switch counts its way to.
+pub(super) fn unbalanced(text: &str, (open, close): (char, char)) -> Option<String> {
     let mut depth = 0i32;
     for ch in text.chars() {
         if ch == open {
@@ -724,7 +723,7 @@ fn check_key(key: &str, vars_type: VariablesType) -> Result<(), OriginateError> 
                 .to_owned(),
         )
     } else {
-        unbalanced(key, vars_type)
+        unbalanced(key, vars_type.delimiters())
     };
     fault.map_or(Ok(()), |fault| {
         Err(OriginateError::ParseError(format!(
@@ -765,7 +764,7 @@ fn check_representable(
         )));
     }
 
-    unbalanced(value, vars_type).map_or(Ok(()), |fault| {
+    unbalanced(value, vars_type.delimiters()).map_or(Ok(()), |fault| {
         Err(OriginateError::ParseError(format!(
             "variable {key} {fault}"
         )))

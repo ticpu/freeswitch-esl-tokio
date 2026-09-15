@@ -1,6 +1,8 @@
 use std::str::FromStr;
 
-use super::{after_prefix, check_field, parse_leg, undeliverable, EndpointFieldFault};
+use super::{
+    after_prefix, check_expression_field, check_field, parse_leg, undeliverable, EndpointFieldFault,
+};
 use crate::commands::originate::OriginateError;
 use crate::commands::variables::DialStringCarrier;
 use crate::commands::variables::Variables;
@@ -61,6 +63,7 @@ pub struct SofiaGateway {
 /// lookup and falls through to the all-profiles hash iteration).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(try_from = "config::SofiaContact"))]
 #[non_exhaustive]
 pub struct SofiaContact {
     /// User part of the contact lookup.
@@ -220,6 +223,38 @@ impl SofiaGateway {
 }
 
 impl SofiaContact {
+    /// Refuse what `sofia_contact_function` splits at its first `~`, `/` and `@` and a `/` after
+    /// the domain, an empty domain or profile it replaces, and what a pass ahead of it reads.
+    pub(crate) fn check_deliverable(&self) -> Result<(), OriginateError> {
+        const KIND: &str = "sofia_contact";
+        let user_splits: &[&str] = match self.profile {
+            Some(_) => &["~", "@"],
+            None => &["~", "@", "/"],
+        };
+        check_expression_field(KIND, "user", &self.user, user_splits)?;
+        for (field, value) in [
+            ("domain", Some(&self.domain)),
+            (
+                "profile",
+                self.profile
+                    .as_ref(),
+            ),
+        ] {
+            let Some(value) = value else {
+                continue;
+            };
+            check_expression_field(KIND, field, value, &["~", "/"])?;
+            if value.is_empty() {
+                return Err(undeliverable(
+                    KIND,
+                    field,
+                    EndpointFieldFault::EmptyReadsAsDefault,
+                ));
+            }
+        }
+        Ok(())
+    }
+
     pub(crate) fn parse_bare(text: &str) -> Result<Self, OriginateError> {
         let inner = text
             .strip_prefix("${sofia_contact(")
@@ -233,12 +268,14 @@ impl SofiaContact {
         let (user, domain) = user_at_domain
             .split_once('@')
             .ok_or_else(|| OriginateError::ParseError("sofia_contact needs user@domain".into()))?;
-        Ok(Self {
+        let ep = Self {
             user: user.into(),
             domain: domain.into(),
             profile,
             variables: None,
-        })
+        };
+        ep.check_deliverable()?;
+        Ok(ep)
     }
 }
 
@@ -282,6 +319,16 @@ mod config {
     }
 
     #[derive(serde::Deserialize)]
+    pub(super) struct SofiaContact {
+        pub(super) user: String,
+        pub(super) domain: String,
+        #[serde(default)]
+        pub(super) profile: Option<String>,
+        #[serde(default)]
+        pub(super) variables: Option<Variables>,
+    }
+
+    #[derive(serde::Deserialize)]
     pub(super) struct SofiaGateway {
         pub(super) gateway: String,
         pub(super) destination: String,
@@ -315,6 +362,22 @@ impl TryFrom<config::SofiaGateway> for SofiaGateway {
         let ep = Self {
             gateway: config.gateway,
             destination: config.destination,
+            profile: config.profile,
+            variables: config.variables,
+        };
+        ep.check_deliverable()?;
+        Ok(ep)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl TryFrom<config::SofiaContact> for SofiaContact {
+    type Error = OriginateError;
+
+    fn try_from(config: config::SofiaContact) -> Result<Self, Self::Error> {
+        let ep = Self {
+            user: config.user,
+            domain: config.domain,
             profile: config.profile,
             variables: config.variables,
         };

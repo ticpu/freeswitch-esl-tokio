@@ -158,6 +158,20 @@ unchecked:
   follow the first `:` but not precede it, and a context or dialplan after it
   is read into the argument.
 - user: a name carrying `@`, where `user_outgoing_channel` starts the domain.
+- audio: an empty destination, which the module reads as none.
+- sofia_contact: a user carrying `~` or `@`, or `/` without a profile; a domain
+  or profile carrying `~` or `/`, or empty. `sofia_contact_function` cuts its
+  argument at the first `~`, then `/`, then `@`, then a `/` after the domain,
+  replaces an empty domain with the switch's default and reads an empty profile
+  as none.
+- group_call: a group carrying `+` or `@`, and a domain carrying `+`.
+  `group_call_function` takes the order at the first `+` before it looks for
+  `@`.
+- sofia_contact and group_call, any field: a space, `,`, `|`, a quote, a
+  backslash, or a brace or parenthesis left unbalanced. The expression is
+  written as it stands, so the argument split cuts it at a space or quote, the
+  leg splits at `,` or `|`, and the reference parse ends it at the first
+  unbalanced `)` or `}`. A `${…}` reference in a field is left to the switch.
 
 A sofia destination is mod_sofia's own grammar and arrives whole. Unless
 `sofia_suppress_url_encoding` is true, `protect_dest_uri` URL-encodes the user
