@@ -289,7 +289,7 @@ typedef struct switch_caller_profile {
 	const char *context;
 	switch_memory_pool_t *pool;
 } switch_caller_profile_t;
-//@ typedef src/include/switch_types.h switch_call_cause_t
+//@ declaration src/include/switch_types.h switch_call_cause_t
 #define SOF_NONE 0
 #define SCF_API_EXPANSION 0
 

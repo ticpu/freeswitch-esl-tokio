@@ -1,6 +1,6 @@
 /* switch_channel_str2cause from switch_channel.c and the table it reads. */
-//@ declaration src/switch_channel.c struct switch_cause_table {
-//@ declaration src/switch_channel.c static struct switch_cause_table CAUSE_CHART[] = {
+//@ declaration src/switch_channel.c switch_cause_table
+//@ declaration src/switch_channel.c CAUSE_CHART
 //@ function src/switch_channel.c switch_channel_str2cause
 
 int oracle_str2cause(const char *str)

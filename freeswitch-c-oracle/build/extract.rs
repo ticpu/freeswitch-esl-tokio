@@ -18,10 +18,8 @@ pub enum Directive<'a> {
         function: &'a str,
         marker: &'a str,
     },
-    /// `//@ declaration <path> <opening>`: the declaration opening on the column-0 line `opening`.
-    Declaration { path: &'a str, opening: &'a str },
-    /// `//@ typedef <path> <name>`: the `typedef` declaring `name`.
-    Typedef { path: &'a str, name: &'a str },
+    /// `//@ declaration <path> <name>`: the declaration, `typedef` or struct definition of `name`.
+    Declaration { path: &'a str, name: &'a str },
     /// `//@ after <path> <function> <anchor> => <marker>`: the statement opening on the first line
     /// reading `marker` after the one line of `function` reading `anchor`.
     After {
@@ -179,9 +177,7 @@ impl Parsed {
         let found: Vec<Node<'_>> = self
             .nodes(false)
             .into_iter()
-            .filter(|node| {
-                node.kind() == "function_definition" && self.declared_name(*node) == Some(name)
-            })
+            .filter(|node| node.kind() == "function_definition" && self.declares(*node, name))
             .collect();
         match found[..] {
             [node] => Ok(node),
@@ -192,12 +188,17 @@ impl Parsed {
         }
     }
 
-    /// The identifier a definition's declarator names, through pointers and parentheses.
-    fn declared_name(&self, node: Node<'_>) -> Option<&str> {
-        let mut node = node.child_by_field_name("declarator")?;
+    /// Whether a declarator of `node` names `name`.
+    fn declares(&self, node: Node<'_>, name: &str) -> bool {
+        node.children_by_field_name("declarator", &mut node.walk())
+            .any(|declarator| self.declared_name(declarator) == Some(name))
+    }
+
+    /// The identifier a declarator names, through pointers, arrays and parentheses.
+    fn declared_name(&self, mut node: Node<'_>) -> Option<&str> {
         loop {
             node = match node.kind() {
-                "identifier" => return Some(self.text_of(node)),
+                "identifier" | "type_identifier" => return Some(self.text_of(node)),
                 "parenthesized_declarator" => node.named_child(0)?,
                 _ => node.child_by_field_name("declarator")?,
             };
@@ -213,7 +214,6 @@ impl Directive<'_> {
             | Directive::Function { path, .. }
             | Directive::Block { path, .. }
             | Directive::Declaration { path, .. }
-            | Directive::Typedef { path, .. }
             | Directive::After { path, .. }
             | Directive::Before { path, .. } => path,
         }
@@ -227,8 +227,7 @@ impl Directive<'_> {
             Directive::Block {
                 function, marker, ..
             } => block(file, function, marker).map_err(|e| format!("{function}: {e}")),
-            Directive::Declaration { opening, .. } => declaration(file, opening),
-            Directive::Typedef { name, .. } => typedef(file, name),
+            Directive::Declaration { name, .. } => declaration(file, name),
             Directive::After {
                 function,
                 anchor,
@@ -285,10 +284,6 @@ pub fn directive(line: &str) -> Result<Option<Directive<'_>>, String> {
             }
         }
         "declaration" => Directive::Declaration {
-            path,
-            opening: argument,
-        },
-        "typedef" => Directive::Typedef {
             path,
             name: argument,
         },
@@ -393,50 +388,28 @@ pub fn beside(
     Ok(file.lines(start, end))
 }
 
-/// The declaration opening on the one line reading `opening`, through its `;`.
-pub fn declaration(file: &Parsed, opening: &str) -> Result<String, String> {
-    let starts: Vec<usize> = file
-        .reading(
-            0,
-            file.text
-                .len(),
-            opening,
-        )
-        .into_iter()
-        .filter(|&at| {
-            at == 0
-                || file
-                    .text
-                    .as_bytes()[at - 1]
-                    == b'\n'
-        })
-        .collect();
-    let [start] = starts[..] else {
-        return Err(format!(
-            "opens {opening:?} on {} lines, not one",
-            starts.len()
-        ));
-    };
-    let (start, end) = file.statement_at(start)?;
-    Ok(file.lines(start, end))
-}
-
-/// The one `typedef` declaring `name`.
-pub fn typedef(file: &Parsed, name: &str) -> Result<String, String> {
+/// The one declaration, `typedef` or struct definition naming `name`, through its `;`.
+pub fn declaration(file: &Parsed, name: &str) -> Result<String, String> {
     let found: Vec<Node<'_>> = file
         .nodes(true)
         .into_iter()
-        .filter(|node| {
-            node.kind() == "type_definition"
-                && node
-                    .children_by_field_name("declarator", &mut node.walk())
-                    .any(|declarator| file.text_of(declarator) == name)
+        .filter(|node| match node.kind() {
+            "declaration" | "type_definition" => file.declares(*node, name),
+            "struct_specifier" => {
+                node.child_by_field_name("body")
+                    .is_some()
+                    && node
+                        .child_by_field_name("name")
+                        .is_some_and(|named| file.text_of(named) == name)
+            }
+            _ => false,
         })
         .collect();
     let [node] = found[..] else {
-        return Err(format!("has {} typedefs of {name}, not one", found.len()));
+        return Err(format!("declares {name} {} times, not once", found.len()));
     };
-    Ok(file.lines(node.start_byte(), node.end_byte()))
+    let (start, end) = file.statement_at(node.start_byte())?;
+    Ok(file.lines(start, end))
 }
 
 #[cfg(test)]
@@ -649,19 +622,18 @@ typedef enum {
     fn declarations_and_typedefs_run_to_their_semicolon() {
         let file = parsed(FILE);
         assert_eq!(
-            declaration(&file, "struct pair {"),
+            declaration(&file, "pair"),
             Ok("struct pair {\n\tconst char *name;\n\tint value;\n};\n".to_owned())
         );
         assert_eq!(
-            declaration(&file, "static struct pair TABLE[] = {"),
+            declaration(&file, "TABLE"),
             Ok("static struct pair TABLE[] = {\n\t{\"A\", 1},\n\t{NULL, 0}\n};\n".to_owned())
         );
         assert_eq!(
-            typedef(&file, "number_t"),
+            declaration(&file, "number_t"),
             Ok("typedef enum {\n\tONE = 1,\n\tTWO\n} number_t;\n".to_owned())
         );
-        assert!(typedef(&file, "missing_t").is_err());
-        assert!(declaration(&file, "struct missing {").is_err());
+        assert!(declaration(&file, "missing_t").is_err());
     }
 
     #[test]
@@ -684,10 +656,10 @@ typedef enum {
             }))
         );
         assert_eq!(
-            directive("//@ declaration src/a.c static struct pair TABLE[] = {"),
+            directive("//@ declaration src/a.c TABLE"),
             Ok(Some(Directive::Declaration {
                 path: "src/a.c",
-                opening: "static struct pair TABLE[] = {"
+                name: "TABLE"
             }))
         );
         assert!(directive("//@ function src/a.c").is_err());
@@ -711,10 +683,10 @@ typedef enum {
             .expect("a define directive")
             .expect("a directive");
         assert_eq!(define.extract(&file), Ok("#define SHORT 1\n".to_owned()));
-        let typedef = directive("//@ typedef src/a.c number_t")
-            .expect("a typedef directive")
+        let declaration = directive("//@ declaration src/a.c number_t")
+            .expect("a declaration directive")
             .expect("a directive");
-        assert!(typedef
+        assert!(declaration
             .extract(&file)
             .is_ok());
     }

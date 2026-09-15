@@ -1,6 +1,6 @@
 /* mod_sofia's profile and gateway, reduced to the fields its destination readers touch. A lookup
    is reported, and answers only for a name the harness lists. */
-//@ typedef src/mod/endpoints/mod_sofia/mod_sofia.h sofia_transport_t
+//@ declaration src/mod/endpoints/mod_sofia/mod_sofia.h sofia_transport_t
 
 typedef struct sofia_profile {
 	const char *name;
