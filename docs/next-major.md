@@ -125,6 +125,11 @@ conventions; this one follows neither.
 
 Public, re-exported nowhere, one caller inside `Originate::from_str`.
 
+### `originate_split` should be `pub(crate)`
+
+Public, re-exported nowhere, one caller inside `Originate::parse_with`. A caller
+wanting the argument split already has it through `Originate`.
+
 
 ### `FilterDelete { header: "all" }` duplicates `FilterDeleteAll`
 

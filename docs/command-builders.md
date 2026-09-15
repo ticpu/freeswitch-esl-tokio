@@ -135,9 +135,9 @@ variable scoping documentation.
 
 **Originate** — full command: `originate {endpoint} {target} [dialplan] [context] [cid_name] [cid_num] [timeout]`
 
-**originate_split()** — quote-aware tokenizer. Splits on a delimiter (space or comma)
-while respecting single-quoted regions and backslash escapes. Ported from the Python
-`originate_split()` function.
+**originate_split()** — splits a command line the way the `originate` API splits its
+arguments: `separate_string_blank_delim` on a space, `separate_string_char_delim` on
+any other delimiter. Tokens keep their quoting, which later parsing consumes.
 
 ### Channel Commands
 

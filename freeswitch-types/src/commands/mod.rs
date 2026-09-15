@@ -40,6 +40,7 @@ pub use variables::{
     VariablesDisplay,
 };
 
+use crate::tokenizer::{blank_delim_spans, char_delim_spans};
 use originate::DEFAULT_INLINE_DELIMITER;
 
 /// Find the index of the closing bracket matching the opener at position 0.
@@ -109,61 +110,36 @@ pub fn originate_unquote(token: &str) -> String {
     }
 }
 
-/// Quote-aware tokenizer for originate command strings.
+/// Split a command line the way the `originate` API splits its arguments.
 ///
-/// Splits `line` on `split_at` (default: space), respecting single-quote
-/// pairing to avoid splitting inside quoted values. Backslash-escaped quotes
-/// are not treated as quote boundaries.
+/// On a space this is `separate_string_blank_delim` in `switch_utils.c`, on any
+/// other delimiter `separate_string_char_delim`. Tokens keep their quotes and
+/// escapes: [`originate_unquote`] and the variable-block parser consume those.
 ///
-/// Ported from Python `originate_split()`.
+/// A quote left open is an error. The switch runs the rest of the line into one
+/// argument instead, a shape nothing this crate renders produces.
 pub fn originate_split(line: &str, split_at: char) -> Result<Vec<String>, OriginateError> {
-    let mut tokens = Vec::new();
-    let mut token = String::new();
-    let mut in_quote = false;
-    let chars: Vec<char> = line
-        .chars()
-        .collect();
-    let mut i = 0;
-
-    while i < chars.len() {
-        let ch = chars[i];
-
-        if ch == split_at
-            && !in_quote
-            && !token
-                .trim()
-                .is_empty()
-        {
-            tokens.push(
-                token
-                    .trim()
-                    .to_string(),
-            );
-            token.clear();
-            i += 1;
-            continue;
-        }
-
-        if ch == '\'' && !(i > 0 && chars[i - 1] == '\\') {
-            in_quote = !in_quote;
-        }
-
-        token.push(ch);
-        i += 1;
+    if split_at != ' ' {
+        return Ok(char_delim_spans(line, split_at)
+            .into_iter()
+            .map(str::to_string)
+            .collect());
     }
-
-    if in_quote {
-        return Err(OriginateError::UnclosedQuote(token));
+    let (spans, open_quote) = blank_delim_spans(line);
+    if open_quote {
+        let last = spans
+            .last()
+            .copied()
+            .unwrap_or_default();
+        return Err(OriginateError::UnclosedQuote(last.to_string()));
     }
-
-    let token = token
-        .trim()
-        .to_string();
-    if !token.is_empty() {
-        tokens.push(token);
-    }
-
-    Ok(tokens)
+    Ok(spans
+        .into_iter()
+        .map(|t| {
+            t.trim_start_matches(' ')
+                .to_string()
+        })
+        .collect())
 }
 
 /// Split an `m:<delim>:` prefix off an inline action list.

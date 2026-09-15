@@ -2,16 +2,20 @@
 //! `cleanup_separated_string` in `switch_utils.c`, for every reader of text the
 //! switch tokenizes that way.
 
+#[cfg(feature = "sdp")]
 use std::iter::Peekable;
+#[cfg(feature = "sdp")]
 use std::str::Chars;
 
 /// Whether a matching close quote lies ahead, mirroring the C `strchr(ptr + 1, '\'')`.
+#[cfg(feature = "sdp")]
 fn has_closing_quote(rest: &Peekable<Chars<'_>>) -> bool {
     rest.clone()
         .any(|c| c == '\'')
 }
 
 /// The `\X` expansions `unescape_char` in `switch_utils.c` maps; any other `X` is `None`.
+#[cfg(feature = "sdp")]
 fn unescape_char(escaped: char) -> Option<char> {
     match escaped {
         'n' => Some('\n'),
@@ -31,42 +35,95 @@ fn unescape_char(escaped: char) -> Option<char> {
 /// are dropped, `'` is toggled (and stripped from output), and escape sequences are
 /// expanded: `\'`→`'`, `\"`→`"`, `\<delim>`→`<delim>`, `\\`→`\`, `\n`→LF, `\r`→CR,
 /// `\t`→TAB, `\s`→space; any other `\X` passes through as `\X`.
+#[cfg(feature = "sdp")]
 pub(crate) fn separate_string_char_delim(s: &str, delim: char) -> Vec<String> {
-    let mut raw_tokens: Vec<String> = Vec::new();
-    let mut current = String::new();
+    char_delim_spans(s, delim)
+        .into_iter()
+        .map(|t| cleanup_separated_string(t, delim))
+        .collect()
+}
+
+/// The raw tokens `separate_string_char_delim` cuts, before any cleanup.
+///
+/// A token starts only at a character, so a trailing delimiter and an empty input
+/// yield no token, while two adjacent delimiters yield an empty one.
+pub(crate) fn char_delim_spans(s: &str, delim: char) -> Vec<&str> {
+    let mut spans = Vec::new();
+    let mut begin = None;
     let mut inside_quotes = false;
-    let mut chars = s
-        .chars()
-        .peekable();
-    while let Some(ch) = chars.next() {
+    let mut chars = s.char_indices();
+    while let Some((i, ch)) = chars.next() {
+        let start = *begin.get_or_insert(i);
         if ch == '\\' {
-            // Backslash and the char it escapes ride into the raw token verbatim;
-            // cleanup_separated_string expands them. Skipping ahead only prevents a split.
-            if let Some(&next) = chars.peek() {
-                chars.next();
-                current.push('\\');
-                current.push(next);
-            } else {
-                current.push('\\');
-            }
-        } else if ch == '\'' {
-            // Quote state affects the split point; cleanup strips the quote itself.
-            if inside_quotes || has_closing_quote(&chars) {
-                inside_quotes = !inside_quotes;
-            }
-            current.push('\'');
+            chars.next();
+        } else if ch == '\'' && (inside_quotes || s[i + 1..].contains('\'')) {
+            inside_quotes = !inside_quotes;
         } else if ch == delim && !inside_quotes {
-            raw_tokens.push(std::mem::take(&mut current));
-        } else {
-            current.push(ch);
+            spans.push(&s[start..i]);
+            begin = None;
         }
     }
-    raw_tokens.push(current);
+    if let Some(start) = begin {
+        spans.push(&s[start..]);
+    }
+    spans
+}
 
-    raw_tokens
-        .into_iter()
-        .map(|t| cleanup_separated_string(&t, delim))
-        .collect()
+/// The raw tokens `separate_string_blank_delim` cuts on spaces, before any cleanup,
+/// and whether a quote was still open at the end.
+///
+/// Unlike the char delimiter, a quote toggles with no lookahead, and a run of
+/// spaces is one separator.
+#[cfg(feature = "esl")]
+pub(crate) fn blank_delim_spans(s: &str) -> (Vec<&str>, bool) {
+    enum State {
+        Start,
+        SkipInitialSpace,
+        FindDelim,
+        SkipEndingSpace,
+    }
+
+    let mut spans = Vec::new();
+    let mut state = State::Start;
+    let mut begin = 0;
+    let mut inside_quotes = false;
+    let mut chars = s.char_indices();
+    let mut current = chars.next();
+    while let Some((i, ch)) = current {
+        match state {
+            // START and the space skips hand the character they stop on to the
+            // next state rather than consuming it.
+            State::Start => {
+                begin = i;
+                state = State::SkipInitialSpace;
+                continue;
+            }
+            State::SkipInitialSpace if ch != ' ' => {
+                state = State::FindDelim;
+                continue;
+            }
+            State::SkipEndingSpace if ch != ' ' => {
+                state = State::Start;
+                continue;
+            }
+            State::SkipInitialSpace | State::SkipEndingSpace => {}
+            State::FindDelim => {
+                if ch == '\\' {
+                    chars.next();
+                } else if ch == '\'' {
+                    inside_quotes = !inside_quotes;
+                } else if ch == ' ' && !inside_quotes {
+                    spans.push(&s[begin..i]);
+                    state = State::SkipEndingSpace;
+                }
+            }
+        }
+        current = chars.next();
+    }
+    if matches!(state, State::SkipInitialSpace | State::FindDelim) {
+        spans.push(&s[begin..]);
+    }
+    (spans, inside_quotes)
 }
 
 /// Apply `cleanup_separated_string` logic to a single raw token.
@@ -75,6 +132,7 @@ pub(crate) fn separate_string_char_delim(s: &str, delim: char) -> Vec<String> {
 /// - Strips trailing spaces outside quotes (via `end` pointer tracking).
 /// - Strips `'` quote characters (they are not included in output).
 /// - Expands escape sequences.
+#[cfg(feature = "sdp")]
 fn cleanup_separated_string(raw: &str, delim: char) -> String {
     let mut out = String::new();
     // `end_len` tracks the length of `out` at the last non-trailing-space position.
@@ -137,7 +195,7 @@ fn cleanup_separated_string(raw: &str, delim: char) -> String {
     out
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "sdp"))]
 mod tests {
     use super::*;
 
