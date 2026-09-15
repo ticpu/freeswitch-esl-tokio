@@ -204,6 +204,8 @@ pub enum EndpointFieldFault {
     /// Carries what a pass reads ahead of a `sofia_contact` or `group_call` expansion: a space,
     /// `,`, `|`, a quote, a backslash, or an unbalanced brace or parenthesis.
     ReadBeforeTheFunction,
+    /// Empty where the module needs text to dial, so it stops before placing a call.
+    EmptyDialsNothing,
 }
 
 impl fmt::Display for EndpointFieldFault {
@@ -233,6 +235,9 @@ impl fmt::Display for EndpointFieldFault {
                 "carries a space, comma, pipe, quote, backslash or unbalanced bracket, \
                  which a pass reads before the expression's function",
             ),
+            Self::EmptyDialsNothing => {
+                f.write_str("is empty, so the endpoint module dials nothing")
+            }
         }
     }
 }
@@ -655,3 +660,6 @@ impl DialString for Endpoint {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(all(test, feature = "serde"))]
+mod c_oracle;

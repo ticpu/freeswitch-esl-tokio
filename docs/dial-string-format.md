@@ -146,11 +146,11 @@ What no escaping delivers is refused on parse and config load, and built
 unchecked:
 
 - `:_:` in any field.
-- sofia: a profile carrying `/` or `^`, or reading `gateway` in any case.
+- sofia: a profile carrying `/`, `^` or `@`, or reading `gateway` in any case.
   `sofia_outgoing_channel` cuts its text at the first `^` for the To override and
   the profile at the first `/`, and takes a text opening `gateway/` in any case
   for the gateway path.
-- sofia gateway: a gateway or profile carrying `/` or `^`, a profile carrying
+- sofia gateway: a gateway or profile carrying `/`, `^` or `@`, a profile carrying
   `::` or ending in `:`, and a gateway carrying `::` without a profile. The
   gateway is looked up by the whole text between `gateway/` and the next `/`, in
   a hash holding each gateway under both `name` and `profile::name`, so the key
@@ -162,7 +162,12 @@ unchecked:
   An extension opening `app=` in any case runs that application: a `/` may
   follow the first `:` but not precede it, and a context or dialplan after it
   is read into the argument.
-- user: a name carrying `@`, where `user_outgoing_channel` starts the domain.
+- sofia and sofia gateway: `@` in a profile or gateway puts one in the text
+  `protect_dest_uri` reads, which then cuts a destination holding a
+  `SWITCH_URL_UNSAFE` byte and no `@` at the last `/` (measured: a profile `a@b`
+  with destination `x y` fails `INVALID_URL`).
+- user: a name carrying `@`, where `user_outgoing_channel` starts the domain,
+  and an empty name with no domain, on which it stops before its lookup.
 - audio: an empty destination, which the module reads as none.
 - sofia_contact: a user carrying `~` or `@`, or `/` without a profile; a domain
   or profile carrying `~` or `/`, or empty. `sofia_contact_function` cuts its

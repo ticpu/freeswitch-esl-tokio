@@ -150,9 +150,10 @@ impl_dial_string_with_variables!(SofiaContact, write_expression, |this| match &t
 });
 
 impl SofiaEndpoint {
-    /// Refuse a profile `sofia_outgoing_channel` cuts at `/` or `^`, or reads as the gateway path.
+    /// Refuse a profile `sofia_outgoing_channel` cuts at `/` or `^` or reads as the gateway path,
+    /// and one carrying `@`, where `protect_dest_uri` reads the text as a URI and may cut it.
     pub(crate) fn check_deliverable(&self) -> Result<(), OriginateError> {
-        check_field("sofia", "profile", &self.profile, &["/", "^"])?;
+        check_field("sofia", "profile", &self.profile, &["/", "^", "@"])?;
         if self
             .profile
             .eq_ignore_ascii_case("gateway")
@@ -185,12 +186,12 @@ impl SofiaGateway {
     pub(crate) fn check_deliverable(&self) -> Result<(), OriginateError> {
         const KIND: &str = "sofia gateway";
         let gateway_splits: &[&str] = match self.profile {
-            Some(_) => &["/", "^"],
-            None => &["/", "^", "::"],
+            Some(_) => &["/", "^", "@"],
+            None => &["/", "^", "@", "::"],
         };
         check_field(KIND, "gateway", &self.gateway, gateway_splits)?;
         if let Some(profile) = &self.profile {
-            check_field(KIND, "profile", profile, &["/", "^", "::"])?;
+            check_field(KIND, "profile", profile, &["/", "^", "@", "::"])?;
             if profile.ends_with(':') {
                 return Err(undeliverable(
                     KIND,

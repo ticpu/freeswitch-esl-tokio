@@ -60,10 +60,11 @@ but not the programmatic path.
 
 ### Endpoint fields need to refuse what the module misreads
 
-A sofia profile carrying `/` or `^` or reading `gateway`, a gateway key whose
-`::` reads at another place, a loopback extension or context carrying `/`, an
-empty loopback context or dialplan or either after an `app=` extension, a user
-name carrying `@`, an empty audio destination, a `sofia_contact` or `group_call`
+A sofia profile carrying `/`, `^` or `@` or reading `gateway`, a gateway or
+gateway profile carrying `@`, a gateway key whose `::` reads at another place,
+a loopback extension or context carrying `/`, an empty loopback context or
+dialplan or either after an `app=` extension, a user name carrying `@` or empty
+without a domain, an empty audio destination, a `sofia_contact` or `group_call`
 field carrying its function's separator or what a pass reads ahead of the
 expansion, an empty `sofia_contact` domain or profile, and `:_:` in any field
 build and render, then reach the module or function as something else. Parse and config load refuse them

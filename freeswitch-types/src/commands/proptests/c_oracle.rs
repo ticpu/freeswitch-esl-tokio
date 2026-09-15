@@ -4,7 +4,7 @@ use super::*;
 
 /// The pairs and endpoint text the switch's C reads of `dial` at `target`: `originate_function`
 /// on the API line or the dialplan carrier's expansion, then `switch_ivr_originate`'s passes.
-fn c_reads_the_leg(
+pub(crate) fn c_reads_the_leg(
     c: Oracle,
     dial: &str,
     target: DialStringTarget,

@@ -1,4 +1,4 @@
-use super::{after_prefix, check_field};
+use super::{after_prefix, check_field, undeliverable, EndpointFieldFault};
 use crate::commands::originate::OriginateError;
 use crate::commands::variables::Variables;
 
@@ -47,9 +47,23 @@ impl_dial_string_with_variables!(UserEndpoint, write_module_text, |this| match &
 });
 
 impl UserEndpoint {
-    /// Refuse an `@` in the name, where `user_outgoing_channel` starts the domain.
+    /// Refuse an `@` in the name, where `user_outgoing_channel` starts the domain, and an empty
+    /// name with no domain, on which it stops before its lookup.
     pub(crate) fn check_deliverable(&self) -> Result<(), OriginateError> {
         check_field("user", "name", &self.name, &["@"])?;
+        if self
+            .name
+            .is_empty()
+            && self
+                .domain
+                .is_none()
+        {
+            return Err(undeliverable(
+                "user",
+                "name",
+                EndpointFieldFault::EmptyDialsNothing,
+            ));
+        }
         match &self.domain {
             Some(domain) => check_field("user", "domain", domain, &[]),
             None => Ok(()),

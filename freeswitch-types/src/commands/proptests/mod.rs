@@ -30,6 +30,7 @@ use crate::test_text::text;
 use crate::variables::VariableName;
 
 mod c_oracle;
+pub(crate) use c_oracle::c_reads_the_leg;
 mod port;
 
 fn scope() -> impl Strategy<Value = VariablesType> {
@@ -71,7 +72,7 @@ fn api_targets() -> Vec<DialStringTarget> {
     targets
 }
 
-fn targets() -> Vec<DialStringTarget> {
+pub(crate) fn targets() -> Vec<DialStringTarget> {
     let mut carriers = api_targets();
     carriers.push(DialStringTarget::new(DialStringCarrier::Dialplan));
     block_parses()
@@ -189,7 +190,7 @@ fn read_single_leg(
     ))
 }
 
-fn bare_endpoint() -> impl Strategy<Value = Endpoint> {
+pub(crate) fn bare_endpoint() -> impl Strategy<Value = Endpoint> {
     prop_oneof![
         (text(), option::of(text()), option::of(text())).prop_map(
             |(extension, context, dialplan)| {
@@ -253,7 +254,7 @@ fn bare_endpoint() -> impl Strategy<Value = Endpoint> {
 }
 
 /// Left to the switch like a block value naming a variable; an expression's own `${` is not.
-fn fields_name_a_variable(bare: &Endpoint) -> bool {
+pub(crate) fn fields_name_a_variable(bare: &Endpoint) -> bool {
     match bare {
         Endpoint::SofiaContact(ep) => [
             Some(&ep.user),

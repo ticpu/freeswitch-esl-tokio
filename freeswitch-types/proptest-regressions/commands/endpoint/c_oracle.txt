@@ -1,0 +1,15 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc bd7165cba07ad87144c509ecaccae30d81ad34c61d94109fb7806c4a70e68348 # shrinks to (Sofia(SofiaEndpoint { profile: "", destination: "", variables: None }), DialStringTarget { carrier: EslApi, block_parse: PairSplitCleans, argument: Blank })
+cc d96507589cbd8ccd62499c29d334b3175400cbb7073e5c4ed80fd4dc0e5cf4e6 # shrinks to "sofia//"
+cc fc4805685ab549e7f5f1a350ac9e87d3dcaaef0f851f593ce3d8062119d2761e # shrinks to (User(UserEndpoint { name: "", domain: None, variables: None }), DialStringTarget { carrier: EslApi, block_parse: PairSplitCleans, argument: Blank })
+cc 74a373e49f1c09132d91009471ebf9d4a23a08e90a252f17a9aa1b59238745ca # shrinks to (Sofia(SofiaEndpoint { profile: " ", destination: " ^", variables: None }), DialStringTarget { carrier: EslApi, block_parse: PairSplitCleans, argument: Blank })
+cc d5e3eefd995aaef12a0201369d0bc367960cbcd8ace75de06678725c0eb2bd41 # shrinks to "sofia//^"
+cc 9f50361ecbc550766eb5fcc308d7b5d4aec62352bea6207e2ef39c9977986f25 # shrinks to (Sofia(SofiaEndpoint { profile: " ", destination: "% ", variables: None }), DialStringTarget { carrier: EslApi, block_parse: PairSplitCleans, argument: Blank })
+cc 7ab97a97ba15c8ab0218c2f38b4a1680f6ac71efb65d24d31960420dbc856420 # shrinks to "sofia/  /%  "
+cc 21f23f0f6eb868eff74f1c60bcfb7378651468448ef3258a0c052bd98a6d9f76 # shrinks to "sofia/gateway/gateway/"
+cc 7c0eccb1e35139d2fc7175e1278bb5451f7d27245f8eced9e15620b9ac138038 # shrinks to (SofiaGateway(SofiaGateway { gateway: "gateway", destination: "", profile: None, variables: None }), DialStringTarget { carrier: EslApi, block_parse: PairSplitCleans, argument: Blank })
