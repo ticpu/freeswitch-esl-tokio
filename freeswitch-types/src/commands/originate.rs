@@ -474,6 +474,9 @@ impl Originate {
     }
 
     /// Execute a single XML-format application on the answered channel.
+    ///
+    /// `originate` ends the arguments at the first `)`, so an argument carrying one, such as a
+    /// `tone_stream://%(500,0,800)` spec, goes through [`inline`](Self::inline).
     pub fn application(endpoint: Endpoint, app: Application) -> Self {
         Self {
             endpoint,
@@ -1078,7 +1081,7 @@ pub enum OriginateError {
     /// An extension opens with `&` and more, which `originate` runs as an application.
     ExtensionReadsAsApplication,
     /// An `&name(args)` application whose name carries a parenthesis or whose arguments carry
-    /// `)`, where `originate` ends the arguments.
+    /// `)`, where `originate` ends the arguments. [`Originate::inline`] delivers such arguments.
     ParenthesisInApplication {
         /// The application name.
         application: String,
@@ -1152,7 +1155,8 @@ impl std::fmt::Display for OriginateError {
             ),
             Self::ParenthesisInApplication { .. } => f.write_str(
                 "an application's name carries a parenthesis or its arguments carry ), \
-                 where originate ends the arguments",
+                 where originate ends the arguments; Originate::inline delivers such \
+                 arguments in an inline action list",
             ),
             Self::InlineApplicationsWithDialplan => f.write_str(
                 "inline applications run only under the inline dialplan; \
