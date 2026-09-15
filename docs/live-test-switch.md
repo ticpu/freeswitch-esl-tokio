@@ -147,7 +147,18 @@ Registered members come from the `lab-lo` profile registering to itself:
   INVITE a test sends to a registered contact lands there otherwise.
 
 A self-registering IPv6 twin of that profile never sends its REGISTER on the
-measured build, so bracketed contacts come only from the captured PBX output.
+measured build: `nua_register` reports an invalid handle and nothing leaves the
+socket. Bracketed contacts therefore come only from the captured PBX output.
+
+A gateway registering over IPv6 to a remote registrar has a trap of its own.
+With an IPv6 literal as its `realm`, the digest challenge never matches:
+`[addr]:port` was challenged for realm `[addr]`, and `[addr]` alone for the
+registrar's domain, both ending in *Cannot locate any authentication
+credentials*. The same gateway named by DNS registers, as does an IPv4 literal
+with a port. Name an IPv6 registrar by DNS.
+
+`sofia loglevel all 9` writes each digest's input, the gateway password
+included, into the log. Set it back to 0 before sharing a capture.
 
 ## Escaping tests and the parser revision
 
