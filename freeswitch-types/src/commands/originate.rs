@@ -2534,6 +2534,43 @@ mod tests {
         }
     }
 
+    /// A lone quote on the blank split is wrapped and escaped, so the split closes the region
+    /// it opens and its cleanup delivers the quote.
+    #[test]
+    fn blank_split_delivers_a_single_quote_in_any_argument() {
+        let cases = [
+            (
+                Originate::application(test_endpoint(), Application::simple("park"))
+                    .cid_name("it's"),
+                r"originate loopback/9199/test &park() XML default 'it\'s'",
+            ),
+            (
+                Originate::application(
+                    test_endpoint(),
+                    Application::new("set", Some(r"quoted=it's\n")),
+                ),
+                r"originate loopback/9199/test '&set(quoted=it\'s\\n)'",
+            ),
+            (
+                Originate::inline(null_endpoint(), [Application::new("set", Some("a=it's,b"))])
+                    .unwrap(),
+                r"originate loopback/9199 'set:a=it\'s\\,b' inline",
+            ),
+        ];
+        for (cmd, wire) in cases {
+            assert_eq!(cmd.to_string(), wire);
+            let parsed: Originate = wire
+                .parse()
+                .unwrap_or_else(|e| panic!("{wire} failed to parse: {e}"));
+            assert_eq!(parsed, cmd, "{wire}");
+        }
+
+        let parsed: Originate = r"originate loopback/9199/test &park() XML default it\'s"
+            .parse()
+            .unwrap();
+        assert_eq!(parsed.caller_id_name(), Some("it's"));
+    }
+
     /// `switch_separate_string` takes `^^ ` as picking the blank split itself.
     #[test]
     fn a_blank_argv_separator_picks_the_blank_split() {

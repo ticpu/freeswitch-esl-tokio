@@ -329,6 +329,17 @@ mod tests {
         );
     }
 
+    /// A bare quote opens a region the blank split never closes, and a backslash inside the
+    /// wrapping is consumed by that split's cleanup.
+    #[test]
+    fn quote_wraps_any_token_carrying_a_single_quote() {
+        assert_eq!(originate_quote("it's"), r"'it\'s'");
+        assert_eq!(originate_quote(r"a\b it's"), r"'a\\b it\'s'");
+        assert_eq!(originate_quote("a b"), "'a b'");
+        assert_eq!(originate_quote(r"a\b c"), r"'a\b c'");
+        assert_eq!(originate_quote(r"a\,b"), r"a\,b");
+    }
+
     #[test]
     fn unquote_non_quoted_returns_as_is() {
         assert_eq!(originate_unquote("&park()"), "&park()");
