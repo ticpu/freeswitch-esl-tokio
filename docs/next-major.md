@@ -41,7 +41,9 @@ closing bracket truncates the block. A value carrying the block's own `^^`
 separator is the third: `with_separator` checks the values present when it is
 called, and an `insert` after it splits into a pair nobody wrote. A single quote
 in a channel-scope value is the fourth: the switch pairs it with the next quote
-before it parses the block, at any escaping depth.
+before it parses the block, at any escaping depth. A value carrying `:_:` is the
+fifth: any occurrence in a dial string sends the originate down the enterprise
+split, whatever the quoting.
 Refusing them is the only correct handling,
 and it cannot live at render time — `Display` is infallible and `ToString`
 panics on a `fmt::Error`, which would put a panic in a library. Until these
@@ -50,6 +52,14 @@ return `Result`, such a value is built silently and lost on the wire.
 `Deserialize` and `FromStr` already return `Result`, so they can reject at the
 boundary without waiting for the major — that covers config-driven construction
 but not the programmatic path.
+
+### `Originate` setters need to refuse `undef`
+
+`originate_function` reads every argument equal to `undef` as absent, so a
+positional set to it arrives as unset, and a target set to it trips the switch's
+assert on the missing extension. Parse and config load refuse both; `extension`,
+`context`, `cid_name`, `cid_num` and `dialplan_raw` cannot until they return
+`Result`.
 
 ### Consider removing `Display` for `Variables` and `Endpoint`
 
