@@ -41,11 +41,13 @@ pub fn missing() -> Option<&'static str> {
     }
 }
 
+/// `input` and its terminator. After a trailing backslash the C steps over the terminator and
+/// reads the next byte, so a second NUL keeps that read inside the buffer and ends the split.
 #[cfg(c_oracle)]
 fn buffer(input: &[u8]) -> Vec<u8> {
-    let mut buffer = Vec::with_capacity(input.len() + 1);
+    let mut buffer = Vec::with_capacity(input.len() + 2);
     buffer.extend_from_slice(input);
-    buffer.push(0);
+    buffer.extend_from_slice(&[0, 0]);
     buffer
 }
 
