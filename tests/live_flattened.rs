@@ -1218,20 +1218,24 @@ async fn argv_capture(
     let body = live_group_call(client, group, "A").await;
     target
         .escape_argument(&format!("<fp_marker={marker},originate_timeout=4>{body}"))
-        .expect("a separator target escapes")
+        .expect("the API carrier escapes")
         .into_owned()
 }
 
-/// Originate `list`'s raw text under `^^<sep>` and compare each leg it dials with its channel.
+/// Originate `list`'s raw text under `^^<sep>`, or on a plain line without one, and compare each
+/// leg it dials with its channel.
 async fn dial_at_argv(
     client: &EslClient,
     events: &mut EslEventStream,
     label: &str,
-    sep: char,
+    sep: Option<char>,
     list: &FlattenedDialString,
     marker: &str,
 ) {
-    let line = format!("originate ^^{sep}{}{sep}&park()", list.display_raw());
+    let line = match sep {
+        Some(sep) => format!("originate ^^{sep}{}{sep}&park()", list.display_raw()),
+        None => format!("originate {} &park()", list.display_raw()),
+    };
     let reply = client
         .api(&line)
         .await
@@ -1278,7 +1282,46 @@ async fn live_typed_view_equals_what_each_leg_received_at_an_argv_separator() {
                 escaped,
                 "{label}"
             );
-            dial_at_argv(&client, &mut events, &label, sep, &list, &m).await;
+            dial_at_argv(&client, &mut events, &label, Some(sep), &list, &m).await;
+        }
+    }
+}
+
+#[tokio::test]
+#[ignore = "needs FreeSWITCH ESL on :8022; see docs/live-test-switch.md"]
+async fn live_blank_split_forwards_the_legs_retain_keeps() {
+    let (client, mut events, _permit) = connect().await;
+    client
+        .subscribe_events(EventFormat::Plain, &[EslEventType::ChannelCreate])
+        .await
+        .expect("subscribe CHANNEL_CREATE");
+
+    let target = target_under_test(API);
+    for (group, drops) in [
+        ("g-fp-argv-space", &[None][..]),
+        ("g-fp-argv-leg2", &[None, Some(0), Some(1)][..]),
+    ] {
+        for &dropped in drops {
+            let drop_name = dropped.map_or_else(|| "none".to_owned(), |leg| leg.to_string());
+            let label = format!("{group}.A without leg {drop_name} at the blank split");
+            let m = marker(&format!("blank-{group}-drop-{drop_name}"));
+            let escaped = argv_capture(&client, group, &m, target).await;
+            let mut list = FlattenedDialString::parse_for(&escaped, target)
+                .unwrap_or_else(|e| panic!("{label}: {escaped:?}: {e}"));
+            assert_eq!(
+                list.display_raw()
+                    .to_string(),
+                escaped,
+                "{label}"
+            );
+            if let Some(dropped) = dropped {
+                let mut index = 0;
+                list.retain(|_| {
+                    index += 1;
+                    index - 1 != dropped
+                });
+            }
+            dial_at_argv(&client, &mut events, &label, None, &list, &m).await;
         }
     }
 }
@@ -1315,7 +1358,7 @@ async fn live_argv_separator_forwards_the_legs_retain_keeps() {
                     index += 1;
                     index - 1 != dropped
                 });
-                dial_at_argv(&client, &mut events, &label, sep, &list, &m).await;
+                dial_at_argv(&client, &mut events, &label, Some(sep), &list, &m).await;
             }
         }
     }
@@ -1354,7 +1397,7 @@ async fn live_argv_separator_dial_string_edge_spaces() {
                 dial,
                 "{label}"
             );
-            dial_at_argv(&client, &mut events, &label, sep, &list, &m).await;
+            dial_at_argv(&client, &mut events, &label, Some(sep), &list, &m).await;
         }
     }
 }
