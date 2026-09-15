@@ -282,11 +282,13 @@ own. All of the following were measured on a live switch.
 
 **The separator is escaped, not chosen.** A bare comma inside an argument ends
 the action, so the switch builds and runs applications nobody wrote and logs
-nothing. One backslash is enough, because `cleanup_separated_string` unescapes a
-character only when it is the delimiter of the split being cleaned up after: the
-originate line is split on spaces first, where `\,` is left alone, then the
-action list is split on its own separator, where the same `\,` becomes a comma.
-`Originate::inline` emits this.
+nothing. One backslash reaching the action split is enough, because
+`cleanup_separated_string` unescapes a character only when it is the delimiter
+of the split being cleaned up after: the originate line is split on spaces
+first, where `\,` is left alone, then the action list is split on its own
+separator, where the same `\,` becomes a comma. `Originate::inline` writes that
+`\,`, then quotes the whole list through `originate_quote`, which doubles the
+backslash for the space split to consume.
 
 An `m:<delim>:` prefix immediately before the first action changes the separator
 for the list, the way `^^` does for a block. It is consumed by the hunt, so
@@ -681,8 +683,11 @@ Application arguments containing spaces must be single-quoted in originate:
 originate loopback/9199/test '&socket(127.0.0.1:8040 async full)'
 ```
 
-The `freeswitch-esl-tokio` library handles this quoting automatically via
-`originate_quote()` / `originate_unquote()`.
+The space split's cleanup also strips quotes and reads `\\`, `\'`, `\"`, `\n`,
+`\r`, `\t` and `\s` in every token, so a value carrying a quote or backslash
+needs the same treatment. `originate_quote()` wraps any token that is empty or
+carries a space, quote or backslash, escaping `'` and `\` inside;
+`originate_unquote()` runs the cleanup and reads it back.
 
 ### `^^X` argument separator
 

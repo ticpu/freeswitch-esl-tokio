@@ -77,7 +77,7 @@ fn print_endpoint_examples() {
     .cid_name("Alice")
     .cid_num("5551234")
     .timeout(Duration::from_secs(30));
-    // originate sofia/internal/1000@10.0.0.1 1000 XML default Alice 5551234 30
+    // originate sofia/internal/1000@10.0.0.1 1000 undef undef Alice 5551234 30
     println!("{}", cmd);
 
     // -----------------------------------------------------------------------
@@ -92,7 +92,7 @@ fn print_endpoint_examples() {
         Application::simple("park"),
     )
     .timeout(Duration::from_secs(60));
-    // originate sofia/gateway/my_provider/18005551234 &park() XML undef undef 60
+    // originate sofia/gateway/my_provider/18005551234 &park() undef undef undef undef 60
     println!("{}", cmd);
 
     // With a profile qualifier: sofia/gateway/external::my_provider/destination
@@ -130,7 +130,7 @@ fn print_endpoint_examples() {
         Application::simple("park"),
     )
     .timeout(Duration::from_secs(20));
-    // originate ${sofia_contact(*/bob@pbx.example.com)} &park() XML undef undef 20
+    // originate ${sofia_contact(*/bob@pbx.example.com)} &park() undef undef undef undef 20
     println!("{}", cmd);
 
     // -----------------------------------------------------------------------

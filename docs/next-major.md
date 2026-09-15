@@ -10,6 +10,14 @@ revisited when it is finally actionable.
 
 ## freeswitch-types 2.0
 
+### `DialplanType` should carry any dialplan name
+
+`originate_function` hands whatever word sits in the dialplan slot to the
+transfer, so the type covers two of an open set. A variant holding the name
+would make it lose `Copy`, a break; `Originate::dialplan_raw` and
+`dialplan_name` carry the name beside it until then. Fold them into the variant
+and drop the pair.
+
 ### `AudioEndpoint::fmt_with_prefix` should be private
 
 It takes a `&mut fmt::Formatter`, which a caller can only obtain inside a

@@ -116,8 +116,9 @@ an empty `inline_applications` list.
 
 Because FreeSWITCH parses arguments 3 through 7 by position, setting a late
 one forces the earlier ones to be emitted. `timeout_secs` on its own yields
-`... &park() XML default undef undef 30`: `XML` and `default` are defaults and
-`undef` is the FreeSWITCH keyword for an omitted positional argument.
+`... &park() undef undef undef undef 30`: `undef` is the FreeSWITCH keyword for
+an omitted positional argument, which the switch reads as `XML`, `default` and
+no caller id.
 
 ## The two legs
 

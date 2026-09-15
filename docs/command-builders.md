@@ -138,17 +138,25 @@ variable scoping documentation.
 `originate_function` NULLs every argument reading `undef` in any case, then reads
 the rest strictly by position: the third is the dialplan whatever it says, and
 past seven it answers usage. Both splits parse through one reader with those
-rules, refusing a token naming no dialplan type, an eighth argument, and an
-`undef` target, which the switch asserts is set and aborts on. On the blank
-split an argument is written through `originate_quote()`, an empty one as `''`
-since a run of blanks is one split, and an absent dialplan or context forced by
-a later slot as `XML`/`default`. A line opening `^^ ` parses as the blank split.
+rules, refusing an eighth argument and an `undef` target, which the switch
+asserts is set and aborts on. A dialplan word `DialplanType` does not cover is
+kept by name (`dialplan_raw()` / `dialplan_name()`); the transfer looks a
+dialplan module up by it, and a name no module registers hangs the channel up
+with `NO_ROUTE_DESTINATION` (measured). A positional left `None` but forced
+present by a later one is written `undef` on either split, and the switch falls
+back to `XML`/`default`. A line opening `^^ ` parses as the blank split.
+
+On the blank split every argument goes through `originate_quote()`: a token that
+is empty or carries a space, `'` or `\` is wrapped and escaped as
+`quote_for_uuid_setvar()` does, since `uuid_setvar` splits on the same blank
+tokenizer, so `\n`, `\\`, `\s` and `\t` arrive as written rather than read as
+escapes. `originate_unquote()` runs that split's cleanup and inverts it.
 
 With `with_argv_separator(sep)` the line is
 `originate ^^<sep><endpoint><sep><target>[<sep>positional…]`, every argument
 escaped once for that split and none passed through `originate_quote()`. A
-positional left `None` but forced present by a later one is written `undef`, and
-the switch falls back to `XML`/`default`. `Some("")` is an empty token, which
+positional left `None` but forced present by a later one is written `undef`.
+`Some("")` is an empty token, which
 `switch_ivr_session_transfer` reads as the leg's own context (measured). An empty value in the last slot is written `''`, because a trailing
 separator adds no argument. An `Originate` dials one `Endpoint`; a multi-leg list
 goes on the caller's own line through `FlattenedDialString::display_raw()`.
@@ -262,6 +270,8 @@ Key design choices:
 
 - **`DialplanType`** — serde uses `"xml"`/`"inline"` (lowercase, config-friendly).
   `Display` uses `"XML"`/`"inline"` (wire format). Independent representations.
+  An `Originate` config's `dialplan` also takes any other name, kept as the
+  switch receives it, and refuses `undef`.
 - **`Variables`** — flat YAML map deserializes as `VariablesType::Default` (the
   99% case). Explicit `{scope, vars}` form for Enterprise/Channel scopes.
 - **`Endpoint`** — externally tagged enum with `snake_case` variant names.
