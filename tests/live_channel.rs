@@ -9,8 +9,7 @@ mod live_common;
 
 use freeswitch_esl_tokio::commands::originate::{Variables, VariablesType};
 use freeswitch_esl_tokio::commands::{
-    BlockParse, DialStringCarrier, DialStringTarget, ExecuteOn, LoopbackEndpoint, UuidGetVar,
-    UuidKill, UuidSetVar,
+    DialStringCarrier, ExecuteOn, LoopbackEndpoint, UuidGetVar, UuidKill, UuidSetVar,
 };
 use freeswitch_esl_tokio::ExecuteOptions;
 use freeswitch_esl_tokio::{
@@ -19,8 +18,9 @@ use freeswitch_esl_tokio::{
     TimetableField, TimetablePrefix,
 };
 use live_common::{
-    bgapi_originate_ok, channel_exists, connect, getvar, kill_channel, wait_for_own_event,
-    wait_for_var, ChannelReaper,
+    bgapi_originate_ok, carried_in, channel_exists, connect, escaping_block, getvar, kill_channel,
+    target_under_test, wait_for_own_event, wait_for_var, ChannelReaper, ESCAPING_CASES,
+    ESCAPING_SEPARATOR,
 };
 use std::collections::HashSet;
 use std::time::Duration;
@@ -248,97 +248,6 @@ async fn live_uuid_kill_with_cause() {
 }
 
 // --- Dial-string escaping, per carrier ---
-
-/// Values whose escaping is not obvious, each paired with a sentinel so a value
-/// that eats its separator shows up as damage to a *later* variable.
-///
-/// Two quoted values, never one: a block carrying a single quote has no partner
-/// for it to pair with and passes under encodings that corrupt a realistic
-/// block. Two quotes in one value are the other pairing: the last pass keeps a
-/// bare quote only while none follows it in the same field. The empty value is
-/// absent because no dial string can express it — `Variables` refuses it at the
-/// boundaries that can.
-const ESCAPING_CASES: &[(&str, &[(&str, &str)])] = &[
-    ("plain comma", &[("p1", "a,b"), ("p2", "SENTINEL")]),
-    (
-        "comma and space",
-        &[("p1", "T-1001, urgent"), ("p2", "SENTINEL")],
-    ),
-    (
-        "two quoted values",
-        &[("p1", "it's"), ("p2", "don't"), ("p3", "SENTINEL")],
-    ),
-    (
-        "two quotes in one value",
-        &[("p1", "l'a'b"), ("p2", "SENTINEL")],
-    ),
-    (
-        "space and two quotes",
-        &[("p1", "Rue de l'Île d'Or"), ("p2", "SENTINEL")],
-    ),
-    (
-        "backslash before an inert character",
-        &[("p1", r"C:\path"), ("p2", "SENTINEL")],
-    ),
-    (
-        "backslash before one the switch reads as an escape",
-        &[("p1", r"a\nb"), ("p2", "SENTINEL")],
-    ),
-    ("pipe", &[("p1", "a|b"), ("p2", "SENTINEL")]),
-];
-
-/// `lead` goes in first, so a value that eats its separator damages a variable
-/// after it rather than the one the far side is found by.
-fn escaping_block(
-    lead: &[(&str, &str)],
-    pairs: &[(&str, &str)],
-    separator: Option<char>,
-    scope: VariablesType,
-) -> Variables {
-    let mut vars = Variables::new(scope);
-    for (k, v) in lead
-        .iter()
-        .chain(pairs.iter())
-    {
-        vars.insert(*k, *v);
-    }
-    match separator {
-        None => vars,
-        Some(sep) => vars
-            .with_separator(sep)
-            .unwrap_or_else(|e| panic!("{sep:?} rejected: {e}")),
-    }
-}
-
-/// Appears in none of [`ESCAPING_CASES`], which is what `with_separator`
-/// demands and what keeps a comma ordinary text inside the block.
-const ESCAPING_SEPARATOR: char = '~';
-
-/// `Variables` refuses a quote in channel scope, so those rows have no wire
-/// form to measure there; `live_channel_scope_pairs_quotes_across_values` pins
-/// why.
-fn carried_in(scope: VariablesType, pairs: &[(&str, &str)]) -> bool {
-    scope != VariablesType::Channel
-        || pairs
-            .iter()
-            .all(|(_, v)| !v.contains('\''))
-}
-
-/// The revision these tests render for: `FREESWITCH_BLOCK_PARSE` names one to
-/// measure a switch against, and unset is the crate default.
-fn block_parse_under_test() -> BlockParse {
-    match std::env::var("FREESWITCH_BLOCK_PARSE") {
-        Ok(name) => name
-            .parse()
-            .unwrap_or_else(|e| panic!("FREESWITCH_BLOCK_PARSE: {e}")),
-        Err(std::env::VarError::NotPresent) => BlockParse::default(),
-        Err(e) => panic!("FREESWITCH_BLOCK_PARSE: {e}"),
-    }
-}
-
-fn target_under_test(carrier: DialStringCarrier) -> DialStringTarget {
-    DialStringTarget::new(carrier).with_block_parse(block_parse_under_test())
-}
 
 /// Every case through `originate`, whose argument list the switch splits before
 /// the block is parsed.
