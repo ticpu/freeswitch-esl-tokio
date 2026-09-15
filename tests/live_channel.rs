@@ -1004,17 +1004,20 @@ async fn escaping_over_the_dialplan_carrier(separator: Option<char>, scope: Vari
         // The bridge is async: the far leg carries the block once the A leg
         // names it as its bridge partner.
         let deadline = Instant::now() + Duration::from_secs(10);
-        wait_for_var(&client, &a_uuid, "bridge_uuid", deadline)
+        let bridged = wait_for_var(&client, &a_uuid, "bridge_uuid", deadline)
             .await
-            .unwrap_or_else(|| panic!("{label}: the anchor never bridged"));
+            .is_some();
         let mut results = Vec::new();
-        for (key, want) in *pairs {
-            results.push((*key, *want, getvar(&client, &b_uuid, key).await));
+        if bridged {
+            for (key, want) in *pairs {
+                results.push((*key, *want, getvar(&client, &b_uuid, key).await));
+            }
         }
         reaper
             .reap()
             .await;
 
+        assert!(bridged, "{label}: the anchor never bridged");
         for (key, want, got) in results {
             assert_eq!(
                 got.as_deref(),
