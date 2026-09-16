@@ -6,6 +6,9 @@
 # The stable resolver ignores dependency rust-version floors, so a dependency
 # bump can silently raise the real MSRV above the declared one. Installs the
 # toolchain through rustup when missing. Run before a release, and in CI.
+#
+# The floor covers what a consumer compiles, so dev-dependencies stay out of it:
+# the C oracle's parser needs a newer toolchain than the library promises.
 
 set -euo pipefail
 
@@ -18,7 +21,8 @@ for manifest in Cargo.toml freeswitch-types/Cargo.toml; do
 	msrv="$(sed -n 's/^rust-version = "\(.*\)"$/\1/p' "$manifest")"
 	echo "checking $crate on rust $msrv"
 	rustup toolchain install "$msrv" --profile minimal --no-self-update
-	cargo "+$msrv" check -p "$crate" --all-features --all-targets --message-format=short
+	cargo "+$msrv" check -p "$crate" --all-features --message-format=short
+	cargo "+$msrv" check -p "$crate" --all-features --examples --message-format=short
 done
 
 echo "msrv ok"
