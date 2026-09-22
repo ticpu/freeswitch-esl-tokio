@@ -192,12 +192,15 @@ arguments: `separate_string_blank_delim` on a space, `separate_string_char_delim
 any other delimiter. A leading `^^X` overrides the delimiter it is given, as the
 switch reads one. Tokens keep their quoting, which later parsing consumes.
 
-**FlattenedDialString** — a dial string the switch produced, such as a
-`group_call` expansion, read through the switch's own passes for a
-`DialStringTarget`. Each leg answers `variable()` with what its channel
-receives, carries a `LegTarget` (`error/` cause, typed `Endpoint`, or unparsed
-text) and per-pair warnings. `retain()` drops legs; `display_raw()` forwards the
-kept legs as written, `display_for()` renders them canonically.
+**FlattenedDialString** — any dial string read through the switch's own passes
+for a `DialStringTarget`, whatever wrote it: a `group_call` expansion, a config
+line, a line a human typed. Each leg answers `variable()` with what its channel
+receives, carries a `LegTarget` (`error/` cause, typed `Endpoint`, or the text of
+a module this crate does not model) and per-pair warnings. A module outside the
+typed set fails no parse: the block, the leg splits and the argv pass are core
+behaviour, so the leg keeps its text and the rest of the list reads as usual.
+`retain()` drops legs; `display_raw()` forwards the kept legs as written,
+`display_for()` renders them canonically.
 
 **DialStringTarget::with_argv_separator** — the target for a line that splits
 `originate`'s arguments on a `^^X` separator. The dial string is one argument of
