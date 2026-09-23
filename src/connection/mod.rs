@@ -348,7 +348,9 @@ impl std::fmt::Debug for EslClient {
 ///
 /// Events are delivered as `Result<EslEvent, EslError>`. An `Err(EslError::QueueFull)`
 /// indicates that one or more events were dropped because the application fell behind.
-/// Use [`EslClient::dropped_event_count`] for the exact count.
+/// It rides the next successful dispatch, so a burst that ends with the queue still
+/// full reports nothing in-band: [`EslClient::dropped_event_count`] is the reliable
+/// count. [`EventOverflow`] trades those drops for a bounded stall.
 pub struct EslEventStream {
     rx: mpsc::Receiver<Result<EslEvent, EslError>>,
     status_rx: watch::Receiver<ConnectionStatus>,

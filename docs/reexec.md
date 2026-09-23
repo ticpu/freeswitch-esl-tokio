@@ -83,6 +83,12 @@ channel, so the caller receives all in-flight events.
   and the result channel would never be sent.
 - **Biased select** prioritizes the stop signal over socket reads, so
   the drain begins immediately when the signal fires.
+- **A dispatch waiting on event-queue capacity** under
+  `EventOverflow::BlockFor` is cut short by the same signal, and the
+  drain itself never waits. The event the dispatch was holding is
+  discarded and counted in `dropped_event_count()`; no `QueueFull`
+  marker reaches the consumer, since that marker needs a later
+  dispatch and the process is leaving.
 
 ## Event Subscriptions
 
@@ -97,7 +103,9 @@ the library's event channel.
 
 - **Preserving `EslEventStream` across exec.** The mpsc channel is
   process-local. The new process creates a fresh one via
-  `adopt_stream()`.
+  `adopt_stream()`. That call rebuilds with default options, so a
+  daemon running a non-default queue size or overflow policy must use
+  `adopt_stream_with_options()` to keep it.
 - **Automatic reconnection.** The library detects disconnection; the
   caller controls reconnection strategy.
 - **Cross-platform support.** `teardown_for_reexec()` is

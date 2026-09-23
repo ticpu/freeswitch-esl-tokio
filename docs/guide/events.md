@@ -203,3 +203,39 @@ The two state headers do not report the same field. `switch_channel_event_set_ba
 Events from different channels can interleave freely on the ESL wire. If you are tracking channel lifecycle, use `CHANNEL_STATE` (CS_INIT) as the start-of-life trigger and `CHANNEL_STATE` (CS_DESTROY) as end-of-life rather than relying on `CHANNEL_CREATE`/`CHANNEL_DESTROY`.
 
 Start-of-life is two steps, though: `switch_channel_event_set_extended_data()` adds the `variable_*` block only for the event ids on its whitelist, and `CHANNEL_STATE` is not one of them (unless the switch runs with `verbose-events`, the channel carries `CF_VERBOSE_EVENTS`, or the event was given a `presence-data-cols` header). So CS_INIT names a channel without describing one, and `CHANNEL_CREATE` -- which is whitelisted, and fires after the endpoint's `on_init` chain -- is the first event carrying channel variables. `CHANNEL_DESTROY` is whitelisted too, so the final variable block arrives there rather than on the CS_DESTROY state event that ends the life.
+
+## Event queue overflow
+
+The reader hands events to `EslEventStream` over a bounded channel
+(`EslConnectOptions::with_event_queue_size`). What happens when a consumer
+falls behind and that channel fills is `with_event_overflow`:
+
+```rust
+use freeswitch_esl_tokio::{EslConnectOptions, EventOverflow};
+use std::time::Duration;
+
+let options = EslConnectOptions::new()
+    .with_event_queue_size(5000)
+    .with_event_overflow(EventOverflow::BlockFor(Duration::from_secs(10)));
+```
+
+`DropIncoming`, the default, discards the arriving event, counts it in
+`dropped_event_count()`, and arms one `EslError::QueueFull` item that the
+consumer sees on the stream. That item rides the *next* successful dispatch,
+so a burst ending with the queue still full reports nothing in band — read the
+counter, not the marker.
+
+`BlockFor` instead parks the reader until capacity, up to the budget, and only
+then drops. `event_stall_count()` and `event_stall_duration()` report the
+waiting; read both, since one long stall and many short ones share a total and
+mean different things. The count rises when the wait starts, so a consumer can
+tell it is stalled right now.
+
+Two things bound where `BlockFor` is usable. The reader serves command replies
+from the same loop, and the switch stops reading our socket while its write to
+us is stalled, so a command issued during a stall fails and its late reply is
+discarded as stale — use it only on a connection that issues none, remembering
+that even an events-only connection issues commands when it subscribes and
+re-subscribes. And the budget belongs well short of the switch's own send-retry
+window: past that the switch abandons a half-written event and the stream
+desyncs, which is worse than a counted loss.
