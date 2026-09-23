@@ -5,9 +5,11 @@ mod mock_server;
 
 use freeswitch_esl_tokio::{
     ConnectionStatus, DisconnectReason, EslClient, EslConnectOptions, EslError, EslEventType,
-    DEFAULT_ESL_PASSWORD,
+    EventOverflow, DEFAULT_ESL_PASSWORD,
 };
-use mock_server::{recv_event, setup_connected_pair, setup_raw_pair, MockClient};
+use mock_server::{
+    recv_event, setup_connected_pair, setup_connected_pair_with_options, setup_raw_pair, MockClient,
+};
 use std::collections::HashMap;
 
 #[tokio::test]
@@ -278,5 +280,50 @@ async fn sequential_teardown_adopt_teardown() {
     assert_eq!(
         events2.status(),
         ConnectionStatus::Disconnected(DisconnectReason::ReexecTeardown)
+    );
+}
+
+#[tokio::test]
+async fn teardown_wins_race_against_stalled_dispatch() {
+    use std::time::Duration;
+
+    let options = EslConnectOptions::new()
+        .with_event_queue_size(1)
+        .with_event_overflow(EventOverflow::BlockFor(Duration::from_secs(30)));
+    let (mut mock, client, mut events) =
+        setup_connected_pair_with_options(DEFAULT_ESL_PASSWORD, options).await;
+
+    let sent = 3;
+    for i in 0..sent {
+        let mut headers = HashMap::new();
+        headers.insert("Unique-ID".to_string(), format!("uuid-{}", i));
+        mock.send_event_plain("CHANNEL_CREATE", &headers)
+            .await;
+    }
+
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    while client.event_stall_count() == 0 && tokio::time::Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert!(client.event_stall_count() > 0, "reader never stalled");
+
+    // The stop signal must cut the wait short rather than let teardown run out
+    // its own drain budget.
+    let result = tokio::time::timeout(Duration::from_secs(3), client.teardown_for_reexec())
+        .await
+        .expect("teardown did not beat the stalled dispatch");
+    let (fd, _residual) = result.expect("teardown failed");
+    assert!(fd >= 0);
+
+    let mut received = 0u64;
+    while let Ok(Some(Ok(_))) =
+        tokio::time::timeout(Duration::from_millis(200), events.recv()).await
+    {
+        received += 1;
+    }
+    assert_eq!(
+        received + client.dropped_event_count(),
+        sent as u64,
+        "every event is either delivered or counted as dropped"
     );
 }

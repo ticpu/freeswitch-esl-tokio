@@ -6,7 +6,7 @@ mod mock_server;
 
 use freeswitch_esl_tokio::{
     ConnectionMode, EslClient, EslConnectOptions, EslError, EslEventType, EventHeader,
-    HeaderLookup, DEFAULT_ESL_PASSWORD,
+    EventOverflow, HeaderLookup, DEFAULT_ESL_PASSWORD,
 };
 use mock_server::{
     recv_event, setup_connected_pair, setup_connected_pair_with_options, setup_raw_pair,
@@ -387,4 +387,113 @@ async fn test_connection_mode_outbound() {
 
     let (client, _events) = accept_result.unwrap();
     assert_eq!(client.connection_mode(), ConnectionMode::Outbound);
+}
+
+/// Send `count` CHANNEL_CREATE events carrying a sequential `Unique-ID`.
+async fn send_numbered_events(mock: &mut mock_server::MockClient, count: usize) {
+    for i in 0..count {
+        let mut headers = HashMap::new();
+        headers.insert("Unique-ID".to_string(), format!("uuid-{}", i));
+        mock.send_event_plain("CHANNEL_CREATE", &headers)
+            .await;
+    }
+}
+
+/// Poll `probe` until it holds or the deadline passes.
+async fn wait_until<F: Fn() -> bool>(probe: F, within: Duration) -> bool {
+    let deadline = tokio::time::Instant::now() + within;
+    while tokio::time::Instant::now() < deadline {
+        if probe() {
+            return true;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    probe()
+}
+
+#[tokio::test]
+async fn block_mode_stalls_instead_of_dropping() {
+    let options = EslConnectOptions::new()
+        .with_event_queue_size(1)
+        .with_event_overflow(EventOverflow::BlockFor(Duration::from_secs(30)));
+    let (mut mock, client, mut events) =
+        setup_connected_pair_with_options(DEFAULT_ESL_PASSWORD, options).await;
+
+    send_numbered_events(&mut mock, 3).await;
+
+    // The second event cannot fit and parks the reader on queue capacity.
+    assert!(
+        wait_until(|| client.event_stall_count() > 0, Duration::from_secs(5)).await,
+        "reader never stalled"
+    );
+    assert_eq!(client.dropped_event_count(), 0, "block mode must not drop");
+
+    for i in 0..3 {
+        let event = recv_event(&mut events).await;
+        assert_eq!(
+            event.header_str("Unique-ID"),
+            Some(format!("uuid-{}", i).as_str()),
+            "events must arrive in wire order"
+        );
+    }
+    assert!(client.event_stall_duration() > Duration::ZERO);
+}
+
+#[tokio::test]
+async fn block_mode_falls_back_to_drop_past_budget() {
+    let options = EslConnectOptions::new()
+        .with_event_queue_size(1)
+        .with_event_overflow(EventOverflow::BlockFor(Duration::from_millis(100)));
+    let (mut mock, client, mut events) =
+        setup_connected_pair_with_options(DEFAULT_ESL_PASSWORD, options).await;
+
+    send_numbered_events(&mut mock, 4).await;
+
+    assert!(
+        wait_until(|| client.dropped_event_count() > 0, Duration::from_secs(5)).await,
+        "budget expiry must fall back to dropping"
+    );
+
+    // Draining lets the armed QueueFull marker reach the consumer.
+    send_numbered_events(&mut mock, 1).await;
+    let mut got_queue_full = false;
+    while let Ok(Some(item)) = tokio::time::timeout(Duration::from_millis(500), events.recv()).await
+    {
+        if matches!(item, Err(EslError::QueueFull)) {
+            got_queue_full = true;
+        }
+    }
+    assert!(got_queue_full, "expected a QueueFull notification");
+}
+
+#[tokio::test]
+async fn block_mode_stall_does_not_trip_liveness() {
+    let options = EslConnectOptions::new()
+        .with_event_queue_size(1)
+        .with_event_overflow(EventOverflow::BlockFor(Duration::from_secs(30)));
+    let (mut mock, client, mut events) =
+        setup_connected_pair_with_options(DEFAULT_ESL_PASSWORD, options).await;
+    client.set_liveness_timeout(Duration::from_secs(3));
+
+    send_numbered_events(&mut mock, 2).await;
+    assert!(
+        wait_until(|| client.event_stall_count() > 0, Duration::from_secs(5)).await,
+        "reader never stalled"
+    );
+
+    // Outlast the liveness threshold while parked, then release the reader.
+    tokio::time::sleep(Duration::from_secs(5)).await;
+    let _ = recv_event(&mut events).await;
+    let _ = recv_event(&mut events).await;
+
+    // Long enough for an idle tick to evaluate liveness after the stall.
+    tokio::time::sleep(Duration::from_millis(2500)).await;
+    assert!(
+        client.is_connected(),
+        "stall time must not count against liveness: {:?}",
+        client.status()
+    );
+
+    send_numbered_events(&mut mock, 1).await;
+    let _ = recv_event(&mut events).await;
 }
