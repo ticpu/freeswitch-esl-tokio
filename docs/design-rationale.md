@@ -42,7 +42,8 @@ rejected — it would put commands on the wire the caller never asked for, which
 spams the FreeSWITCH command log on every interval and breaks the rule that the
 caller owns and can account for every byte sent. Liveness therefore watches only
 server-pushed traffic; on idle connections the caller supplies it, conventionally
-by subscribing to `HEARTBEAT`.
+by subscribing to `HEARTBEAT`. Time the reader spends waiting on queue capacity is
+excluded from the threshold: the timer is for a peer that stopped sending.
 
 That subscription can be denied — a permission-restricted user
 (`esl-allowed-events` without `HEARTBEAT`) is rejected with `-ERR permission
@@ -460,6 +461,20 @@ neither marker stays non-fatal there: its normal case is a returned value.
 The response type is `#[must_use]`, because dropping it discards the only report
 either half makes.
 
+## Back-pressure on the event queue is opt-in and bounded
+
+A full event queue drops the arriving event and counts it. A caller may instead have the
+reader wait for capacity, supplying the budget it will stall for; past that budget the
+drop path resumes. An unbounded wait is refused: the switch's send retries expire and
+its write site does not check the result, so a stall outliving them truncates an event
+on the wire and puts the next message's framing inside it.
+
+Waiting is sound only where the connection issues no commands, which nothing here can
+enforce. It loses the race with the re-exec stop signal and never runs during the drain,
+dropping the event it held rather than spending the teardown's budget. Errors the reader
+delivers on its way out never wait: the disconnect status publishes only once the loop
+returns.
+
 ## Re-exec preserves the authenticated socket across binary upgrades
 
 Production ESL daemons like fs-eventd maintain a persistent TCP connection to
@@ -473,7 +488,8 @@ The re-exec mechanism (`teardown_for_reexec()` + `adopt_stream()`) preserves
 the TCP socket file descriptor across `exec()`, so the new binary image
 inherits the already-authenticated, already-subscribed ESL connection. No
 events are lost because the kernel TCP receive buffer holds data during the
-brief exec window.
+brief exec window. That covers the socket and the parser's residual only —
+anything already handed to the consumer's queue dies with the process image.
 
 The drain protocol is the critical detail: the reader loop must stop at a
 clean message boundary. ESL's two-part framing means that if the parser is
