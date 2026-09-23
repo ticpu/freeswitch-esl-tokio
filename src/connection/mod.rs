@@ -205,9 +205,13 @@ struct SharedState {
     /// Command response timeout in milliseconds
     command_timeout_ms: AtomicU64,
     /// Set when events have been dropped due to a full queue
-    event_overflow: AtomicBool,
+    queue_full_notice_armed: AtomicBool,
     /// Total count of dropped events
     dropped_event_count: AtomicU64,
+    /// Dispatches that had to wait for queue capacity
+    event_stall_count: AtomicU64,
+    /// Accumulated nanoseconds spent waiting for queue capacity
+    event_stall_nanos: AtomicU64,
     /// Auth response from inbound connect (None for outbound)
     auth_response: Option<EslResponse>,
     /// Whether this is an inbound or outbound ESL connection
@@ -215,6 +219,29 @@ struct SharedState {
     /// Re-exec channel caller half (taken by teardown_for_reexec)
     #[cfg(unix)]
     reexec: Mutex<Option<ReexecCaller>>,
+}
+
+/// What the reader does when the event queue is full.
+///
+/// Waiting is only sound on a connection that issues no commands: the reader
+/// serves replies from the same loop, and the switch's listener stops reading
+/// while its write to us is stalled, so a command sent during a wait fails and
+/// its late reply is discarded as stale. An events-only connection still issues
+/// commands when it subscribes and re-subscribes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum EventOverflow {
+    /// Drop the arriving event, count it, and arm an `EslError::QueueFull`
+    /// notice for the consumer.
+    #[default]
+    DropIncoming,
+    /// Wait up to this long for capacity, then fall back to `DropIncoming`.
+    ///
+    /// A budget near the switch's own send-retry window trades a counted loss
+    /// for a truncated event on the wire: `switch_socket_send` gives up after
+    /// it, and the event-write site in `mod_event_socket.c` does not check the
+    /// result. Keep it well short of that.
+    BlockFor(Duration),
 }
 
 /// Options for ESL connection configuration.
@@ -226,6 +253,7 @@ pub struct EslConnectOptions {
     event_queue_size: usize,
     connect_timeout: Duration,
     strict_header_utf8: bool,
+    event_overflow: EventOverflow,
 }
 
 impl EslConnectOptions {
@@ -257,6 +285,12 @@ impl EslConnectOptions {
         self
     }
 
+    /// Set what the reader does when the event queue is full.
+    pub fn with_event_overflow(mut self, overflow: EventOverflow) -> Self {
+        self.event_overflow = overflow;
+        self
+    }
+
     /// Capacity of the mpsc channel delivering events. Default: 1000.
     pub fn event_queue_size(&self) -> usize {
         self.event_queue_size
@@ -271,6 +305,11 @@ impl EslConnectOptions {
     pub fn strict_header_utf8(&self) -> bool {
         self.strict_header_utf8
     }
+
+    /// Full-queue behaviour. Default: [`EventOverflow::DropIncoming`].
+    pub fn event_overflow(&self) -> EventOverflow {
+        self.event_overflow
+    }
 }
 
 impl Default for EslConnectOptions {
@@ -279,6 +318,7 @@ impl Default for EslConnectOptions {
             event_queue_size: MAX_EVENT_QUEUE_SIZE,
             connect_timeout: Duration::from_millis(DEFAULT_TIMEOUT_MS),
             strict_header_utf8: false,
+            event_overflow: EventOverflow::DropIncoming,
         }
     }
 }
@@ -568,8 +608,10 @@ impl EslClient {
             status_tx,
             liveness_timeout_ms: AtomicU64::new(0),
             command_timeout_ms: AtomicU64::new(DEFAULT_COMMAND_TIMEOUT_MS),
-            event_overflow: AtomicBool::new(false),
+            queue_full_notice_armed: AtomicBool::new(false),
             dropped_event_count: AtomicU64::new(0),
+            event_stall_count: AtomicU64::new(0),
+            event_stall_nanos: AtomicU64::new(0),
             auth_response,
             mode,
             #[cfg(unix)]
@@ -590,6 +632,7 @@ impl EslClient {
             parser,
             shared.clone(),
             event_tx,
+            options.event_overflow,
             reexec_reader,
         ));
 

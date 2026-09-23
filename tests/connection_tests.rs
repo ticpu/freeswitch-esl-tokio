@@ -454,7 +454,9 @@ async fn block_mode_falls_back_to_drop_past_budget() {
         "budget expiry must fall back to dropping"
     );
 
-    // Draining lets the armed QueueFull marker reach the consumer.
+    // The marker rides the next dispatch, so the queue has to be empty first.
+    while (tokio::time::timeout(Duration::from_millis(300), events.recv()).await).is_ok() {}
+
     send_numbered_events(&mut mock, 1).await;
     let mut got_queue_full = false;
     while let Ok(Some(item)) = tokio::time::timeout(Duration::from_millis(500), events.recv()).await

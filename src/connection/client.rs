@@ -802,6 +802,27 @@ impl EslClient {
             .load(Ordering::Relaxed)
     }
 
+    /// Dispatches that had to wait for event-queue capacity.
+    ///
+    /// Zero under [`EventOverflow::DropIncoming`](super::EventOverflow).
+    pub fn event_stall_count(&self) -> u64 {
+        self.shared
+            .event_stall_count
+            .load(Ordering::Relaxed)
+    }
+
+    /// Time the reader has spent waiting for event-queue capacity.
+    ///
+    /// Read beside [`event_stall_count`](Self::event_stall_count): one long
+    /// stall and many short ones are the same total and different problems.
+    pub fn event_stall_duration(&self) -> Duration {
+        Duration::from_nanos(
+            self.shared
+                .event_stall_nanos
+                .load(Ordering::Relaxed),
+        )
+    }
+
     /// Set liveness timeout. Any inbound TCP traffic resets the timer.
     /// Set to zero to disable (default).
     ///
