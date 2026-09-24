@@ -137,8 +137,12 @@ fn main() {
     let index = manifest.join("../hooks/source-refs.yaml");
     println!("cargo::rerun-if-changed={}", index.display());
 
+    // The oracle answers what the switch's own C does, and the switch is built
+    // for Linux; a cross target sends cc-rs after a toolchain that is not there.
+    let target_os = env::var("CARGO_CFG_TARGET_OS").expect("cargo sets CARGO_CFG_TARGET_OS");
     let root = env::var_os("FREESWITCH_SOURCE");
     let root = match root.as_deref() {
+        _ if target_os != "linux" => Err(format!("target OS is {target_os}, not linux")),
         None => Err("FREESWITCH_SOURCE is not set".to_owned()),
         Some(root) if root.is_empty() => Err("FREESWITCH_SOURCE is empty".to_owned()),
         Some(root) => Ok(Path::new(root)),
