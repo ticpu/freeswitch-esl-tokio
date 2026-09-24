@@ -179,7 +179,7 @@ switch that fails them parses blocks in a way no revision describes yet.
 
 ## Writing a live test
 
-Two rules, both learned from tests that passed for the wrong reason:
+Four rules, learned from tests that passed, or failed, for the wrong reason:
 
 **Correlate to your own channel.** Keep the UUID the originate returns and
 filter every event against it. Matching on event type alone, on a channel-name
@@ -201,6 +201,24 @@ UUIDs as you learn them, kill them, then assert. Use `kill_channel()` (logs
 rather than swallowing) for cleanup, and `channel_exists()` when a test needs
 to *prove* a channel died — cleanup deliberately tolerates "already gone", so
 it cannot tell you that.
+
+**A bridge's outcome isn't safe to read before its wait is over.**
+`switch_ivr_originate` writes `DIALSTATUS` and `originate_disposition` as a
+placeholder (`INVALIDARGS`, `failure`) before it has even parsed the dial
+string, and only overwrites either once the attempt actually settles. Reading
+either to short-circuit a `wait_for_var` on `bridge_uuid` can catch that
+placeholder and report a bridge that is about to succeed as already failed —
+measured on `&bridge(...)` queued inline on an originate's own application
+list, where the ESL reply can win the race against the application actually
+starting. Polling `bridge_uuid` for the whole deadline and reading
+`DIALSTATUS` only once that deadline is spent avoids it: a bridge that is
+going to succeed does so in milliseconds, so nothing legitimate is still
+sitting on the placeholder once a multi-second deadline has run out. A bridge
+that never settles at all — the far leg's own auto-answer starved long enough
+that FreeSWITCH's own default 60s origination timeout (`SWITCH_DEFAULT_TIMEOUT`
+in `switch_types.h`) is what eventually gives up on it — may still read as the
+placeholder at any deadline well short of that, so the diagnostic names a
+cause only once the switch itself has one to give.
 
 ## Checking state by hand
 

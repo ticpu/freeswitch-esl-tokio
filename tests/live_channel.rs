@@ -22,8 +22,8 @@ use freeswitch_esl_tokio::{
 use live_common::{
     bgapi_originate_ok, block_parse_under_test, carried_in, channel_exists, connect,
     escaping_block, getvar, kill_channel, percent_escape_tree, switch_version, target_under_test,
-    wait_for_own_event, wait_for_var, ChannelReaper, PercentEscape, ESCAPING_CASES,
-    ESCAPING_SEPARATOR,
+    wait_for_bridge, wait_for_own_event, BridgeOutcome, ChannelReaper, PercentEscape,
+    ESCAPING_CASES, ESCAPING_SEPARATOR,
 };
 use std::collections::HashSet;
 use std::time::Duration;
@@ -1004,11 +1004,9 @@ async fn escaping_over_the_dialplan_carrier(separator: Option<char>, scope: Vari
         // The bridge is async: the far leg carries the block once the A leg
         // names it as its bridge partner.
         let deadline = Instant::now() + Duration::from_secs(10);
-        let bridged = wait_for_var(&client, &a_uuid, "bridge_uuid", deadline)
-            .await
-            .is_some();
+        let outcome = wait_for_bridge(&client, &a_uuid, deadline).await;
         let mut results = Vec::new();
-        if bridged {
+        if matches!(outcome, Some(BridgeOutcome::Bridged(_))) {
             for (key, want) in *pairs {
                 results.push((*key, *want, getvar(&client, &b_uuid, key).await));
             }
@@ -1017,7 +1015,13 @@ async fn escaping_over_the_dialplan_carrier(separator: Option<char>, scope: Vari
             .reap()
             .await;
 
-        assert!(bridged, "{label}: the anchor never bridged");
+        match outcome {
+            Some(BridgeOutcome::Bridged(_)) => {}
+            Some(BridgeOutcome::Failed(status)) => {
+                panic!("{label}: the anchor's bridge failed: DIALSTATUS={status}")
+            }
+            None => panic!("{label}: the anchor never bridged"),
+        }
         for (key, want, got) in results {
             assert_eq!(
                 got.as_deref(),

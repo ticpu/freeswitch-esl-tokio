@@ -301,6 +301,46 @@ pub async fn wait_for_var(
     }
 }
 
+/// What became of a `bridge` executed on an anchor channel.
+#[derive(Debug)]
+pub enum BridgeOutcome {
+    /// `bridge_uuid`: the far leg's uuid.
+    Bridged(String),
+    /// FreeSWITCH settled `DIALSTATUS` to something other than `ANSWER` or
+    /// `EARLY` before the far leg ever bridged -- the attempt is over, and no
+    /// amount of the deadline left will produce a `bridge_uuid`.
+    Failed(String),
+}
+
+/// Poll an anchor channel for how its `bridge` execute settled.
+///
+/// `bridge_uuid` alone cannot tell "still trying" from "already failed", so a
+/// caller that only waits for it burns the whole deadline on an attempt
+/// FreeSWITCH gave up on in the first poll -- and then reports a timeout that
+/// names no cause. `DIALSTATUS` is set the moment `switch_ivr_originate`
+/// settles the attempt, success or not, so checking it turns that hang into
+/// an immediate, attributable failure.
+pub async fn wait_for_bridge(
+    client: &EslClient,
+    anchor: &str,
+    deadline: Instant,
+) -> Option<BridgeOutcome> {
+    loop {
+        if let Some(peer) = getvar(client, anchor, "bridge_uuid").await {
+            return Some(BridgeOutcome::Bridged(peer));
+        }
+        if let Some(status) = getvar(client, anchor, "DIALSTATUS").await {
+            if status != "ANSWER" && status != "EARLY" {
+                return Some(BridgeOutcome::Failed(status));
+            }
+        }
+        if Instant::now() >= deadline {
+            return None;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
+
 /// The channels a test created, so it can kill them before it asserts.
 ///
 /// Cleanup has to run *before* the assertions. A panic between creating a

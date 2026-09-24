@@ -22,7 +22,7 @@ use freeswitch_esl_tokio::{
 };
 use live_common::{
     carried_in, channel_exists, connect, escaping_block, getvar, kill_channel, target_under_test,
-    wait_for_var, ChannelReaper, ESCAPING_CASES, ESCAPING_SEPARATOR,
+    wait_for_bridge, BridgeOutcome, ChannelReaper, ESCAPING_CASES, ESCAPING_SEPARATOR,
 };
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -776,11 +776,15 @@ async fn received_over_the_dialplan(
         return (Err(format!("execute bridge rejected: {e}")), vec![anchor]);
     }
     let deadline = Instant::now() + Duration::from_secs(10);
-    match wait_for_var(client, &anchor, "bridge_uuid", deadline).await {
-        Some(peer) => {
+    match wait_for_bridge(client, &anchor, deadline).await {
+        Some(BridgeOutcome::Bridged(peer)) => {
             let values = read_vars(client, &peer, keys).await;
             (Ok(values), vec![anchor, peer])
         }
+        Some(BridgeOutcome::Failed(status)) => (
+            Err(format!("the anchor's bridge failed: DIALSTATUS={status}")),
+            vec![anchor],
+        ),
         None => (Err("the anchor never bridged".to_owned()), vec![anchor]),
     }
 }
