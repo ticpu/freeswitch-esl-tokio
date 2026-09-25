@@ -16,8 +16,8 @@ it is built on. Never push a tag and its commit together.**
 
 **Never `cargo publish` without completing these steps first:**
 
-1. `scripts/pre-release.sh` passes
-2. Push the release commit alone (`git push`) and wait for CI to pass on it
+1. Push the release commit alone (`git push`) and wait for CI to pass on it
+2. `scripts/pre-release.sh` passes; its codeql check reads the scan of the pushed HEAD
 3. Detach, pin `Cargo.lock` on a child commit, and tag it (`git tag -as`) with a
    brief changelog in the tag message (use `git log --oneline <previous-tag>..HEAD`
    to generate it)
@@ -65,10 +65,27 @@ git add freeswitch-types/Cargo.toml Cargo.toml
 git commit -m "release: vX.Y.Z"
 ```
 
-4. Run `scripts/pre-release.sh` — stop and report on any failure. Nothing is
-   published or tagged yet, so amend the release commit and re-run.
+4. Push the release commit **alone** and wait for CI to go green on it. The tag
+   is immutable once pushed, so it is not created until this passes; a red run
+   here is fixed with another commit, not a retag:
 
-5. Draft a changelog from `git log --oneline <last-tag>..HEAD`.
+```sh
+git push
+./scripts/watch-ci.sh
+```
+
+   Never select the run with `--branch ... --limit 1`. The CodeQL workflow is a
+   separate run on the same commit and usually finishes first, so the most
+   recent run on the branch is regularly the scan rather than CI, and reading it
+   green says nothing about CI. `watch-ci.sh` pins both the workflow and the
+   commit SHA, and passes `--exit-status`, without which `gh run watch` exits 0
+   on a run that failed.
+
+5. Run `scripts/pre-release.sh` once the CodeQL run on HEAD has finished — stop
+   and report on any failure. Nothing is tagged or published yet: fix with a new
+   commit, push it, and re-run from step 4.
+
+6. Draft a changelog from `git log --oneline <last-tag>..HEAD`.
 
    **Rules:**
    - Group entries under section headings: `New features:`, `Bug fixes:`,
@@ -92,23 +109,6 @@ git commit -m "release: vX.Y.Z"
    Build:
    - what changed
    ```
-
-6. Push the release commit **alone** and wait for CI to go green on it. The tag
-   is immutable once pushed, so it is not created until this passes; a red run
-   here is fixed with another commit, not a retag:
-
-```sh
-git push
-./scripts/watch-ci.sh
-```
-
-   Never select the run with `--branch ... --limit 1`. This repository runs
-   GitHub's default-setup CodeQL scan alongside `ci.yml`, and it is a separate
-   run on the same commit with no workflow file behind it. It usually finishes
-   first, so the most recent run on the branch is regularly the scan rather than
-   CI, and reading it green says nothing about CI. `watch-ci.sh` pins both the
-   workflow and the commit SHA, and passes `--exit-status`, without which
-   `gh run watch` exits 0 on a run that failed.
 
 7. Build the tag locally — nothing is pushed yet. It sits on a detached child of
    the green commit that pins `Cargo.lock`, so a tagged tree resolves the exact
