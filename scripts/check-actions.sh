@@ -1,10 +1,12 @@
 #!/bin/bash
-# Fail when a GitHub Action pin is not the latest release it claims to be.
+# Fail when a GitHub Action pin is not the release it claims, carries a known
+# advisory, or has missed a release Dependabot should already have delivered.
 #
 # Usage: ./check-actions.sh
 #
 # Every uses: must read owner/repo[/path]@<commit sha> # <release tag>, the tag
-# must still resolve to that commit, and it must be the action's latest release.
+# must still resolve to that commit, and no GitHub advisory may affect it. A
+# newer release fails once it is GRACE_DAYS old and warns before that.
 # Needs gh. Run before a release.
 
 set -euo pipefail
@@ -13,6 +15,10 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CRATE_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$CRATE_DIR"
 
+# .github/dependabot.yml's cooldown plus its weekly schedule, and a few days to merge.
+GRACE_DAYS=14
+cutoff="$(date -u -d "-$GRACE_DAYS days" +%Y-%m-%dT%H:%M:%SZ)"
+
 USES='^([^:]+:[0-9]+):[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]*([^@[:space:]]+)@([^[:space:]#]+)[[:space:]]*(#[[:space:]]*([^[:space:]]+))?'
 
 failed=0
@@ -20,8 +26,16 @@ fail() {
 	echo "actions: $*" >&2
 	failed=1
 }
+warn() {
+	echo "actions: warning: $*" >&2
+}
 
-declare -A latest_release=()
+# Whether version $1 sorts after version $2.
+newer() {
+	[ "$1" != "$2" ] && [ "$(printf '%s\n' "$1" "$2" | sort -V | tail -1)" = "$1" ]
+}
+
+declare -A releases=()
 
 while IFS= read -r line; do
 	if [[ ! $line =~ $USES ]]; then
@@ -55,21 +69,33 @@ while IFS= read -r line; do
 		fail "$where: $action pins $ref but $tag is $tag_sha"
 	fi
 
-	if [ -z "${latest_release[$repo]+set}" ]; then
+	advisories="$(
+		gh api -X GET /advisories -f ecosystem=actions -f "affects=$repo@$tag,$action@$tag" \
+			--jq '.[] | "\(.ghsa_id) \(.severity): \(.summary)"'
+	)"
+	if [ -n "$advisories" ]; then
+		fail "$where: $action@$tag is affected by $advisories"
+	fi
+
+	if [ -z "${releases[$repo]+set}" ]; then
 		# Not releases/latest: codeql-action marks its CodeQL bundle as latest.
-		latest_release[$repo]="$(
+		releases[$repo]="$(
 			gh api "repos/$repo/releases?per_page=100" --jq '.[]
 				| select((.draft or .prerelease) | not)
-				| .tag_name
-				| select(test("^v?[0-9]+(\\.[0-9]+)*$"))' |
-				sort -V | tail -1
+				| select(.tag_name | test("^v?[0-9]+(\\.[0-9]+)*$"))
+				| "\(.tag_name) \(.published_at)"'
 		)"
 	fi
-	latest="${latest_release[$repo]}"
-	if [ -z "$latest" ]; then
+	if [ -z "${releases[$repo]}" ]; then
 		fail "$where: $repo publishes no versioned release"
-	elif [ "$tag" != "$latest" ]; then
-		fail "$where: $action is at $tag, latest release is $latest"
+		continue
+	fi
+	latest="$(cut -d' ' -f1 <<<"${releases[$repo]}" | sort -V | tail -1)"
+	due="$(awk -v cutoff="$cutoff" '$2 <= cutoff { print $1 }' <<<"${releases[$repo]}" | sort -V | tail -1)"
+	if [ -n "$due" ] && newer "$due" "$tag"; then
+		fail "$where: $action is at $tag, $due has been out over $GRACE_DAYS days"
+	elif newer "$latest" "$tag"; then
+		warn "$where: $action is at $tag, $latest is under $GRACE_DAYS days old"
 	fi
 done < <(grep -Hn -E '^[[:space:]]*(-[[:space:]]+)?uses:' .github/workflows/*.yml)
 

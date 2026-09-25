@@ -7,6 +7,9 @@ updates:
   directory: /
   schedule:
     interval: weekly
+  # scripts/check-actions.sh GRACE_DAYS assumes this and the weekly interval.
+  cooldown:
+    default-days: 3
   groups:
     actions:
       patterns:
