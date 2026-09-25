@@ -292,6 +292,52 @@ fn a_chained_block_split_by_a_non_ascii_byte_is_refused() {
     }
 }
 
+/// A `[` range from the first leg to the second's endpoint decides how the comma scan rewrites the
+/// commas of the second leg's block: a `^^,` head splits alike, a `^^:` value keeps the placeholder.
+#[test]
+fn a_range_from_an_earlier_leg_rewrites_a_later_legs_block() {
+    let second_leg = |input: &str, block_parse| {
+        let list = dial_list(&trace(input), 0..input.len(), false, block_parse).unwrap();
+        port_view(&list).1[0].groups[0][1].clone()
+    };
+    let cases = [
+        (r"portaudio/[\\\\,[^^,v0=undef]sofia/gateway/]/", "undef"),
+        (r"portaudio/[\\\\,[^^:v0=a,b]sofia/gateway/]/", "a\u{2}b"),
+    ];
+    for (input, value) in cases {
+        let want = (
+            vec![(
+                b"v0".to_vec(),
+                value
+                    .as_bytes()
+                    .to_vec(),
+            )],
+            b"sofia/gateway/]/".to_vec(),
+        );
+        assert_eq!(second_leg(input, BlockParse::default()), want, "{input}");
+        for (tree, c) in freeswitch_c_oracle::oracles() {
+            let dial = c.dial(input.as_bytes());
+            let [thread] = &dial.threads[..] else {
+                panic!("tree {tree}: one thread: {dial:?}");
+            };
+            let leg = &thread.groups[0][1];
+            let switch = (
+                leg.pairs
+                    .clone(),
+                leg.endpoint
+                    .clone()
+                    .unwrap_or_default(),
+            );
+            assert_eq!(switch, want, "tree {tree}: {input}");
+            assert_eq!(
+                second_leg(input, tree_block_parse(tree)),
+                want,
+                "tree {tree}"
+            );
+        }
+    }
+}
+
 #[test]
 fn switch_true_matches_the_switch() {
     let word = select(

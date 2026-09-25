@@ -308,7 +308,7 @@ impl TryFrom<config::BridgeDialString> for BridgeDialString {
 mod tests {
     use super::*;
     use crate::commands::endpoint::{
-        DialString, ErrorEndpoint, LoopbackEndpoint, SofiaEndpoint, SofiaGateway,
+        AudioEndpoint, DialString, ErrorEndpoint, LoopbackEndpoint, SofiaEndpoint, SofiaGateway,
     };
     use crate::commands::variables::{BlockParse, VariablesType};
 
@@ -789,6 +789,54 @@ mod tests {
                 "{fine}"
             );
         }
+    }
+
+    /// A `[` in an earlier leg, its `]` in a later leg's endpoint, and a `^^` block between.
+    fn bracket_around_block(sep: char, value: &str) -> BridgeDialString {
+        let mut vars = Variables::new(VariablesType::Channel)
+            .with_separator(sep)
+            .unwrap();
+        vars.insert("v0", value);
+        BridgeDialString::new(vec![vec![
+            Endpoint::PortAudio(AudioEndpoint::new().with_destination("[\\")),
+            SofiaGateway::new("]", "")
+                .with_variables(vars)
+                .into(),
+        ]])
+    }
+
+    /// The comma scan takes the `^^,` head inside the range for a plain comma and writes the
+    /// block's own default, which the block then splits on alike.
+    #[test]
+    fn a_comma_head_the_scan_rewrites_round_trips() {
+        let bridge = bracket_around_block(',', "undef");
+        let rendered = bridge.to_string();
+        let back: BridgeDialString = rendered
+            .parse()
+            .unwrap_or_else(|e| panic!("{rendered} failed to parse: {e}"));
+        assert_eq!(back, bridge, "rendered {rendered}");
+        let json = serde_json::to_value(&bridge).unwrap();
+        assert_eq!(
+            serde_json::from_value::<BridgeDialString>(json).unwrap(),
+            bridge
+        );
+    }
+
+    /// The range opened in the first leg decides how the scan rewrites a comma in the second
+    /// leg's `^^:` value, which then reaches the channel as the scan's placeholder.
+    #[test]
+    fn a_range_rewriting_a_later_legs_value_is_refused() {
+        let bridge = bracket_around_block(':', "a,b");
+        let rendered = bridge.to_string();
+        assert!(
+            matches!(
+                rendered.parse::<BridgeDialString>(),
+                Err(OriginateError::BracketSpansLegs { group: 0 })
+            ),
+            "{rendered}"
+        );
+        let json = serde_json::to_value(&bridge).unwrap();
+        assert!(serde_json::from_value::<BridgeDialString>(json).is_err());
     }
 
     /// The dialplan carrier's expansion, the leg splits over a `[]` block and both of a block's own
