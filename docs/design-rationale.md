@@ -658,13 +658,11 @@ conference-info), and `freeswitch-types` re-exports everything from
 builders on top. Existing users see no API change — all types remain
 importable from `freeswitch_types::`.
 
-The requirement on sip-header is an open range across its pre-1.0 minors, not a
-caret. Its types are re-exported here, so a downstream that also depends on
-sip-header directly must resolve to the same version or the re-exported type and
-its own are two types; the open range lets cargo unify them at whatever minor the
-downstream needs. The cost — a breaking sip-header minor can break a published
-`freeswitch-types` through a downstream `cargo update` — is carried because both
-crates have one author who releases them together.
+The requirement on sip-header is a caret on one minor. Its types are re-exported
+here and sit in this crate's own signatures, so a breaking sip-header minor is a
+breaking `freeswitch-types` release, and a range spanning minors lets a
+downstream resolve build a published version against one it no longer compiles
+with. Moving to a new sip-header minor is therefore a major here.
 
 ### The ARRAY encoding problem
 
