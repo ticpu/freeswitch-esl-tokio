@@ -10,7 +10,7 @@ use freeswitch_esl_tokio::commands::{
 };
 use freeswitch_esl_tokio::{
     parse_api_body, EslClient, EslConnectOptions, EslEvent, EslEventPriority, EslEventStream,
-    EslEventType, EventFormat, EventHeader, FreeswitchVersion, HeaderLookup, Originate,
+    EslEventType, EslResult, EventFormat, EventHeader, FreeswitchVersion, HeaderLookup, Originate,
     UNDEF_VALUE,
 };
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -98,34 +98,56 @@ pub async fn connect() -> (
     (client, events, permit)
 }
 
+/// A fresh uuid from the switch, for `origination_uuid`.
+pub async fn create_uuid(client: &EslClient) -> String {
+    client
+        .api("create_uuid")
+        .await
+        .expect("create_uuid transport error")
+        .api_result()
+        .expect("create_uuid failed")
+        .to_string()
+}
+
+/// Send `cmd` over bgapi and return the Job-UUID its BACKGROUND_JOB will carry.
+pub async fn bgapi_originate(client: &EslClient, cmd: &Originate) -> String {
+    client
+        .bgapi(&cmd.to_string())
+        .await
+        .expect("bgapi originate transport error")
+        .job_uuid()
+        .expect("bgapi should return Job-UUID header")
+        .to_string()
+}
+
+/// The originate's reply if `evt` is `job_uuid`'s BACKGROUND_JOB: the channel uuid, or why it failed.
+pub fn originate_job_reply(evt: &EslEvent, job_uuid: &str) -> Option<EslResult<String>> {
+    if evt.event_type() != Some(EslEventType::BackgroundJob) || evt.job_uuid() != Some(job_uuid) {
+        return None;
+    }
+    let body = evt
+        .body()
+        .expect("BACKGROUND_JOB should have a body");
+    Some(parse_api_body(body).map(str::to_string))
+}
+
 /// bgapi originate via the builder, wait for BACKGROUND_JOB, return the UUID.
+///
+/// Drops every event ahead of the job, the channel's own included: the switch starts the
+/// channel before it replies. A caller reading those preassigns `origination_uuid` instead.
 pub async fn bgapi_originate_ok(
     client: &EslClient,
     events: &mut EslEventStream,
     cmd: &Originate,
 ) -> String {
-    let resp = client
-        .bgapi(&cmd.to_string())
-        .await
-        .expect("bgapi originate transport error");
-    let job_uuid = resp
-        .job_uuid()
-        .expect("bgapi should return Job-UUID header")
-        .to_string();
+    let job_uuid = bgapi_originate(client, cmd).await;
 
-    // Wait for the BACKGROUND_JOB event with our Job-UUID
     let deadline = Instant::now() + Duration::from_secs(15);
     while Instant::now() < deadline {
         match tokio::time::timeout_at(deadline, events.recv()).await {
             Ok(Some(Ok(evt))) => {
-                if evt.event_type() == Some(EslEventType::BackgroundJob)
-                    && evt.job_uuid() == Some(&job_uuid)
-                {
-                    let body = evt
-                        .body()
-                        .expect("BACKGROUND_JOB should have a body");
-                    let uuid = parse_api_body(body).expect("originate failed");
-                    return uuid.to_string();
+                if let Some(reply) = originate_job_reply(&evt, &job_uuid) {
+                    return reply.expect("originate failed");
                 }
             }
             Ok(Some(Err(e))) => panic!("event error: {}", e),

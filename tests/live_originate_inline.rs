@@ -18,7 +18,9 @@ use freeswitch_esl_tokio::commands::LoopbackEndpoint;
 use freeswitch_esl_tokio::{
     Application, Endpoint, EslEventType, EventFormat, EventHeader, HeaderLookup, Originate,
 };
-use live_common::{bgapi_originate_ok, connect, getvar, ChannelReaper};
+use live_common::{
+    bgapi_originate, connect, create_uuid, getvar, originate_job_reply, ChannelReaper,
+};
 use std::time::Duration;
 use tokio::time::Instant;
 
@@ -27,8 +29,9 @@ use tokio::time::Instant;
 const PARK_TIMEOUT_SECS: &str = "8";
 
 /// Holds the leg while the test reads back what the application received.
-fn parked_loopback() -> Endpoint {
+fn parked_loopback(uuid: &str) -> Endpoint {
     let mut vars = Variables::new(VariablesType::Default);
+    vars.insert("origination_uuid", uuid);
     vars.insert("park_timeout", PARK_TIMEOUT_SECS);
     Endpoint::Loopback(
         LoopbackEndpoint::new("9199")
@@ -43,14 +46,16 @@ fn parked_loopback() -> Endpoint {
 /// data header shows what the dialplan parsed while the variable shows what
 /// reached the application — and it is the second one that a split in the
 /// wrong place corrupts.
-async fn run_and_read_back(cmd: &Originate, variable: &str) -> Option<String> {
+async fn run_and_read_back(
+    build: impl FnOnce(Endpoint) -> Originate,
+    variable: &str,
+) -> Option<String> {
     let (client, mut events, _permit) = connect().await;
 
     client
         .subscribe_events(
             EventFormat::Plain,
             &[
-                // bgapi_originate_ok reads the originated uuid off this one.
                 EslEventType::BackgroundJob,
                 EslEventType::ChannelExecuteComplete,
             ],
@@ -58,18 +63,32 @@ async fn run_and_read_back(cmd: &Originate, variable: &str) -> Option<String> {
         .await
         .expect("subscribe failed");
 
-    let uuid = bgapi_originate_ok(&client, &mut events, cmd).await;
+    // The inline list runs on the channel's own thread, so `set` can complete
+    // before the originate's BACKGROUND_JOB: the uuid has to be known first.
+    let uuid = create_uuid(&client).await;
     let mut reaper = ChannelReaper::new(&client);
     reaper.track(&uuid);
+    let job_uuid = bgapi_originate(&client, &build(parked_loopback(&uuid))).await;
 
     // `set` completing is the point the variable exists; reading before that
     // races the application rather than the wire.
     let deadline = Instant::now() + Duration::from_secs(20);
+    let mut reply = None;
     let mut ran = false;
-    while !ran && Instant::now() < deadline {
+    while !(ran && reply.is_some()) {
         match tokio::time::timeout_at(deadline, events.recv()).await {
             Ok(Some(Ok(evt))) => {
-                ran = evt.event_type() == Some(EslEventType::ChannelExecuteComplete)
+                if let Some(result) = originate_job_reply(&evt, &job_uuid) {
+                    let failed = result.is_err();
+                    if let Ok(originated) = &result {
+                        reaper.track(originated);
+                    }
+                    reply = Some(result);
+                    if failed {
+                        break;
+                    }
+                }
+                ran |= evt.event_type() == Some(EslEventType::ChannelExecuteComplete)
                     && evt.unique_id() == Some(uuid.as_str())
                     && evt.header(EventHeader::Application) == Some("set");
             }
@@ -88,6 +107,10 @@ async fn run_and_read_back(cmd: &Originate, variable: &str) -> Option<String> {
     reaper
         .reap()
         .await;
+    let originated = reply
+        .unwrap_or_else(|| panic!("no BACKGROUND_JOB for {job_uuid}"))
+        .unwrap_or_else(|e| panic!("originate of {uuid} failed: {e}"));
+    assert_eq!(originated, uuid, "origination_uuid was not honoured");
     assert!(ran, "the set application never ran on {uuid}");
     value
 }
@@ -98,17 +121,19 @@ async fn run_and_read_back(cmd: &Originate, variable: &str) -> Option<String> {
 #[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_inline_argument_keeps_its_commas() {
     let spec = "tone_stream://%(500,0,800)";
-    let cmd = Originate::inline(
-        parked_loopback(),
-        [
-            Application::new("set", Some(format!("probe_comma={spec}"))),
-            Application::park(),
-        ],
-    )
-    .expect("inline builder rejected a valid list");
+    let cmd = |endpoint: Endpoint| {
+        Originate::inline(
+            endpoint,
+            [
+                Application::new("set", Some(format!("probe_comma={spec}"))),
+                Application::park(),
+            ],
+        )
+        .expect("inline builder rejected a valid list")
+    };
 
     assert_eq!(
-        run_and_read_back(&cmd, "probe_comma").await,
+        run_and_read_back(cmd, "probe_comma").await,
         Some(spec.to_string())
     );
 }
@@ -118,18 +143,20 @@ async fn live_inline_argument_keeps_its_commas() {
 #[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_inline_argument_keeps_a_named_separator() {
     let value = "a|b|c";
-    let cmd = Originate::inline_with_delimiter(
-        parked_loopback(),
-        [
-            Application::new("set", Some(format!("probe_pipe={value}"))),
-            Application::park(),
-        ],
-        '|',
-    )
-    .expect("inline builder rejected a valid separator");
+    let cmd = |endpoint: Endpoint| {
+        Originate::inline_with_delimiter(
+            endpoint,
+            [
+                Application::new("set", Some(format!("probe_pipe={value}"))),
+                Application::park(),
+            ],
+            '|',
+        )
+        .expect("inline builder rejected a valid separator")
+    };
 
     assert_eq!(
-        run_and_read_back(&cmd, "probe_pipe").await,
+        run_and_read_back(cmd, "probe_pipe").await,
         Some(value.to_string())
     );
 }
@@ -139,17 +166,19 @@ async fn live_inline_argument_keeps_a_named_separator() {
 #[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_inline_argument_keeps_a_hostile_value() {
     let value = ",|;~^!";
-    let cmd = Originate::inline(
-        parked_loopback(),
-        [
-            Application::new("set", Some(format!("probe_hostile={value}"))),
-            Application::park(),
-        ],
-    )
-    .expect("inline builder rejected a valid list");
+    let cmd = |endpoint: Endpoint| {
+        Originate::inline(
+            endpoint,
+            [
+                Application::new("set", Some(format!("probe_hostile={value}"))),
+                Application::park(),
+            ],
+        )
+        .expect("inline builder rejected a valid list")
+    };
 
     assert_eq!(
-        run_and_read_back(&cmd, "probe_hostile").await,
+        run_and_read_back(cmd, "probe_hostile").await,
         Some(value.to_string())
     );
 }
@@ -160,17 +189,19 @@ async fn live_inline_argument_keeps_a_hostile_value() {
 #[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_inline_argument_keeps_a_single_quote() {
     let value = "it's one value";
-    let cmd = Originate::inline(
-        parked_loopback(),
-        [
-            Application::new("set", Some(format!("probe_quote={value}"))),
-            Application::park(),
-        ],
-    )
-    .expect("one quote is deliverable and must not be refused");
+    let cmd = |endpoint: Endpoint| {
+        Originate::inline(
+            endpoint,
+            [
+                Application::new("set", Some(format!("probe_quote={value}"))),
+                Application::park(),
+            ],
+        )
+        .expect("one quote is deliverable and must not be refused")
+    };
 
     assert_eq!(
-        run_and_read_back(&cmd, "probe_quote").await,
+        run_and_read_back(cmd, "probe_quote").await,
         Some(value.to_string())
     );
 }
@@ -181,17 +212,19 @@ async fn live_inline_argument_keeps_a_single_quote() {
 #[ignore = "needs a live FreeSWITCH ESL; see docs/live-test-switch.md"]
 async fn live_inline_argument_keeps_an_edge_space_and_a_tab() {
     let value = "a\tb it's ";
-    let cmd = Originate::inline(
-        parked_loopback(),
-        [
-            Application::new("set", Some(format!("probe_edge={value}"))),
-            Application::park(),
-        ],
-    )
-    .expect("inline builder rejected a valid list");
+    let cmd = |endpoint: Endpoint| {
+        Originate::inline(
+            endpoint,
+            [
+                Application::new("set", Some(format!("probe_edge={value}"))),
+                Application::park(),
+            ],
+        )
+        .expect("inline builder rejected a valid list")
+    };
 
     assert_eq!(
-        run_and_read_back(&cmd, "probe_edge").await,
+        run_and_read_back(cmd, "probe_edge").await,
         Some(value.to_string())
     );
 }
@@ -205,17 +238,19 @@ async fn live_inline_argument_keeps_two_quotes() {
         ("x'a'y z", "x'a'y z"),
         ("${cond('${probe_unset}' == '' ? empty : full)}", "empty"),
     ] {
-        let cmd = Originate::inline(
-            parked_loopback(),
-            [
-                Application::new("set", Some(format!("probe_quotes={value}"))),
-                Application::park(),
-            ],
-        )
-        .expect("inline builder rejected a valid list");
+        let cmd = |endpoint: Endpoint| {
+            Originate::inline(
+                endpoint,
+                [
+                    Application::new("set", Some(format!("probe_quotes={value}"))),
+                    Application::park(),
+                ],
+            )
+            .expect("inline builder rejected a valid list")
+        };
 
         assert_eq!(
-            run_and_read_back(&cmd, "probe_quotes").await,
+            run_and_read_back(cmd, "probe_quotes").await,
             Some(want.to_string()),
             "{value}"
         );
@@ -229,23 +264,25 @@ async fn live_inline_argument_keeps_two_quotes() {
 async fn live_inline_argument_rewritten_after_construction() {
     use freeswitch_esl_tokio::commands::originate::OriginateTarget;
 
-    let mut cmd = Originate::inline(
-        parked_loopback(),
-        [
-            Application::new("set", Some("probe_late=${placeholder}")),
-            Application::park(),
-        ],
-    )
-    .expect("inline builder rejected a valid list");
-
     let rendered = "{absolute_codec_string=G722,PCMU}";
-    let OriginateTarget::InlineApplications(apps) = cmd.target_mut() else {
-        panic!("expected InlineApplications");
+    let cmd = |endpoint: Endpoint| {
+        let mut cmd = Originate::inline(
+            endpoint,
+            [
+                Application::new("set", Some("probe_late=${placeholder}")),
+                Application::park(),
+            ],
+        )
+        .expect("inline builder rejected a valid list");
+        let OriginateTarget::InlineApplications(apps) = cmd.target_mut() else {
+            panic!("expected InlineApplications");
+        };
+        *apps[0].args_mut() = Some(format!("probe_late={rendered}"));
+        cmd
     };
-    *apps[0].args_mut() = Some(format!("probe_late={rendered}"));
 
     assert_eq!(
-        run_and_read_back(&cmd, "probe_late").await,
+        run_and_read_back(cmd, "probe_late").await,
         Some(rendered.to_string())
     );
 }

@@ -21,8 +21,9 @@ use freeswitch_esl_tokio::{
     EslEventType, EslResult, EventFormat, ExecuteOptions, HangupCause, HeaderLookup, UNDEF_VALUE,
 };
 use live_common::{
-    carried_in, channel_exists, connect, escaping_block, getvar, kill_channel, target_under_test,
-    wait_for_bridge, BridgeOutcome, ChannelReaper, ESCAPING_CASES, ESCAPING_SEPARATOR,
+    carried_in, channel_exists, connect, create_uuid, escaping_block, getvar, kill_channel,
+    target_under_test, wait_for_bridge, BridgeOutcome, ChannelReaper, ESCAPING_CASES,
+    ESCAPING_SEPARATOR,
 };
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -1009,15 +1010,7 @@ async fn escaping_through_the_typed_view(carrier: DialStringCarrier, scope: Vari
             // The dialplan carrier finds its far leg by a pre-assigned uuid.
             let b_uuid = match carrier {
                 DialStringCarrier::EslApi => None,
-                _ => Some(
-                    client
-                        .api("create_uuid")
-                        .await
-                        .expect("create_uuid transport error")
-                        .api_result()
-                        .expect("create_uuid failed")
-                        .to_owned(),
-                ),
+                _ => Some(create_uuid(&client).await),
             };
             let lead: Vec<(&str, &str)> = b_uuid
                 .iter()

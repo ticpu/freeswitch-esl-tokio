@@ -20,7 +20,7 @@ use freeswitch_esl_tokio::{
     EventHeader, HeaderLookup, LogLevel, Originate, TimetableField, TimetablePrefix,
 };
 use live_common::{
-    bgapi_originate_ok, block_parse_under_test, carried_in, channel_exists, connect,
+    bgapi_originate_ok, block_parse_under_test, carried_in, channel_exists, connect, create_uuid,
     escaping_block, getvar, kill_channel, percent_escape_tree, switch_version, target_under_test,
     wait_for_bridge, wait_for_own_event, BridgeOutcome, ChannelReaper, PercentEscape,
     ESCAPING_CASES, ESCAPING_SEPARATOR,
@@ -581,16 +581,6 @@ fn hostile_field(lead: &str) -> String {
     format!(r"{lead} it's C:\x,y")
 }
 
-async fn create_uuid(client: &EslClient) -> String {
-    client
-        .api("create_uuid")
-        .await
-        .expect("create_uuid transport error")
-        .api_result()
-        .expect("create_uuid failed")
-        .to_string()
-}
-
 /// Dial `endpoint` without waiting for the outcome: `bgapi originate` over the API carrier, an
 /// async `bridge` from a parked anchor over the dialplan one. Returns the anchor to reap.
 async fn dial_without_waiting(
@@ -963,13 +953,7 @@ async fn escaping_over_the_dialplan_carrier(separator: Option<char>, scope: Vari
         if !carried_in(scope, pairs) {
             continue;
         }
-        let b_uuid = client
-            .api("create_uuid")
-            .await
-            .expect("create_uuid transport error")
-            .api_result()
-            .expect("create_uuid failed")
-            .to_string();
+        let b_uuid = create_uuid(&client).await;
         let a_uuid = client
             .api("originate null/anchor &park()")
             .await
