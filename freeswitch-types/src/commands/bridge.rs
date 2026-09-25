@@ -11,10 +11,9 @@ use super::originate::OriginateError;
 use super::variables::{
     installed_variables, read_error, BlockParse, DialStringCarrier, DialStringTarget, Variables,
 };
-use crate::switch_passes::expansion::expand_escapes;
-use crate::switch_passes::originate_legs::{scan_group, split_groups};
-use crate::switch_passes::separate::CBuffer;
-use crate::switch_passes::{pipeline, trace};
+use crate::switch_passes::brackets::Block;
+use crate::switch_passes::originate_legs::Leg;
+use crate::switch_passes::pipeline;
 
 /// A bridge dial string is the argument of a dialplan application, which
 /// receives it whole, so it renders and parses one escaping level shallower
@@ -184,17 +183,38 @@ impl BridgeDialString {
 
         let mut groups = Vec::new();
         for group in &thread.groups {
-            let mut endpoints = Vec::new();
-            for leg in group {
-                if leg
-                    .blocks
-                    .is_empty()
-                    && leg
-                        .endpoint
+            let legs: Vec<&Leg> = group
+                .iter()
+                .filter(|leg| {
+                    !leg.blocks
                         .is_empty()
-                {
-                    continue;
+                        || !leg
+                            .endpoint
+                            .is_empty()
+                })
+                .collect();
+            let texts: Option<Vec<&str>> = legs
+                .iter()
+                .map(|leg| {
+                    s.get(
+                        leg.raw
+                            .clone(),
+                    )
+                })
+                .collect();
+            if let Some(texts) = texts {
+                let joined = legs
+                    .iter()
+                    .map(|leg| reading(leg))
+                    .collect();
+                if legs_interfere(texts, Some(joined), target) {
+                    return Err(OriginateError::BracketSpansLegs {
+                        group: groups.len(),
+                    });
                 }
+            }
+            let mut endpoints = Vec::new();
+            for leg in legs {
                 if leg
                     .blocks
                     .len()
@@ -230,13 +250,13 @@ impl BridgeDialString {
         Ok(bridge)
     }
 
-    /// Refuse a group whose separator the switch's comma scan rewrites.
+    /// Refuse a group whose legs the switch's comma scan reads across.
     fn check_legs(&self, block_parse: BlockParse) -> Result<(), OriginateError> {
         let target = DialStringTarget::new(CARRIER).with_block_parse(block_parse);
         match self
             .groups
             .iter()
-            .position(|group| separator_merged(group, target))
+            .position(|group| endpoints_interfere(group, target))
         {
             Some(group) => Err(OriginateError::BracketSpansLegs { group }),
             None => Ok(()),
@@ -244,37 +264,70 @@ impl BridgeDialString {
     }
 }
 
-/// Whether `switch_ivr_originate`'s comma scan, run over the group its `|` split leaves of the
-/// application's expanded argument, rewrites a separator between two legs, as a bracket range
-/// spanning them does.
-fn separator_merged(group: &[Endpoint], target: DialStringTarget) -> bool {
-    let mut text = String::new();
-    let mut separators = Vec::new();
-    for (i, endpoint) in group
-        .iter()
-        .enumerate()
-    {
-        if i > 0 {
-            separators.push(text.len());
-            text.push(',');
-        }
-        text.push_str(
-            &endpoint
-                .display_for(target)
-                .to_string(),
-        );
-    }
-    let (expanded, _) = expand_escapes(&trace(&text));
-    let mut buffer = CBuffer::new(&expanded);
-    let split = split_groups(&mut buffer);
-    let [group] = &split.tokens[..] else {
+/// What the switch installs on a leg and the endpoint text it dials.
+type LegReading = (Vec<Block>, String);
+
+fn reading(leg: &Leg) -> LegReading {
+    (
+        leg.blocks
+            .clone(),
+        leg.endpoint
+            .clone(),
+    )
+}
+
+/// Each leg the switch reads of `text`, as one group.
+fn read_group(text: &str, target: DialStringTarget) -> Option<Vec<LegReading>> {
+    let list = pipeline::read(text, target).ok()?;
+    let [thread] = &list.threads[..] else {
+        return None;
+    };
+    let [group] = &thread.groups[..] else {
+        return None;
+    };
+    Some(
+        group
+            .iter()
+            .map(reading)
+            .collect(),
+    )
+}
+
+/// Whether the switch reads a group otherwise than each of its leg `texts` dialled alone, as a
+/// bracket range `switch_ivr_originate`'s comma scan runs from one leg into another makes it.
+fn legs_interfere<'a>(
+    texts: impl IntoIterator<Item = &'a str>,
+    joined: Option<Vec<LegReading>>,
+    target: DialStringTarget,
+) -> bool {
+    let Some(alone) = texts
+        .into_iter()
+        .map(|text| read_group(text, target))
+        .collect::<Option<Vec<_>>>()
+    else {
         return false;
     };
-    scan_group(&mut buffer, group.start);
-    buffer
-        .c_str(group.start)
+    joined != Some(alone.concat())
+}
+
+/// [`legs_interfere`] for a group's endpoints as they render.
+fn endpoints_interfere(group: &[Endpoint], target: DialStringTarget) -> bool {
+    let rendered: Vec<String> = group
         .iter()
-        .any(|&(c, start, _)| c != ',' && separators.contains(&start))
+        .map(|endpoint| {
+            endpoint
+                .display_for(target)
+                .to_string()
+        })
+        .collect();
+    let joined = read_group(&rendered.join(","), target);
+    legs_interfere(
+        rendered
+            .iter()
+            .map(String::as_str),
+        joined,
+        target,
+    )
 }
 
 #[cfg(feature = "serde")]
@@ -814,7 +867,10 @@ mod tests {
         let back: BridgeDialString = rendered
             .parse()
             .unwrap_or_else(|e| panic!("{rendered} failed to parse: {e}"));
-        assert_eq!(back, bridge, "rendered {rendered}");
+        assert_eq!(
+            back.to_string(),
+            r"portaudio/[\\\\\\\\,[v0=undef]sofia/gateway/]/"
+        );
         let json = serde_json::to_value(&bridge).unwrap();
         assert_eq!(
             serde_json::from_value::<BridgeDialString>(json).unwrap(),
@@ -833,7 +889,8 @@ mod tests {
                 rendered.parse::<BridgeDialString>(),
                 Err(OriginateError::BracketSpansLegs { group: 0 })
             ),
-            "{rendered}"
+            "{rendered}: {:?}",
+            rendered.parse::<BridgeDialString>()
         );
         let json = serde_json::to_value(&bridge).unwrap();
         assert!(serde_json::from_value::<BridgeDialString>(json).is_err());

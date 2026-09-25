@@ -119,6 +119,8 @@ pub(crate) fn parse_block(
         .c_str(at)
         .get(1..end - at)?
     {
+        // `switch_ivr_originate`'s comma scan can turn a `^^,` head into the `[]` default.
+        [('^', ..), ('^', ..), (picked, ..), ..] if *picked == comma => ',',
         [('^', ..), ('^', ..), (picked, ..), ..] => *picked,
         [('^', ..), ('^', ..)] => '\0',
         _ => ',',

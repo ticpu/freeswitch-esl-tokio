@@ -215,8 +215,13 @@ event's value passes through the same `switch_url_encode`
 
 In a bridge, the comma scan ahead of the leg split protects commas from a `[`
 to its matching `]` whichever leg holds either, so an endpoint whose `[` closes
-in a later leg of its group merges the legs between. `BridgeDialString`
-refuses such a group on parse and config load.
+in a later leg of its group merges the legs between. Where the separator
+survives, because a backslash precedes it, the commas of a later leg's `[]`
+block are rewritten by the first bracket's state instead of their own: a `^^,`
+head becomes the block's default split and reads alike, but a comma in a `^^:`
+value reaches the channel as the scan's `\x02` placeholder. `BridgeDialString`
+refuses a group on parse and config load when the switch reads its legs
+otherwise than each alone.
 
 ## Variable scoping
 

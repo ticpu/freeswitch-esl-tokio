@@ -74,7 +74,7 @@ pub enum OriginateError {
         fault: EndpointFieldFault,
     },
     /// A `[` in one leg's endpoint text closes in a later leg of the same group, so the switch
-    /// reads every leg between as one. Names the group.
+    /// merges the legs between or rewrites a later leg's block. Names the group.
     BracketSpansLegs {
         /// Index of the group.
         group: usize,
@@ -154,7 +154,7 @@ impl std::fmt::Display for OriginateError {
             } => write!(f, "the {field} of a {endpoint} endpoint {fault}"),
             Self::BracketSpansLegs { group } => write!(
                 f,
-                "a bracket in group {group} closes in a later leg, which the switch reads as one leg"
+                "a bracket in group {group} closes in a later leg, which the switch reads across the legs"
             ),
             Self::UnexpandedExpression { endpoint } => write!(
                 f,

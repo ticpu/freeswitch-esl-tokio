@@ -290,13 +290,13 @@ fn head_blocks(
 }
 
 /// The `|` split `switch_ivr_originate` cuts a thread's data into, in the buffer holding it.
-pub(crate) fn split_groups(buffer: &mut CBuffer) -> Split {
+fn split_groups(buffer: &mut CBuffer) -> Split {
     buffer.separate(0, '|', MAX_PEERS)
 }
 
 /// The comma pre-scan `switch_ivr_originate` runs over the group at `start` before its leg split,
 /// in place.
-pub(crate) fn scan_group(buffer: &mut CBuffer, start: usize) {
+fn scan_group(buffer: &mut CBuffer, start: usize) {
     escape_block_commas(buffer.c_str_mut(start));
 }
 
